@@ -683,6 +683,9 @@ export default function Home() {
               {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
             </button>
             <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
+            {it.done && (
+              <button className={'star photo-star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
+            )}
             <div className="side-acts">
               <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
               {it.done
@@ -706,12 +709,7 @@ export default function Home() {
             </div>
           </div>
           <div className="body">
-            <div className="top">
-              <NameBlock p={it} />
-              {it.done && (
-                <button className={'star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
-              )}
-            </div>
+            <NameBlock p={it} />
             <Rating p={{ ...it, openNow: undefined }} />
             {it.hoursInfo && (
               <p className="today">

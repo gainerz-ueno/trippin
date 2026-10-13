@@ -233,3 +233,11 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 
 /* 住所のコピー欄は1行だけ表示（コピーは全文） */
 .addr-line .addr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ★は写真の右上に重ねる。店名・住所の枠を広く */
+.thumbwrap{position:relative}
+.photo-star{position:absolute;top:4px;right:4px;width:34px;height:34px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;font-size:20px;display:flex;align-items:center;justify-content:center;padding:0}
+.photo-star.on{background:var(--star);color:#fff}
+.line{padding:6px 6px 6px 10px}
+.line .name{font-size:16px;overflow-wrap:break-word;word-break:normal}
+.copy{padding:4px 8px;font-size:11px}
