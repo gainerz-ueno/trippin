@@ -91,7 +91,7 @@ function CategoryDropdown({ customCats, onPick, onAddCustom, onClose }) {
 }
 
 // フォルダ（旅行ごとに自分で名前を付けて分ける）
-function FolderBar({ folders, current, counts, onSelect, onCreate, onRename, onDelete }) {
+function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, onRename, onDelete }) {
   const [mode, setMode] = useState(null); // 'new' / 'edit'
   const [name, setName] = useState('');
   const [confirm, setConfirm] = useState(false);
@@ -131,7 +131,7 @@ function FolderBar({ folders, current, counts, onSelect, onCreate, onRename, onD
       )}
       {mode === 'edit' && (
         confirm ? (
-          <div className="confirm">「{current}」とその中のお店{counts[current] || 0}件を削除しますか？
+          <div className="confirm">「{current}」とその中のお店{totals[current] || 0}件（候補と行ったの両方）を削除しますか？
             <button className="btn" type="button" onClick={() => { onDelete(current); setConfirm(false); setMode(null); }}>削除する</button>
             <button className="btn ghost" type="button" onClick={() => setConfirm(false)}>やめる</button>
           </div>
@@ -888,10 +888,18 @@ export default function Home() {
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); deletePhotosOf(id).catch(() => {}); }
 
-  const trips = folders;
   const allFolders = [...new Set([...folders, ...items.map((i) => i.trip).filter(Boolean)])];
+  const trips = allFolders;
+  // フォルダの数字は今のタブ（候補／行った）の件数、削除の確認は全部の件数
   const folderCounts = {};
-  items.forEach((i) => { folderCounts[i.trip] = (folderCounts[i.trip] || 0) + 1; });
+  const folderTotals = {};
+  items.forEach((i) => {
+    folderTotals[i.trip] = (folderTotals[i.trip] || 0) + 1;
+    if ((tab === 'done') === !!i.done) folderCounts[i.trip] = (folderCounts[i.trip] || 0) + 1;
+  });
+  // タブの数字は全フォルダの合計
+  const candTotal = items.filter((i) => !i.done).length;
+  const doneTotal = items.filter((i) => i.done).length;
   const inTrip = items.filter((i) => i.trip === trip && (catFilter === 'すべて' || (catFilter === 'なし' ? !i.category : i.category === catFilter)));
   const usedCats = [...new Set(items.filter((i) => i.trip === trip).map((i) => i.category || 'なし'))];
   const catOrder = [...BASE_CATS.map(([n]) => n), ...customCats, 'なし'];
@@ -1012,8 +1020,8 @@ export default function Home() {
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'search'} onClick={() => setTab('search')}>さがす</button>
-        <button role="tab" aria-selected={tab === 'cand'} onClick={() => setTab('cand')}>候補 <span className="count">{cand.length}</span></button>
-        <button role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>行った <span className="count">{done.length}</span></button>
+        <button role="tab" aria-selected={tab === 'cand'} onClick={() => { setTab('cand'); setCatFilter('すべて'); }}>候補 <span className="count">{candTotal}</span></button>
+        <button role="tab" aria-selected={tab === 'done'} onClick={() => { setTab('done'); setCatFilter('すべて'); }}>行った <span className="count">{doneTotal}</span></button>
       </div>
 
       {tab === 'search' && (
@@ -1125,7 +1133,7 @@ export default function Home() {
 
       {tab !== 'search' && (
         <>
-          <FolderBar folders={allFolders} current={trip} counts={folderCounts} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
+          <FolderBar folders={allFolders} current={trip} counts={folderCounts} totals={folderTotals} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
             onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} />
           {usedCats.length > 0 && (
             <div className="chips cat-filter">
@@ -1184,8 +1192,8 @@ export default function Home() {
             {loaded && (tab === 'cand' ? cand : done).length === 0 && (
               <div className="empty">
                 {tab === 'cand'
-                  ? <>まだ候補がありません。<br />「さがす」からお店を見つけて追加してください。</>
-                  : <>まだ行ったお店はありません。<br />候補のお店で「行った」を押すとここに移ります。</>}
+                  ? (candTotal > 0 ? <>「{trip}」にはまだ候補がありません。</> : <>まだ候補がありません。<br />「さがす」からお店を見つけて追加してください。</>)
+                  : (doneTotal > 0 ? <>「{trip}」にはまだ行ったお店がありません。</> : <>まだ行ったお店はありません。<br />候補のお店で「行った」を押すとここに移ります。</>)}
               </div>
             )}
           </div>
