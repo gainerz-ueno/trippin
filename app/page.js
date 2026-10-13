@@ -117,7 +117,10 @@ export default function Home() {
         {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
         <div className="body">
           <div className="top">
-            <p className="name">{it.name}</p>
+            <div>
+              <p className="name">{it.name}</p>
+              {it.altName && <p className="alt">{it.altName}</p>}
+            </div>
             {it.done && (
               <button className={'star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
             )}
@@ -213,9 +216,15 @@ export default function Home() {
               <article className="item" key={p.placeId}>
                 {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
                 <div className="body">
-                  <p className="name">{p.name}</p>
+                  <div>
+                    <p className="name">{p.name}</p>
+                    {p.altName && <p className="alt">{p.altName}</p>}
+                  </div>
                   <Rating p={p} />
-                  <p className="addr">{p.address}</p>
+                  <div>
+                    <p className="addr">{p.address}</p>
+                    {p.altAddress && <p className="addr alt-addr">{p.altAddress}</p>}
+                  </div>
                   <div className="acts">
                     {savedIds.has(p.placeId)
                       ? <button className="added" disabled>候補に追加済み</button>

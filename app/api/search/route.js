@@ -14,15 +14,17 @@ const FIELDS = [
   'nextPageToken',
 ].join(',');
 
-async function searchOnce(textQuery, minRating, pageToken) {
-  const body = { textQuery, languageCode: 'ja', pageSize: 20 };
+const KEY = () => process.env.GOOGLE_MAPS_API_KEY;
+
+async function searchOnce(textQuery, minRating, pageToken, languageCode) {
+  const body = { textQuery, languageCode, pageSize: 20 };
   if (minRating) body.minRating = minRating;
   if (pageToken) body.pageToken = pageToken;
   const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Goog-Api-Key': process.env.GOOGLE_MAPS_API_KEY,
+      'X-Goog-Api-Key': KEY(),
       'X-Goog-FieldMask': FIELDS,
     },
     body: JSON.stringify(body),
@@ -33,11 +35,39 @@ async function searchOnce(textQuery, minRating, pageToken) {
   return data;
 }
 
-function shape(p) {
+// 日本語と中国語（台湾）で同じ検索をして、1ページ分を返す
+async function searchPage(textQuery, minRating, tokens) {
+  const [ja, zh] = await Promise.all([
+    searchOnce(textQuery, minRating, tokens?.ja, 'ja'),
+    searchOnce(textQuery, minRating, tokens?.zh, 'zh-TW').catch(() => ({ places: [] })),
+  ]);
+  const zhMap = new Map((zh.places || []).map((p) => [p.id, p]));
+  const places = (ja.places || []).map((p) => shape(p, zhMap.get(p.id)));
+  const next = ja.nextPageToken ? { ja: ja.nextPageToken, zh: zh.nextPageToken || null } : null;
+  return { places, next };
+}
+
+const count = (s, re) => (String(s).match(re) || []).length;
+const latin = (s) => count(s, /\p{Script=Latin}/gu);
+// かな・漢字が主体か（「…, ベトナム」のように国名だけ日本語の住所は対象外）
+const hasKana = (s) =>
+  count(s, /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/gu) > latin(s) &&
+  /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(s);
+// 漢字が主体の文字列か（ラテン文字より漢字が多い）
+const hanDominant = (s) => count(s, /\p{Script=Han}/gu) > latin(s);
+
+function shape(p, zhPlace) {
+  const name = p.displayName?.text || '';
+  const address = p.formattedAddress || '';
+  const zhName = zhPlace?.displayName?.text || '';
+  const zhAddress = zhPlace?.formattedAddress || '';
   return {
     placeId: p.id,
-    name: p.displayName?.text || '',
-    address: p.formattedAddress || '',
+    name,
+    address,
+    // 日本人が読めない表記のときに並べて出す名前・住所
+    altName: pickAlt(name, zhName),
+    altAddress: pickAlt(address, zhAddress),
     rating: p.rating ?? null,
     reviews: p.userRatingCount ?? 0,
     mapsUrl: p.googleMapsUri || '',
@@ -49,8 +79,52 @@ function shape(p) {
   };
 }
 
+// 戻り値: 文字列=そのまま並べる / 'translate'=日本語に翻訳する / ''=並べない
+function pickAlt(text, zhText) {
+  if (!text) return '';
+  if (hasKana(text) || hanDominant(text)) return ''; // すでに日本語・漢字で読める
+  if (zhText && zhText !== text && hanDominant(zhText)) return zhText; // 漢字の国
+  return 'translate';
+}
+
+// 翻訳が必要なものをまとめて日本語に（翻訳が使えないときは並べない）
+async function fillTranslations(places) {
+  const jobs = [];
+  for (const p of places) {
+    if (p.altName === 'translate') jobs.push([p, 'altName', p.name]);
+    if (p.altAddress === 'translate') jobs.push([p, 'altAddress', p.address]);
+  }
+  if (!jobs.length) return places;
+  try {
+    const res = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${KEY()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: jobs.map((j) => j[2]), target: 'ja', format: 'text' }),
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    const out = data?.data?.translations;
+    if (!res.ok || !out) throw new Error();
+    jobs.forEach(([p, field, src], i) => {
+      const t = out[i]?.translatedText || '';
+      p[field] = t && t !== src ? t : '';
+    });
+  } catch {
+    jobs.forEach(([p, field]) => { p[field] = ''; });
+  }
+  return places;
+}
+
+function decodeToken(t) {
+  if (!t) return null;
+  try { return JSON.parse(Buffer.from(t, 'base64url').toString()); } catch { return null; }
+}
+function encodeToken(t) {
+  return t ? Buffer.from(JSON.stringify(t)).toString('base64url') : null;
+}
+
 export async function POST(req) {
-  if (!process.env.GOOGLE_MAPS_API_KEY) {
+  if (!KEY()) {
     return Response.json({ error: 'APIキーが設定されていません' }, { status: 500 });
   }
   try {
@@ -61,18 +135,19 @@ export async function POST(req) {
     // レビュー件数で絞るときは、最大60件（3ページ）をまとめて取ってから絞る
     if (minReviews > 0) {
       let all = [];
-      let token = null;
+      let tokens = null;
       for (let i = 0; i < 3; i++) {
-        const d = await searchOnce(textQuery, minRating, token);
-        all = all.concat((d.places || []).map(shape));
-        token = d.nextPageToken;
-        if (!token) break;
+        const { places, next } = await searchPage(textQuery, minRating, tokens);
+        all = all.concat(places);
+        tokens = next;
+        if (!tokens) break;
       }
-      return Response.json({ places: all.filter((p) => p.reviews >= minReviews), nextPageToken: null });
+      const filtered = all.filter((p) => p.reviews >= minReviews);
+      return Response.json({ places: await fillTranslations(filtered), nextPageToken: null });
     }
 
-    const d = await searchOnce(textQuery, minRating, pageToken);
-    return Response.json({ places: (d.places || []).map(shape), nextPageToken: d.nextPageToken || null });
+    const { places, next } = await searchPage(textQuery, minRating, decodeToken(pageToken));
+    return Response.json({ places: await fillTranslations(places), nextPageToken: encodeToken(next) });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
   }

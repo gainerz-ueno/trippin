@@ -44,6 +44,8 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
 .name{font-family:var(--display);font-weight:700;font-size:16px;margin:0;word-break:break-word}
 .addr{font-size:12px;color:var(--sub);margin:0;word-break:break-word}
+.alt{font-size:14px;font-weight:500;color:var(--ink);margin:2px 0 0;word-break:break-word}
+.alt-addr{color:var(--ink);margin-top:2px}
 .meta{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;align-items:center}
 .pill{background:var(--chip);color:var(--sub);padding:1px 9px;border-radius:999px}
 .rate{font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
