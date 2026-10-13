@@ -465,11 +465,11 @@ export default function Home() {
                 </select>
               </label>
             </div>
-            <label htmlFor="src">見つけた投稿のURL（任意・YouTubeやインスタ）
+            <label htmlFor="src">お店を見つけた投稿のURL（任意・メモ用。検索には使いません）
               <input id="src" type="url" inputMode="url" value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="https://" />
             </label>
             <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
-            <p className="hint">国を選ぶと、その国の中だけを探します。候補に追加したお店は、「場所」（空なら国）の名前のリストにまとまります。</p>
+            <p className="hint">国を選ぶと、その国の中だけを探します。投稿のURLは、このあと「候補に追加」したお店に「元の投稿」として付きます。候補は「場所」（空なら国）の名前のリストにまとまります。</p>
             {error && <p className="err">{error}</p>}
           </form>
 
