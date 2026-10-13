@@ -7,6 +7,87 @@ const COUNTRY_LIST = [
   ['', '指定なし'], ['TW', '台湾'], ['KR', '韓国'], ['HK', '香港'], ['CN', '中国'], ['VN', 'ベトナム'],
   ['TH', 'タイ'], ['SG', 'シンガポール'], ['MY', 'マレーシア'], ['PH', 'フィリピン'], ['JP', '日本'],
 ];
+// 基本カテゴリー（色は地図のピンにも使う）
+const BASE_CATS = [
+  ['観光', '#2F7D6B'], ['朝市', '#C9822B'], ['夜市', '#5B4BA8'], ['朝食', '#E0A526'], ['昼食', '#D9692E'],
+  ['夕食', '#B8432F'], ['夜食', '#3F4F86'], ['おやつ', '#D45C8C'], ['カフェ', '#8A5A3C'], ['酒場', '#8E2F4F'],
+  ['買物', '#2E7FB8'], ['美容', '#C2569E'], ['マッサージ', '#4E9A5B'],
+];
+const CUSTOM_COLOR = '#6B7A8C';
+const CATS_KEY = 'trippin.cats';
+const catColor = (c) => (BASE_CATS.find(([n]) => n === c) || [, CUSTOM_COLOR])[1];
+
+// カテゴリーを選ぶ（＋ 新しいカテゴリー）
+function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, title }) {
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const all = [...BASE_CATS.map(([n]) => n), ...customCats];
+  function submitNew(e) {
+    e.preventDefault();
+    const n = name.trim();
+    if (!n) return;
+    if (!all.includes(n)) onAddCustom(n);
+    onPick(n);
+  }
+  return (
+    <div className="picker">
+      <div className="picker-head">
+        <b>{title}</b>
+        <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
+      </div>
+      <div className="cat-chips">
+        {all.map((c) => (
+          <button type="button" key={c} className={'cat' + (c === current ? ' sel' : '')} style={{ '--c': catColor(c) }} onClick={() => onPick(c)}>{c}</button>
+        ))}
+        <button type="button" className={'cat none' + (!current ? ' sel' : '')} onClick={() => onPick('')}>なし</button>
+        {!adding && <button type="button" className="cat add-cat" onClick={() => setAdding(true)}>＋ 新しいカテゴリー</button>}
+      </div>
+      {adding && (
+        <form className="new-cat" onSubmit={submitNew}>
+          <input id="newcat" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例：屋台" maxLength={12} />
+          <button className="btn" type="submit">作って選ぶ</button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// 自分で作ったカテゴリーの名前変更・削除
+function CustomCatEditor({ customCats, onRename, onDelete }) {
+  const [editing, setEditing] = useState(null);
+  const [val, setVal] = useState('');
+  const [confirm, setConfirm] = useState(null);
+  if (!customCats.length) return <p className="hint">自分で作ったカテゴリーはまだありません。「候補に追加」やカテゴリーの変更のときに「＋ 新しいカテゴリー」から作れます。</p>;
+  return (
+    <ul className="cat-edit">
+      {customCats.map((c) => (
+        <li key={c}>
+          {editing === c ? (
+            <form onSubmit={(e) => { e.preventDefault(); const v = val.trim(); if (v && v !== c) onRename(c, v); setEditing(null); }}>
+              <input id={'ren-' + c} autoFocus value={val} onChange={(e) => setVal(e.target.value)} maxLength={12} />
+              <button className="btn" type="submit">保存</button>
+              <button className="btn ghost" type="button" onClick={() => setEditing(null)}>やめる</button>
+            </form>
+          ) : confirm === c ? (
+            <div className="confirm">「{c}」を削除しますか？（このカテゴリーのお店は「なし」になります）
+              <button className="btn" type="button" onClick={() => { onDelete(c); setConfirm(null); }}>削除する</button>
+              <button className="btn ghost" type="button" onClick={() => setConfirm(null)}>やめる</button>
+            </div>
+          ) : (
+            <>
+              <span className="cat sel" style={{ '--c': CUSTOM_COLOR }}>{c}</span>
+              <span className="cat-edit-acts">
+                <button type="button" onClick={() => { setEditing(c); setVal(c); }}>名前を変える</button>
+                <button type="button" className="del" onClick={() => setConfirm(c)}>削除</button>
+              </span>
+            </>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 const countryName = (c) => (COUNTRY_LIST.find(([k]) => k === c) || [, ''])[1];
 
 function sourceLabel(u) {
@@ -189,12 +270,21 @@ export default function Home() {
   const [trip, setTrip] = useState('すべて');
   const [confirmId, setConfirmId] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
+  const [customCats, setCustomCats] = useState([]);
+  const [pickFor, setPickFor] = useState(null); // 's:placeId'（候補に追加）/ 'l:id'（カテゴリー変更）
+  const [catFilter, setCatFilter] = useState('すべて');
+  const [editCats, setEditCats] = useState(false);
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
 
   useEffect(() => {
     try { const s = localStorage.getItem(KEY); if (s) setItems(JSON.parse(s)); } catch {}
+    try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
     setLoaded(true);
   }, []);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem(CATS_KEY, JSON.stringify(customCats)); } catch {}
+  }, [customCats, loaded]);
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
@@ -238,15 +328,30 @@ export default function Home() {
   if (sort === 'reviews') sorted.sort((a, b) => b.reviews - a.reviews);
 
   const savedIds = new Set(items.map((i) => i.placeId));
-  function addCandidate(p) {
+  function addCandidate(p, category = '') {
     if (savedIds.has(p.placeId)) return;
-    setItems((prev) => [{ ...p, id: p.placeId, trip: area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
+    setItems((prev) => [{ ...p, id: p.placeId, category, trip: area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
+    setPickFor(null);
+  }
+  const addCustomCat = (n) => setCustomCats((prev) => (prev.includes(n) ? prev : [...prev, n]));
+  function renameCat(from, to) {
+    setCustomCats((prev) => prev.map((c) => (c === from ? to : c)).filter((c, i, a) => a.indexOf(c) === i));
+    setItems((prev) => prev.map((i) => (i.category === from ? { ...i, category: to } : i)));
+    if (catFilter === from) setCatFilter(to);
+  }
+  function deleteCat(name) {
+    setCustomCats((prev) => prev.filter((c) => c !== name));
+    setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: '' } : i)));
+    if (catFilter === name) setCatFilter('すべて');
   }
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); }
 
   const trips = [...new Set(items.map((i) => i.trip))];
-  const inTrip = items.filter((i) => trip === 'すべて' || i.trip === trip);
+  const inTrip = items.filter((i) => (trip === 'すべて' || i.trip === trip) && (catFilter === 'すべて' || (catFilter === 'なし' ? !i.category : i.category === catFilter)));
+  const usedCats = [...new Set(items.filter((i) => trip === 'すべて' || i.trip === trip).map((i) => i.category || 'なし'))];
+  const catOrder = [...BASE_CATS.map(([n]) => n), ...customCats, 'なし'];
+  usedCats.sort((a, b) => catOrder.indexOf(a) - catOrder.indexOf(b));
   const cand = inTrip.filter((i) => !i.done);
   const done = inTrip.filter((i) => i.done).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
 
@@ -264,6 +369,7 @@ export default function Home() {
           </div>
           <Rating p={it} />
           <span className="meta">
+            <button type="button" className={'cat small' + (it.category ? ' sel' : ' none')} style={{ '--c': catColor(it.category) }} onClick={() => setPickFor(pickFor === 'l:' + it.id ? null : 'l:' + it.id)}>{it.category || 'カテゴリーなし'} ▾</button>
             <span className="pill">{it.trip}</span>
             {src && <span className="pill">{src}で発見</span>}
             {it.done && it.rec && <span className="pill" style={{ color: 'var(--star)' }}>おすすめ</span>}
@@ -284,6 +390,10 @@ export default function Home() {
                 : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
               <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
             </div>
+          )}
+          {pickFor === 'l:' + it.id && (
+            <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
+              onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
           )}
           {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} />}
         </div>
@@ -366,10 +476,14 @@ export default function Home() {
                   <div className="acts">
                     {savedIds.has(p.placeId)
                       ? <button className="added" disabled>候補に追加済み</button>
-                      : <button className="add" onClick={() => addCandidate(p)}>候補に追加</button>}
+                      : <button className="add" onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加</button>}
                     <button className={openDetail === 's:' + p.placeId ? 'on' : ''} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細'}</button>
                     <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
                   </div>
+                  {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
+                    <CategoryPicker title="カテゴリーを選んで追加" customCats={customCats} current={null} onAddCustom={addCustomCat}
+                      onPick={(c) => addCandidate(p, c)} onClose={() => setPickFor(null)} />
+                  )}
                   {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
                 </div>
               </article>
@@ -386,6 +500,21 @@ export default function Home() {
               {['すべて', ...trips].map((t) => (
                 <button key={t} aria-pressed={t === trip} onClick={() => setTrip(t)}>{t}</button>
               ))}
+            </div>
+          )}
+          {usedCats.length > 0 && (
+            <div className="chips cat-filter">
+              {['すべて', ...usedCats].map((c) => (
+                <button key={c} aria-pressed={c === catFilter} style={c !== 'すべて' && c !== 'なし' ? { '--c': catColor(c) } : undefined}
+                  className={c !== 'すべて' && c !== 'なし' ? 'dot' : ''} onClick={() => setCatFilter(c)}>{c}</button>
+              ))}
+              <button className="edit-cats" aria-pressed={editCats} onClick={() => setEditCats((v) => !v)}>カテゴリーの編集</button>
+            </div>
+          )}
+          {editCats && (
+            <div className="panel">
+              <h2>自分で作ったカテゴリー</h2>
+              <CustomCatEditor customCats={customCats} onRename={renameCat} onDelete={deleteCat} />
             </div>
           )}
           <div className="list">

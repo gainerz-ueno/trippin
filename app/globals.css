@@ -103,3 +103,28 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .btn.full{display:block;text-align:center;text-decoration:none}
 
 .result-head{margin:0;font-family:var(--display);font-weight:700;font-size:15px}
+
+/* カテゴリー */
+.cat{font:inherit;font-size:13px;border:1.5px solid var(--c, var(--line));color:var(--ink);background:var(--card);padding:4px 12px;border-radius:999px;cursor:pointer;line-height:1.4}
+.cat.sel{background:var(--c, var(--ink));border-color:var(--c, var(--ink));color:#fff}
+.cat.none{border-style:dashed;border-color:var(--line);color:var(--sub)}
+.cat.none.sel{background:var(--chip);color:var(--ink)}
+.cat.add-cat{border-style:dashed;border-color:var(--line);color:var(--sub)}
+.cat.small{font-size:12px;padding:1px 10px}
+.picker{background:var(--copybg);border:1px solid var(--copyline);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.picker-head{display:flex;justify-content:space-between;align-items:center;font-size:13px}
+.picker .x{font:inherit;font-size:18px;line-height:1;border:0;background:none;color:var(--sub);cursor:pointer;padding:0 4px}
+.cat-chips{display:flex;flex-wrap:wrap;gap:6px}
+.new-cat{display:flex;gap:8px}
+.new-cat input{flex:1;min-width:0}
+.new-cat .btn{padding:8px 14px;font-size:13px;white-space:nowrap}
+.chips button.dot::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);margin-right:6px;vertical-align:1px}
+.chips .edit-cats{margin-left:auto;border-style:dashed;color:var(--sub)}
+.cat-edit{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.cat-edit li{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.cat-edit form{display:flex;gap:8px;flex:1;min-width:0}
+.cat-edit form input{flex:1;min-width:0}
+.cat-edit .btn{padding:8px 14px;font-size:13px}
+.cat-edit-acts{display:flex;gap:6px}
+.cat-edit-acts button{font:inherit;font-size:13px;border:1px solid var(--line);background:none;color:var(--ink);padding:4px 11px;border-radius:999px;cursor:pointer}
+.cat-edit-acts .del{color:var(--sub)}
