@@ -419,11 +419,11 @@ function PhotoStrip({ itemId, ver }) {
 }
 
 // メモを書く（入力中の文字はここで持つ）
-function MemoEditor({ initial, onSave, onCancel }) {
+function MemoEditor({ initial, onSave, onCancel, placeholder = '例：並ぶので朝イチで行く。豆乳は甘いのを頼む' }) {
   const [v, setV] = useState(initial || '');
   return (
     <div className="memo-edit">
-      <textarea id="memo" autoFocus rows={3} value={v} onChange={(e) => setV(e.target.value)} placeholder="例：並ぶので朝イチで行く。豆乳は甘いのを頼む" />
+      <textarea id="memo" autoFocus rows={3} value={v} onChange={(e) => setV(e.target.value)} placeholder={placeholder} />
       <div className="memo-acts">
         <button type="button" className="btn" onClick={() => onSave(v.trim())}>保存</button>
         <button type="button" className="btn ghost" onClick={onCancel}>やめる</button>
@@ -490,6 +490,7 @@ export default function Home() {
   const [editCats, setEditCats] = useState(false);
   const [view, setView] = useState('list'); // 'list' / 'map'
   const [memoFor, setMemoFor] = useState(null);
+  const [reviewFor, setReviewFor] = useState(null);
   const [hotels, setHotels] = useState({}); // 旅行先 → ホテル
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
@@ -737,6 +738,18 @@ export default function Home() {
             onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
         )}
         <PhotoStrip itemId={it.id} ver={photoVer} />
+        {it.done && (
+          reviewFor === it.id ? (
+            <MemoEditor initial={it.review} placeholder="例：豆乳と焼餅を注文。朝7時で15分待ち。甘い豆乳が絶品" onSave={(v) => { update(it.id, { review: v }); setReviewFor(null); }} onCancel={() => setReviewFor(null)} />
+          ) : it.review ? (
+            <div className="review">
+              <p className="rv-label">感想</p>
+              <button type="button" className="review-text" onClick={() => setReviewFor(it.id)} aria-label="感想を書き直す">{it.review}</button>
+            </div>
+          ) : (
+            <button type="button" className="review-add" onClick={() => setReviewFor(it.id)}>感想を書く</button>
+          )
+        )}
         <button type="button" className={'detailbar' + (openDetail === 'l:' + it.id ? ' on' : '')} onClick={() => toggleDetail('l:' + it.id)}>
           {openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細を開く'}
         </button>
