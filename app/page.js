@@ -361,11 +361,14 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const mapItems = useMemo(() => shown, [mapKey]);
 
-  function ListCard({ it }) {
+  function ListCard({ it, no }) {
     const src = sourceLabel(it.srcUrl);
     return (
       <article className={'item' + (it.done ? ' done' : '')}>
-        {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+        <div className="thumbwrap">
+          {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+          <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
+        </div>
         <div className="body">
           <div className="top">
             <NameBlock p={it} />
@@ -528,8 +531,8 @@ export default function Home() {
             </div>
           )}
           {view === 'map' && shown.length > 0 && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} />}
-          <div className="list" hidden={view === 'map' && shown.length > 0}>
-            {(tab === 'cand' ? cand : done).map((it) => <ListCard key={it.id} it={it} />)}
+          <div className="list">
+            {shown.map((it, i) => <ListCard key={it.id} it={it} no={i + 1} />)}
             {loaded && (tab === 'cand' ? cand : done).length === 0 && (
               <div className="empty">
                 {tab === 'cand'

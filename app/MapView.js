@@ -68,7 +68,8 @@ export default function MapView({ items, colorOf, photoSrc }) {
     if (!pts.length) return;
 
     const bounds = new maps.LatLngBounds();
-    for (const it of pts) {
+    pts.forEach((it) => {
+      const no = items.indexOf(it) + 1;
       const pos = { lat: it.lat, lng: it.lng };
       bounds.extend(pos);
       const m = new maps.Marker({
@@ -77,19 +78,20 @@ export default function MapView({ items, colorOf, photoSrc }) {
         title: it.name,
         icon: {
           path: maps.SymbolPath.CIRCLE,
-          scale: it.done ? 10 : 9,
+          scale: 13,
           fillColor: colorOf(it.category),
           fillOpacity: 1,
           strokeColor: it.done ? '#1C2836' : '#FFFFFF',
           strokeWeight: it.done ? 3 : 2,
         },
-        label: it.rec ? { text: '★', color: '#FFFFFF', fontSize: '11px' } : undefined,
+        label: { text: String(no), color: '#FFFFFF', fontSize: '13px', fontWeight: '700' },
+        zIndex: 1000 - no,
       });
       m.addListener('click', () => {
         const img = it.photo ? `<img src="${photoSrc(it.photo)}" alt="" style="width:100%;height:96px;object-fit:cover;border-radius:8px;margin-bottom:6px">` : '';
         info.current.setContent(
           `<div style="max-width:220px;font-family:inherit;color:#1C2836">${img}` +
-            `<div style="font-weight:700;font-size:14px">${esc(it.name)}</div>` +
+            `<div style="font-weight:700;font-size:14px">${no}. ${esc(it.name)}</div>` +
             (it.altName ? `<div style="font-size:12px;margin-top:2px">${esc(it.altName)}</div>` : '') +
             `<div style="font-size:12px;color:#5E6E80;margin-top:4px">${esc(it.category || 'カテゴリーなし')}${it.done ? '・行った' : '・候補'}</div>` +
             (it.mapsUrl ? `<a href="${esc(it.mapsUrl)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:12px;color:#2F5D7C">Googleマップで開く</a>` : '') +
@@ -98,7 +100,7 @@ export default function MapView({ items, colorOf, photoSrc }) {
         info.current.open({ map: map.current, anchor: m });
       });
       markers.current.push(m);
-    }
+    });
     if (pts.length === 1) {
       map.current.setCenter({ lat: pts[0].lat, lng: pts[0].lng });
       map.current.setZoom(15);
