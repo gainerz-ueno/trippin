@@ -359,7 +359,7 @@ function HotelPicker({ trip, current, onPick, onClear, onClose }) {
 }
 
 // 自分で撮った写真（このスマホの中に保存）
-function PhotoStrip({ itemId, ver }) {
+function PhotoStrip({ itemId, ver, kind }) {
   const [photos, setPhotos] = useState([]);
   const [big, setBig] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -382,7 +382,7 @@ function PhotoStrip({ itemId, ver }) {
   const groups = [
     ['メモ画像', photos.filter((p) => (p.kind || 'memo') === 'memo')],
     ['行った写真', photos.filter((p) => p.kind === 'visit')],
-  ].filter(([, l]) => l.length);
+  ].filter(([t, l]) => l.length && (kind === 'visit' ? t === '行った写真' : t === 'メモ画像'));
   return (
     <>
       {groups.map(([title, list]) => (
@@ -739,7 +739,7 @@ export default function Home() {
           <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
             onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
         )}
-        <PhotoStrip itemId={it.id} ver={photoVer} />
+        <PhotoStrip itemId={it.id} ver={photoVer} kind={it.done ? 'visit' : 'memo'} />
         {it.done && (
           reviewFor === it.id ? (
             <MemoEditor initial={it.review} placeholder="例：豆乳と焼餅を注文。朝7時で15分待ち。甘い豆乳が絶品" onSave={(v) => { update(it.id, { review: v }); setReviewFor(null); }} onCancel={() => setReviewFor(null)} />
