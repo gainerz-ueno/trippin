@@ -1,13 +1,15 @@
 :root{
   --bg:#EEF3F7; --card:#FFFFFF; --ink:#1C2836; --sub:#5E6E80; --line:#D5DEE7;
   --accent:#E2574C; --accent-ink:#FFFFFF; --go:#2B8A68; --star:#E39B12; --chip:#E1E9F0;
+  --copybg:#F4F7FA; --copyline:#CFDAE4; --copybtn:#2F5D7C; --copybtn-ink:#FFFFFF;
   --display:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Noto Sans JP",sans-serif;
   --body:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#121A23; --card:#1B2633; --ink:#E7EDF3; --sub:#97A6B6; --line:#2C3A4A;
-  --accent:#F06B5F; --accent-ink:#1A0F0E; --go:#45B48C; --star:#F2B23A; --chip:#243241; color-scheme:dark}}
+  --accent:#F06B5F; --accent-ink:#1A0F0E; --go:#45B48C; --star:#F2B23A; --chip:#243241;
+  --copybg:#152030; --copyline:#33475C; --copybtn:#8FB8D6; --copybtn-ink:#0F1A24; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;
@@ -64,9 +66,13 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .confirm{display:flex;gap:8px;align-items:center;font-size:13px;flex-wrap:wrap}
 .count{font-variant-numeric:tabular-nums}
 
-.nb{display:flex;flex-direction:column;gap:2px;min-width:0}
-.line{display:flex;align-items:flex-start;gap:8px;min-width:0}
+.nb{display:flex;flex-direction:column;gap:4px;min-width:0}
+/* 店名・住所のコピー用の囲み（Grab・Uber に貼る現地表記） */
+.line{display:flex;align-items:center;gap:8px;min-width:0;background:var(--copybg);border:1px solid var(--copyline);border-radius:10px;padding:6px 6px 6px 10px}
 .line .name,.line .addr{flex:1;min-width:0}
-.addr-line{margin-top:4px}
-.copy{font:inherit;font-size:11px;font-weight:700;flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:2px 9px;border-radius:999px;cursor:pointer;white-space:nowrap}
-.copy.ok{background:var(--go);border-color:var(--go);color:#fff}
+.line .addr{color:var(--ink)}
+.addr-line{margin-top:6px}
+.alt{padding-left:10px}
+.alt-addr{padding-left:10px}
+.copy{font:inherit;font-size:11px;font-weight:700;flex:none;border:0;background:var(--copybtn);color:var(--copybtn-ink);padding:5px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.copy.ok{background:var(--go);color:#fff}
