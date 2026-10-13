@@ -12,18 +12,18 @@ export async function POST(req) {
     const textQuery = [keyword, area].map((s) => String(s).trim()).filter(Boolean).join(' ');
     if (!textQuery) return Response.json({ error: 'キーワードか場所を入力してください' }, { status: 400 });
 
-    // レビュー件数で絞るときは、最大60件（3ページ）をまとめて取ってから絞る
+    // レビュー件数で絞るとき：1ページずつ取り、10件そろったら止める（最大3ページ）
+    // 続きは「もっと見る」で同じように取る
     if (minReviews > 0) {
       let all = [];
-      let tokens = null;
+      let tokens = decodeToken(pageToken);
       for (let i = 0; i < 3; i++) {
         const { places, next } = await searchPage(textQuery, minRating, tokens, country, {}, opts);
-        all = all.concat(places);
+        all = all.concat(places.filter((p) => p.reviews >= minReviews));
         tokens = next;
-        if (!tokens) break;
+        if (!tokens || all.length >= 10) break;
       }
-      const filtered = all.filter((p) => p.reviews >= minReviews);
-      return Response.json({ places: await fillTranslations(filtered), nextPageToken: null });
+      return Response.json({ places: await fillTranslations(all), nextPageToken: encodeToken(tokens) });
     }
 
     const { places, next } = await searchPage(textQuery, minRating, decodeToken(pageToken), country, {}, opts);

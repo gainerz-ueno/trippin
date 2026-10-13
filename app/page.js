@@ -252,6 +252,7 @@ function Stars({ n }) {
 
 function DetailPanel({ id }) {
   const [d, setD] = useState(detailCache.get(id) || null);
+  const [allPhotos, setAllPhotos] = useState(false); // 写真は最初3枚だけ（1枚ごとに費用がかかるため）
   const [err, setErr] = useState('');
   useEffect(() => {
     if (detailCache.has(id)) return;
@@ -275,13 +276,16 @@ function DetailPanel({ id }) {
     <div className="detail">
       {d.photos.length > 0 && (
         <div className="photos">
-          {d.photos.map((ph) => (
+          {(allPhotos ? d.photos : d.photos.slice(0, 3)).map((ph) => (
             <figure key={ph.name}>
               <img src={photoSrc(ph.name)} alt="" loading="lazy" />
               {ph.by && <figcaption>写真: {ph.by}</figcaption>}
             </figure>
           ))}
         </div>
+      )}
+      {!allPhotos && d.photos.length > 3 && (
+        <button type="button" className="btn ghost full" onClick={() => setAllPhotos(true)}>写真をもっと見る（残り{d.photos.length - 3}枚）</button>
       )}
 
       {d.hours.length > 0 && (
@@ -657,7 +661,6 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
   const lastQuery = useRef(null);
-  const sentinel = useRef(null);
   const resultsTop = useRef(null);
   const [searchSeq, setSearchSeq] = useState(0);
   const [moreBusy, setMoreBusy] = useState(false);
@@ -832,13 +835,6 @@ export default function Home() {
     }
   }
 
-  // 下までスクロールしたら次の20件
-  useEffect(() => {
-    if (!sentinel.current || !nextToken) return;
-    const ob = new IntersectionObserver((es) => { if (es[0].isIntersecting) runSearch(true); }, { rootMargin: '200px' });
-    ob.observe(sentinel.current);
-    return () => ob.disconnect();
-  });
 
   const sorted = [...results];
   if (sort === 'rating') sorted.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
@@ -1125,7 +1121,9 @@ export default function Home() {
               </div>
             )}
             {hereMsg && <p className="hint">{hereMsg}</p>}
-            {searched && !sorted.length && <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>}
+            {searched && !sorted.length && (nextToken
+              ? <div className="empty">ここまでに条件に合うお店はありませんでした。<br />「もっと見る」で続きを探せます。</div>
+              : <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>)}
             {sorted.map((p) => (
               <article className="item" key={p.placeId}>
                 <div className="item-top">
@@ -1156,7 +1154,11 @@ export default function Home() {
                 {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
               </article>
             ))}
-            {nextToken && <div ref={sentinel} className="more">{busy ? '読み込み中…' : ''}</div>}
+            {nextToken && (
+              <button type="button" className="btn ghost full more-btn" disabled={busy} onClick={() => runSearch(true)}>
+                {moreBusy ? '読み込み中…' : 'もっと見る'}
+              </button>
+            )}
           </div>
         </>
       )}
