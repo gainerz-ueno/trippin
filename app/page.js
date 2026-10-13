@@ -125,7 +125,7 @@ function CustomCatEditor({ customCats, onRename, onDelete }) {
   );
 }
 
-const countryName = (c) => (COUNTRY_LIST.find(([k]) => k === c) || [, ''])[1];
+const countryName = (c) => (c ? (COUNTRY_LIST.find(([k]) => k === c) || [, ''])[1] : '');
 
 function sourceLabel(u) {
   if (!u) return null;
@@ -517,11 +517,17 @@ export default function Home() {
     return (
       <article key={it.id} className={'item' + (it.done ? ' done' : '')}>
         <div className="item-top">
-          <div className="thumbwrap">
+          <div className="thumbwrap side">
             <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
               {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
             </button>
             <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
+            <div className="side-acts">
+              <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+              {it.done
+                ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
+                : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
+            </div>
           </div>
           <div className="body">
             <div className="top">
@@ -559,13 +565,8 @@ export default function Home() {
           </div>
         ) : (
           <div className="acts">
-            <button className={openDetail === 'l:' + it.id ? 'on' : ''} onClick={() => toggleDetail('l:' + it.id)}>{openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細'}</button>
-            <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
             <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
             {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
-            {it.done
-              ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
-              : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
             <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
           </div>
         )}
@@ -573,6 +574,9 @@ export default function Home() {
           <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
             onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
         )}
+        <button type="button" className={'detailbar' + (openDetail === 'l:' + it.id ? ' on' : '')} onClick={() => toggleDetail('l:' + it.id)}>
+          {openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細を開く'}
+        </button>
         {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} />}
       </article>
     );

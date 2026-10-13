@@ -191,3 +191,6 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .dd-new input{flex:1;min-width:0;padding:8px 10px;font-size:13px}
 .dd-new .btn{padding:8px 12px;font-size:13px}
 .item{overflow:visible}
+.side-acts .go{background:var(--go);border-color:var(--go);color:#fff}
+.top{width:100%}
+.top .nb{flex:1;min-width:0}
