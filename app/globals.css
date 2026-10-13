@@ -275,3 +275,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .move-wrap{position:relative;display:inline-block}
 .pill-btn{font:inherit;font-size:12px;border:0;cursor:pointer}
 .move-dd{left:auto;right:0;width:200px}
+
+.ai-move { display: flex; gap: 16px; margin: 4px 0 8px; }
+.ai-move label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.ai-move input { width: 18px; height: 18px; accent-color: var(--accent, #2F5D7C); }

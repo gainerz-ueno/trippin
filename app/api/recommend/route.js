@@ -22,7 +22,13 @@ async function gemini(prompt) {
 export async function POST(req) {
   if (!process.env.GEMINI_API_KEY) return Response.json({ error: 'AIの設定がされていません' }, { status: 500 });
   try {
-    const { question = '', here = null, hotel = null, items = [], localTime = '', trip = '' } = await req.json();
+    const { question = '', here = null, hotel = null, items = [], localTime = '', trip = '', walk = true, car = false } = await req.json();
+    // 徒歩圏内：約1km（徒歩15分）／車移動：約8km（Grab・Uber・タクシーで20分）／両方：どちらも
+    const radius = car ? 8000 : walk ? 1200 : 3000;
+    const moveText = walk && car ? '徒歩圏内（約1km）と車移動（約8km、Grab・Uber・タクシー）の両方。近い順に混ぜて提案し、どちらで行くかを理由に書く'
+      : car ? '車移動（Grab・Uber・タクシーで約8km以内）。徒歩では遠いお店もすすめてよい'
+      : walk ? '徒歩圏内（約1km・徒歩15分以内）だけ。遠いお店はすすめない'
+      : '指定なし';
     const q = String(question).trim() || 'このあとどこに行くのがおすすめ？';
     const center = here || (hotel && hotel.lat != null ? { lat: hotel.lat, lng: hotel.lng } : null);
 
@@ -46,7 +52,7 @@ export async function POST(req) {
         const { places } = await searchPage(searchQuery, 4, null, '', {
           openNow: true,
           pageSize: 10,
-          locationBias: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius: 1500 } },
+          locationBias: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius } },
         });
         nearby = await fillTranslations(places.filter((p) => (p.reviews || 0) >= 50).slice(0, 8));
       } catch {}
@@ -85,6 +91,7 @@ export async function POST(req) {
         `現地の時刻: ${localTime || '不明'}`,
         `今いる場所: ${here ? 'わかっている（距離はfromHereを参照）' : hotel ? 'わからない（ホテル付近とみなす）' : 'わからない'}`,
         `ホテル: ${hotel?.name || '未設定'}`,
+        `移動手段: ${moveText}`,
         `候補リスト: ${JSON.stringify(listForAi)}`,
         `近くで今開いているお店: ${JSON.stringify(nearbyForAi)}`,
         `質問: ${q}`,

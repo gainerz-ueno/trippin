@@ -507,6 +507,8 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
   const [err, setErr] = useState('');
   const [hereUsed, setHereUsed] = useState(null);
   const [pick, setPick] = useState(null);
+  const [walk, setWalk] = useState(true);
+  const [car, setCar] = useState(false);
 
   async function ask(question) {
     setBusy(true); setErr(''); setRes(null);
@@ -524,7 +526,7 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
       const r = await fetch('/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, here, hotel, items: payload, localTime: localTimeLabel(offset), trip }),
+        body: JSON.stringify({ question, here, hotel, items: payload, localTime: localTimeLabel(offset), trip, walk, car }),
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'AIに聞けませんでした');
@@ -543,6 +545,10 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
       <div className="picker-head">
         <b>AIナビゲーター{trip ? `（${trip}）` : ''}</b>
         <button type="button" className="x" onClick={() => setOpen(false)} aria-label="閉じる">×</button>
+      </div>
+      <div className="ai-move">
+        <label><input type="checkbox" checked={walk} onChange={(e) => setWalk(e.target.checked)} />徒歩圏内</label>
+        <label><input type="checkbox" checked={car} onChange={(e) => setCar(e.target.checked)} />車移動</label>
       </div>
       <div className="cat-chips">
         {AI_PRESETS.map((t) => <button type="button" key={t} className="cat" disabled={busy} onClick={() => { setQ(''); ask(moodQuestion(t)); }}>{t}</button>)}
