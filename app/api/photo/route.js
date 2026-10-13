@@ -8,5 +8,9 @@ export async function GET(req) {
   const res = await fetch(url);
   const data = await res.json();
   if (!res.ok || !data.photoUri) return new Response('not found', { status: 404 });
-  return Response.redirect(data.photoUri, 302);
+  // 同じ写真を何度もGoogleに取りに行かないよう、ブラウザとVercelに1日覚えさせる
+  return new Response(null, {
+    status: 302,
+    headers: { Location: data.photoUri, 'Cache-Control': 'public, max-age=86400, s-maxage=86400' },
+  });
 }

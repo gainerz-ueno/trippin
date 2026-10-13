@@ -686,6 +686,8 @@ export default function Home() {
   const [catFilter, setCatFilter] = useState('すべて');
   const [editCats, setEditCats] = useState(false);
   const [view, setView] = useState('list'); // 'list' / 'map'
+  const [mapUsed, setMapUsed] = useState(false); // 地図は一度作ったら作り直さない（地図の表示回数を増やさない）
+  useEffect(() => { if (view === 'map') setMapUsed(true); }, [view]);
   const [memoFor, setMemoFor] = useState(null);
   const [reviewFor, setReviewFor] = useState(null);
   const [hotels, setHotels] = useState({}); // 旅行先 → ホテル
@@ -884,10 +886,9 @@ export default function Home() {
     (async () => {
       for (const it of need) {
         try {
-          const r = await fetch(`/api/details?id=${encodeURIComponent(it.placeId)}`);
+          const r = await fetch(`/api/details?id=${encodeURIComponent(it.placeId)}&lite=1`);
           const d = await r.json();
           if (d.error) continue;
-          detailCache.set(it.placeId, d);
           const hoursInfo = { hours: d.hours || [], periods: d.periods || [], offset: d.offset || 0, at: Date.now() };
           setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, hoursInfo } : x)));
         } catch {}
@@ -1200,7 +1201,11 @@ export default function Home() {
               <CustomCatEditor customCats={customCats} onRename={renameCat} onDelete={deleteCat} />
             </div>
           )}
-          {view === 'map' && (shown.length > 0 || mapHotels.length > 0) && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} hotels={mapHotels} />}
+          {mapUsed && (
+            <div hidden={view !== 'map' || (shown.length === 0 && mapHotels.length === 0)}>
+              <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} hotels={mapHotels} visible={view === 'map'} />
+            </div>
+          )}
           <div className="list">
             {shown.map((it, i) => ListCard({ it, no: i + 1 }))}
             {loaded && (tab === 'cand' ? cand : done).length === 0 && (

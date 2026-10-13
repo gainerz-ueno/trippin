@@ -30,7 +30,7 @@ function loadMaps() {
 const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // 候補・行ったのお店を、カテゴリーの色のピンで地図に並べる
-export default function MapView({ items, colorOf, photoSrc, hotels = [] }) {
+export default function MapView({ items, colorOf, photoSrc, hotels = [], visible = true }) {
   const box = useRef(null);
   const map = useRef(null);
   const markers = useRef([]);
@@ -60,7 +60,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [] }) {
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !visible) return;
     const maps = window.google.maps;
     markers.current.forEach((m) => m.setMap(null));
     markers.current = [];
@@ -132,7 +132,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [] }) {
     } else {
       map.current.fitBounds(bounds, 40);
     }
-  }, [ready, items, colorOf, photoSrc, hotels]);
+  }, [ready, items, colorOf, photoSrc, hotels, visible]);
 
   if (err) return <div className="empty">{err}</div>;
   return (

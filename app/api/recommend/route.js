@@ -1,5 +1,5 @@
 // AIおすすめ：今いる場所・現地の時間・ホテル・候補のお店をふまえて提案する（Gemini）
-import { searchPage, fillTranslations } from '../../lib/places';
+import { searchPage, fillTranslations, localize } from '../../lib/places';
 
 const MODEL = 'gemini-3.8-flash';
 
@@ -34,6 +34,7 @@ export async function POST(req) {
 
     // 1) 質問から、近くのお店を探すための検索語を作る
     let nearby = [];
+    let nearbyLang = 'ja';
     if (center) {
       let searchQuery = 'レストラン';
       try {
@@ -49,12 +50,14 @@ export async function POST(req) {
         if (k?.searchQuery) searchQuery = String(k.searchQuery).slice(0, 40);
       } catch {}
       try {
-        const { places } = await searchPage(searchQuery, 4, null, '', {
+        // Googleへの検索は日本語の1回だけ。現地の表記は、選ばれたお店だけ後で取る
+        const { places, lang } = await searchPage(searchQuery, 4, null, '', {
           openNow: true,
           pageSize: 10,
           locationBias: { circle: { center: { latitude: center.lat, longitude: center.lng }, radius } },
-        });
-        nearby = await fillTranslations(places.filter((p) => (p.reviews || 0) >= 50).slice(0, 8));
+        }, { jaOnly: true });
+        nearbyLang = lang;
+        nearby = places.filter((p) => (p.reviews || 0) >= 50).slice(0, 8);
       } catch {}
     }
 
@@ -101,7 +104,7 @@ export async function POST(req) {
 
     const nearbyMap = new Map(nearby.map((p) => [p.placeId, p]));
     const listIds = new Set(items.map((it) => it.id));
-    const picks = (out.picks || [])
+    const picked = (out.picks || [])
       .slice(0, 3)
       .map((pk) => {
         const id = String(pk.id || '');
@@ -110,6 +113,14 @@ export async function POST(req) {
         return null;
       })
       .filter(Boolean);
+
+    // 選ばれた近くのお店だけ、現地の店名・住所（Grab・Uber用）と日本語の表記を付ける
+    const near = picked.filter((pk) => pk.kind === 'nearby');
+    if (near.length) {
+      const loc = await fillTranslations(await localize(near.map((pk) => pk.place), nearbyLang));
+      near.forEach((pk, i) => { pk.place = loc[i]; });
+    }
+    const picks = picked;
 
     return Response.json({ answer: out.answer || '', picks });
   } catch (e) {

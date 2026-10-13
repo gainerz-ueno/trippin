@@ -12,6 +12,9 @@ const FIELDS = [
   'places.currentOpeningHours.openNow',
   'places.primaryTypeDisplayName',
   'places.addressComponents',
+  // 営業時間も検索と同じ料金区分で一緒に取れる（候補に入れたあと別に取りに行かなくていい）
+  'places.regularOpeningHours.periods',
+  'places.utcOffsetMinutes',
   'nextPageToken',
 ].join(',');
 
@@ -81,11 +84,26 @@ async function detailsIn(id, lang) {
   }
 }
 
-// 日本語と現地の言語で同じ検索をして、1ページ分を返す
-export async function searchPage(textQuery, minRating, tokens, country, extra = {}) {
+// 1ページ分を返す
+// ・国を選んでいるとき：現地の言語で1回だけ検索（日本語表記はAIで作る）→ Googleへの検索は1回
+// ・国を選んでいないとき：日本語で検索して国を判定 → 現地の言語でもう1回（現地の表記を取るため）
+// ・opts.jaOnly：日本語の1回だけ（AIナビの近く探し用。現地の表記は選ばれたお店だけ後で取る）
+export async function searchPage(textQuery, minRating, tokens, country, extra = {}, opts = {}) {
+  const lang0 = LANG[country];
+  if (tokens?.single || (lang0 && !tokens?.ja && !opts.jaOnly)) {
+    const lang = tokens?.lang || lang0;
+    const r = await searchOnce(textQuery, minRating, tokens?.local, lang, country, extra);
+    const raw = (r.places || []).filter((p) => !COUNTRIES[country] || countryOf(p) === country);
+    const places = raw.map((p) => shape(p, p, lang, false));
+    const next = r.nextPageToken ? { single: true, local: r.nextPageToken, lang } : null;
+    return { places, next, lang };
+  }
+
   const ja = await searchOnce(textQuery, minRating, tokens?.ja, 'ja', country, extra);
   const jaPlaces = (ja.places || []).filter((p) => !COUNTRIES[country] || countryOf(p) === country);
-  const lang = tokens?.lang || LANG[country] || LANG[mostCommonCountry(jaPlaces)] || 'en';
+  const lang = tokens?.lang || lang0 || LANG[mostCommonCountry(jaPlaces)] || 'en';
+
+  if (opts.jaOnly) return { places: jaPlaces.map((p) => shape(p, null, 'ja')), next: null, lang };
 
   let localNext = null;
   const localMap = new Map();
@@ -100,7 +118,21 @@ export async function searchPage(textQuery, minRating, tokens, country, extra = 
 
   const places = jaPlaces.map((p) => shape(p, localMap.get(p.id), lang));
   const next = ja.nextPageToken ? { ja: ja.nextPageToken, local: localNext, lang } : null;
-  return { places, next };
+  return { places, next, lang };
+}
+
+// 日本語で取ったお店（AIナビで選ばれた数件）に、現地の店名・住所を付ける
+export async function localize(places, lang) {
+  if (!lang || lang === 'ja') return places;
+  return Promise.all(
+    places.map(async (p) => {
+      const lp = await detailsIn(p.placeId, lang);
+      if (!lp) return p;
+      const name = lp.displayName?.text || p.name;
+      const address = lp.formattedAddress || p.address;
+      return { ...p, name, address, ...alts(name, address, p.name, lang, true) };
+    })
+  );
 }
 
 const count = (s, re) => (String(s).match(re) || []).length;
@@ -114,19 +146,42 @@ const hanDominant = (s) => count(s, /\p{Script=Han}/gu) > latin(s);
 
 // name・address = 現地の表記（Grab・Uber に貼る用）
 // altName・altAddress = 日本人が読める表記（文字列=表示 / 'translate'=Geminiで作る / ''=出さない）
-function shape(p, lp, lang) {
-  const jaName = p.displayName?.text || '';
-  const jaAddress = p.formattedAddress || '';
-  const name = (lang !== 'ja' && lp?.displayName?.text) || jaName;
-  const address = (lang !== 'ja' && lp?.formattedAddress) || jaAddress;
-
+function alts(name, address, jaName, lang, jaKnown) {
   let altName = '';
   if (lang !== 'ja' && !hasKana(name) && !hanDominant(name)) {
-    altName = hasKana(jaName) && jaName !== name ? jaName : 'translate';
-  } else if (lang !== 'ja' && hanDominant(name) && hasKana(jaName) && jaName !== name) {
+    altName = jaKnown && hasKana(jaName) && jaName !== name ? jaName : 'translate';
+  } else if (lang !== 'ja' && jaKnown && hanDominant(name) && hasKana(jaName) && jaName !== name) {
     altName = jaName;
   }
   const altAddress = lang !== 'ja' && !hasKana(address) && !hanDominant(address) ? 'translate' : '';
+  return { altName, altAddress };
+}
+
+// 営業時間（曜日ごとの表示は日本語で作る。月曜はじまり）
+const DAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const hm = (t) => `${t.hour ?? 0}:${String(t.minute ?? 0).padStart(2, '0')}`;
+function hoursOf(p) {
+  const periods = p.regularOpeningHours?.periods || [];
+  const offset = p.utcOffsetMinutes ?? 0;
+  let hours = [];
+  if (periods.length === 1 && !periods[0].close) {
+    hours = [1, 2, 3, 4, 5, 6, 0].map((d) => `${DAYS[d]}曜日: 24時間営業`);
+  } else if (periods.length) {
+    hours = [1, 2, 3, 4, 5, 6, 0].map((d) => {
+      const list = periods.filter((x) => x.open?.day === d).map((x) => `${hm(x.open)}～${x.close ? hm(x.close) : ''}`);
+      return `${DAYS[d]}曜日: ${list.length ? list.join('、') : '定休日'}`;
+    });
+  }
+  return { hours, periods, offset, at: Date.now() };
+}
+
+// jaKnown=false：日本語の表記を取っていない（現地の言語1回だけで検索したとき）
+function shape(p, lp, lang, jaKnown = true) {
+  const jaName = jaKnown ? p.displayName?.text || '' : '';
+  const jaAddress = jaKnown ? p.formattedAddress || '' : '';
+  const name = (lang !== 'ja' && lp?.displayName?.text) || jaName || p.displayName?.text || '';
+  const address = (lang !== 'ja' && lp?.formattedAddress) || jaAddress || p.formattedAddress || '';
+  const { altName, altAddress } = alts(name, address, jaName, lang, jaKnown);
 
   return {
     placeId: p.id,
@@ -142,6 +197,7 @@ function shape(p, lp, lang) {
     photo: p.photos?.[0]?.name || null,
     openNow: p.currentOpeningHours?.openNow ?? null,
     type: p.primaryTypeDisplayName?.text || '',
+    hoursInfo: hoursOf(p),
   };
 }
 

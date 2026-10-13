@@ -28,12 +28,17 @@ function money(m) {
   return `${Number(m.units).toLocaleString('ja-JP')} ${m.currencyCode || ''}`.trim();
 }
 
+// lite=1：営業時間だけ（写真・口コミを取らないので安い料金区分になる）
+const LITE = ['id', 'regularOpeningHours.weekdayDescriptions', 'regularOpeningHours.periods', 'utcOffsetMinutes'].join(',');
+
 export async function GET(req) {
-  const id = new URL(req.url).searchParams.get('id') || '';
+  const u = new URL(req.url);
+  const id = u.searchParams.get('id') || '';
+  const lite = u.searchParams.get('lite') === '1';
   if (!/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'bad request' }, { status: 400 });
   try {
     const res = await fetch(`https://places.googleapis.com/v1/places/${id}?languageCode=ja`, {
-      headers: { 'X-Goog-Api-Key': process.env.GOOGLE_MAPS_API_KEY, 'X-Goog-FieldMask': FIELDS },
+      headers: { 'X-Goog-Api-Key': process.env.GOOGLE_MAPS_API_KEY, 'X-Goog-FieldMask': lite ? LITE : FIELDS },
       cache: 'no-store',
     });
     const p = await res.json();
