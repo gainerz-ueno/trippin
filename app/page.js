@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import MapView from './MapView';
 
 const KEY = 'trippin.v1';
 
@@ -274,6 +275,7 @@ export default function Home() {
   const [pickFor, setPickFor] = useState(null); // 's:placeId'（候補に追加）/ 'l:id'（カテゴリー変更）
   const [catFilter, setCatFilter] = useState('すべて');
   const [editCats, setEditCats] = useState(false);
+  const [view, setView] = useState('list'); // 'list' / 'map'
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
 
   useEffect(() => {
@@ -354,6 +356,10 @@ export default function Home() {
   usedCats.sort((a, b) => catOrder.indexOf(a) - catOrder.indexOf(b));
   const cand = inTrip.filter((i) => !i.done);
   const done = inTrip.filter((i) => i.done).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
+  const shown = tab === 'cand' ? cand : done;
+  const mapKey = shown.map((i) => `${i.id}:${i.category}:${i.done}:${i.rec}`).join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const mapItems = useMemo(() => shown, [mapKey]);
 
   function ListCard({ it }) {
     const src = sourceLabel(it.srcUrl);
@@ -511,13 +517,18 @@ export default function Home() {
               <button className="edit-cats" aria-pressed={editCats} onClick={() => setEditCats((v) => !v)}>カテゴリーの編集</button>
             </div>
           )}
+          <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
+            <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
+            <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
+          </div>
           {editCats && (
             <div className="panel">
               <h2>自分で作ったカテゴリー</h2>
               <CustomCatEditor customCats={customCats} onRename={renameCat} onDelete={deleteCat} />
             </div>
           )}
-          <div className="list">
+          {view === 'map' && shown.length > 0 && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} />}
+          <div className="list" hidden={view === 'map' && shown.length > 0}>
             {(tab === 'cand' ? cand : done).map((it) => <ListCard key={it.id} it={it} />)}
             {loaded && (tab === 'cand' ? cand : done).length === 0 && (
               <div className="empty">

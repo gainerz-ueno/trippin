@@ -128,3 +128,10 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .cat-edit-acts{display:flex;gap:6px}
 .cat-edit-acts button{font:inherit;font-size:13px;border:1px solid var(--line);background:none;color:var(--ink);padding:4px 11px;border-radius:999px;cursor:pointer}
 .cat-edit-acts .del{color:var(--sub)}
+
+/* 地図 */
+.viewtoggle{display:grid;grid-template-columns:1fr 1fr;background:var(--chip);border-radius:10px;padding:3px;max-width:240px}
+.viewtoggle button{font:inherit;font-size:13px;font-weight:700;border:0;background:none;color:var(--sub);padding:6px;border-radius:8px;cursor:pointer}
+.viewtoggle button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.mapwrap{display:flex;flex-direction:column;gap:6px}
+.map{width:100%;height:62vh;min-height:320px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--chip)}
