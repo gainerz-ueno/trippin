@@ -360,12 +360,13 @@ function fromHotel(h, it) {
   const km = distanceKm(h, it);
   const road = km * 1.3;
   const dist = km < 1 ? `${Math.round(km * 1000 / 10) * 10}m` : `${km.toFixed(1)}km`;
-  if (road <= 3) return `ホテルから約${dist}・徒歩約${Math.max(1, Math.round((road / 4.5) * 60))}分`;
-  return `ホテルから約${dist}・車で約${Math.max(5, Math.round((road / 25) * 60))}分`;
+  if (road <= 3) return `宿泊先から約${dist}・徒歩約${Math.max(1, Math.round((road / 4.5) * 60))}分`;
+  return `宿泊先から約${dist}・車で約${Math.max(5, Math.round((road / 25) * 60))}分`;
 }
 
 // 泊まるホテルをGoogleマップから選ぶ
-function HotelPicker({ trip, current, onPick, onClear, onClose }) {
+function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
+  const [country, setCountry] = useState(country0 || 'TW');
   const [q, setQ] = useState('');
   const [list, setList] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -378,7 +379,7 @@ function HotelPicker({ trip, current, onPick, onClear, onClose }) {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: q.trim(), area: trip === '未分類' ? '' : trip, jaOnly: true }),
+        body: JSON.stringify({ keyword: q.trim(), country, jaOnly: true }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || '検索に失敗しました');
@@ -393,9 +394,14 @@ function HotelPicker({ trip, current, onPick, onClear, onClose }) {
   return (
     <div className="picker">
       <div className="picker-head">
-        <b>{trip}で泊まるホテル</b>
+        <b>今回の宿泊先（ホテル）</b>
         <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
       </div>
+      <label htmlFor="hotelct">国
+        <select id="hotelct" value={country} onChange={(e) => setCountry(e.target.value)}>
+          {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </label>
       <form className="new-cat" onSubmit={search}>
         <input id="hotelq" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="ホテル名（例：シェラトン）" />
         <button className="btn" type="submit" disabled={busy}>{busy ? 'さがしています…' : 'さがす'}</button>
@@ -644,6 +650,7 @@ export default function Home() {
   const [minRating, setMinRating] = useState(0);
   const [minReviews, setMinReviews] = useState(0);
   const [sort, setSort] = useState('relevance');
+  const [nearHotel, setNearHotel] = useState(true); // 宿泊先の近くでさがす
   const [here, setHere] = useState(null);
   const [hereMsg, setHereMsg] = useState('');
   const srcUrl = '';
@@ -689,7 +696,7 @@ export default function Home() {
   useEffect(() => { if (view === 'map') setMapUsed(true); }, [view]);
   const [memoFor, setMemoFor] = useState(null);
   const [reviewFor, setReviewFor] = useState(null);
-  const [hotels, setHotels] = useState({}); // 旅行先 → ホテル
+  const [hotel, setHotel] = useState(null); // 今回の宿泊先（1つ。すべての画面の軸）
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
   const [photoBusy, setPhotoBusy] = useState(null);
@@ -709,7 +716,17 @@ export default function Home() {
     const fixTrip = (arr) => arr.map((i) => (i.trip ? i : { ...i, trip: UNSORTED }));
     try { const s = localStorage.getItem(KEY); if (s) setItems(fixTrip(JSON.parse(s))); } catch {}
     try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
-    try { const h = localStorage.getItem('trippin.hotels'); if (h) setHotels(JSON.parse(h)); } catch {}
+    try {
+      const h = localStorage.getItem('trippin.hotel');
+      if (h) setHotel(JSON.parse(h));
+      else {
+        // 前の作り（フォルダごとのホテル）から引き継ぐ：開いていたフォルダのホテル、なければどれか1つ
+        const old = JSON.parse(localStorage.getItem('trippin.hotels') || '{}');
+        const cur = localStorage.getItem('trippin.folder');
+        const pick = old[cur] || Object.values(old)[0];
+        if (pick) setHotel(pick);
+      }
+    } catch {}
     try { const c = localStorage.getItem('trippin.country'); if (c && COUNTRY_LIST.some(([k]) => k === c)) setCountry(c); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
@@ -727,8 +744,8 @@ export default function Home() {
   }, [customCats, loaded]);
   useEffect(() => {
     if (!loaded) return;
-    try { localStorage.setItem('trippin.hotels', JSON.stringify(hotels)); } catch {}
-  }, [hotels, loaded]);
+    try { if (hotel) localStorage.setItem('trippin.hotel', JSON.stringify(hotel)); else localStorage.removeItem('trippin.hotel'); } catch {}
+  }, [hotel, loaded]);
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem('trippin.folders', JSON.stringify(folders)); localStorage.setItem('trippin.folder', trip); } catch {}
@@ -742,14 +759,12 @@ export default function Home() {
     if (from === UNSORTED || to === UNSORTED) return;
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
     setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to } : i)));
-    setHotels((prev) => { const n = { ...prev }; if (n[from]) { n[to] = n[from]; delete n[from]; } return n; });
     setTrip(to);
   }
   function deleteFolder(name) {
     const gone = items.filter((i) => i.trip === name).map((i) => i.id);
     setItems((prev) => prev.filter((i) => i.trip !== name));
     gone.forEach((id) => deletePhotosOf(id).catch(() => {}));
-    setHotels((prev) => { const n = { ...prev }; delete n[name]; return n; });
     const rest = allFolders.filter((f) => f !== name);
     setFolders(rest);
     setTrip(UNSORTED);
@@ -761,7 +776,8 @@ export default function Home() {
 
   async function runSearch(more = false, override = null) {
     if (busy) return;
-    const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews), ...(override || {}) };
+    const near = hotel && nearHotel && hotel.lat != null ? { lat: hotel.lat, lng: hotel.lng } : null;
+    const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews), near, ...(override || {}) };
     if (!more && !String(q.keyword).trim() && !String(q.area).trim()) { setError('キーワードか場所を入力してください'); return; }
     if (!more && !q.country) { setError('国を選んでください'); return; }
     setBusy(true); setMoreBusy(more); setError('');
@@ -836,6 +852,7 @@ export default function Home() {
   const sorted = [...results];
   if (sort === 'rating') sorted.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
   if (sort === 'reviews') sorted.sort((a, b) => b.reviews - a.reviews);
+  if (sort === 'hotel' && hotel?.lat != null) sorted.sort((a, b) => (a.lat == null ? 1e9 : distanceKm(hotel, a)) - (b.lat == null ? 1e9 : distanceKm(hotel, b)));
   if (sort === 'near' && here) sorted.sort((a, b) => (a.lat == null ? 1e9 : distanceKm(here, a)) - (b.lat == null ? 1e9 : distanceKm(here, b)));
   async function changeSort(v) {
     setSort(v); setHereMsg('');
@@ -929,8 +946,7 @@ export default function Home() {
   const cand = inTrip.filter((i) => !i.done);
   const done = inTrip.filter((i) => i.done).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
   const shown = tab === 'cand' ? cand : done;
-  const hotelTrip = trip || null;
-  const mapHotels = useMemo(() => [hotelTrip && hotels[hotelTrip]].filter(Boolean), [hotels, hotelTrip]);
+  const mapHotels = useMemo(() => [hotel].filter(Boolean), [hotel]);
   const mapKey = shown.map((i) => `${i.id}:${i.category}:${i.done}:${i.rec}`).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const mapItems = useMemo(() => shown, [mapKey]);
@@ -980,7 +996,7 @@ export default function Home() {
                 <span>{todayHours(it.hoursInfo) ? '今日 ' + todayHours(it.hoursInfo).replace(/^[^:：]+[:：]\s*/, '') : '営業時間の情報なし'}</span>
               </p>
             )}
-            {fromHotel(hotels[it.trip], it) && <p className="fromhotel">{fromHotel(hotels[it.trip], it)}</p>}
+            {fromHotel(hotel, it) && <p className="fromhotel">{fromHotel(hotel, it)}</p>}
             <span className="meta">
               <button type="button" className={'cat small' + (it.category ? ' sel' : ' none')} style={{ '--c': catColor(it.category) }} onClick={() => setPickFor(pickFor === 'l:' + it.id ? null : 'l:' + it.id)}>{it.category || 'カテゴリーなし'} ▾</button>
               <span className="move-wrap">
@@ -1039,6 +1055,27 @@ export default function Home() {
         <h1>Trip<span>pin</span></h1>
         <div className="tag">行きたい場所リスト</div>
       </header>
+
+      <div className="hotelbar top-hotel">
+        {hotel ? (
+          <>
+            <span className="hb-label">宿泊先</span>
+            <span className="hb-name">{hotel.name}</span>
+            <button type="button" onClick={() => setHotelEdit((v) => !v)}>変更</button>
+          </>
+        ) : (
+          <div className="hb-first">
+            <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>今回の宿泊先（ホテル）を登録</button>
+            <p className="hb-note">※登録すると宿泊先を軸に行動しやすくなります</p>
+          </div>
+        )}
+      </div>
+      {hotelEdit && (
+        <HotelPicker country={country} current={hotel}
+          onPick={(h) => { setHotel(h); setHotelEdit(false); }}
+          onClear={() => { setHotel(null); setHotelEdit(false); if (sort === 'hotel') setSort('relevance'); }}
+          onClose={() => setHotelEdit(false)} />
+      )}
 
       <div className="tabs" role="tablist">
         <button role="tab" aria-selected={tab === 'search'} onClick={() => setTab('search')}>さがす</button>
@@ -1100,6 +1137,9 @@ export default function Home() {
               )}
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
+            {hotel && (
+              <label className="near-hotel"><input type="checkbox" checked={nearHotel} onChange={(e) => setNearHotel(e.target.checked)} />宿泊先の近くでさがす</label>
+            )}
             <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
             <p className="hint">国を選ぶと、その国の中だけを探します。</p>
             {error && <p className="err">{error}</p>}
@@ -1114,6 +1154,7 @@ export default function Home() {
                   <option value="rating">点数が高い順</option>
                   <option value="reviews">レビューが多い順</option>
                   <option value="near">近い順（現在地から）</option>
+                  {hotel && <option value="hotel">近い順（宿泊先から）</option>}
                 </select>
               </div>
             )}
@@ -1143,6 +1184,7 @@ export default function Home() {
                     <NameBlock p={p} />
                     <Rating p={p} />
                     {sort === 'near' && here && p.lat != null && <p className="dist">現在地から{distanceKm(here, p).toFixed(1)}km</p>}
+                    {fromHotel(hotel, p) && <p className="fromhotel">{fromHotel(hotel, p)}</p>}
                   </div>
                 </div>
                 <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
@@ -1164,32 +1206,6 @@ export default function Home() {
         <>
           <FolderBar folders={allFolders} current={trip} counts={folderCounts} totals={folderTotals} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
             onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} />
-          {trips.length > 0 && trip !== UNSORTED && (
-            <div className="hotelbar">
-              {hotelTrip ? (
-                hotels[hotelTrip] ? (
-                  <>
-                    <span className="hb-label">ホテル</span>
-                    <span className="hb-name">{hotels[hotelTrip].name}</span>
-                    <button type="button" onClick={() => setHotelEdit((v) => !v)}>変更</button>
-                  </>
-                ) : (
-                  <div className="hb-first">
-                    <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>今回の宿泊先（ホテル）を登録</button>
-                    <p className="hb-note">※登録すると宿泊先を軸に行動しやすくなります</p>
-                  </div>
-                )
-              ) : (
-                <span className="hb-none">上で旅行先を選ぶと、泊まるホテルを設定できます</span>
-              )}
-            </div>
-          )}
-          {hotelEdit && hotelTrip && (
-            <HotelPicker trip={hotelTrip} current={hotels[hotelTrip]}
-              onPick={(h) => { setHotels((prev) => ({ ...prev, [hotelTrip]: h })); setHotelEdit(false); }}
-              onClear={() => { setHotels((prev) => { const n = { ...prev }; delete n[hotelTrip]; return n; }); setHotelEdit(false); }}
-              onClose={() => setHotelEdit(false)} />
-          )}
           {usedCats.length > 0 && (
             <div className="chips cat-filter">
               {['すべて', ...usedCats].map((c) => (
@@ -1200,7 +1216,7 @@ export default function Home() {
             </div>
           )}
           {tab === 'cand' && inFolder.length > 0 && (
-            <AiPanel items={inFolder} hotel={hotelTrip ? hotels[hotelTrip] : null} trip={trip === UNSORTED ? '' : trip} customCats={customCats} onAddCustom={addCustomCat}
+            <AiPanel items={inFolder} hotel={hotel} trip={trip === UNSORTED ? '' : trip} customCats={customCats} onAddCustom={addCustomCat}
               savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, trip || null)}
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
           )}

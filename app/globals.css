@@ -290,3 +290,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .hb-note{margin:0;font-size:12px;color:var(--sub);text-align:center}
 
 .more-btn{margin-top:4px}
+
+.top-hotel{margin:0 0 12px}
+.near-hotel{display:flex;flex-direction:row;align-items:center;gap:8px;font-size:14px;font-weight:600;margin:4px 0 0}
+.near-hotel input{width:18px;height:18px;margin:0;flex:none}

@@ -38,7 +38,8 @@ async function searchOnce(textQuery, minRating, pageToken, languageCode, country
   const body = { textQuery, languageCode, pageSize: 20, ...extra };
   if (minRating) body.minRating = minRating;
   const box = COUNTRIES[country];
-  if (box) {
+  // locationBias（宿泊先・現在地の近く）と国の範囲は同時に指定できないので、そのときは国の範囲は結果の国で絞る
+  if (box && !body.locationBias) {
     body.locationRestriction = {
       rectangle: { low: { latitude: box[0], longitude: box[1] }, high: { latitude: box[2], longitude: box[3] } },
     };
