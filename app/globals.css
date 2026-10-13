@@ -144,3 +144,4 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .shot{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px dashed var(--copyline);border-radius:12px;background:var(--copybg)}
 .shot .btn{width:100%}
 .shot-shops{display:flex;flex-direction:column;gap:6px}
+.shot-lead{margin:0;font-family:var(--display);font-weight:700;font-size:15px;order:-1}

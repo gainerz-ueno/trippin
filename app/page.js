@@ -519,7 +519,8 @@ export default function Home() {
               <button type="button" className="btn ghost" disabled={shotBusy} onClick={() => shotInput.current?.click()}>
                 {shotBusy ? 'スクショを読み取っています…' : 'スクショからさがす'}
               </button>
-              <p className="hint">インスタなどのスクショを選ぶと、AIが店名・街・国を読み取って検索します。</p>
+              <p className="shot-lead">スクショから独自AIがお店を特定</p>
+              <p className="hint">インスタやYouTubeのスクショを選ぶだけで、看板・キャプション・位置タグから店名・街・国を読み取って、そのまま検索します。</p>
               {shotShops.length > 1 && (
                 <div className="shot-shops">
                   <p className="hint">読み取ったお店（押すと検索します）</p>
