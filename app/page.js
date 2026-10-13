@@ -696,12 +696,14 @@ export default function Home() {
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
 
   useEffect(() => {
-    try { const s = localStorage.getItem(KEY); if (s) setItems(JSON.parse(s)); } catch {}
+    // フォルダが決まっていないお店は「未分類」に入れる（消えて見えないように）
+    const fixTrip = (arr) => arr.map((i) => (i.trip ? i : { ...i, trip: '未分類' }));
+    try { const s = localStorage.getItem(KEY); if (s) setItems(fixTrip(JSON.parse(s))); } catch {}
     try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
     try { const h = localStorage.getItem('trippin.hotels'); if (h) setHotels(JSON.parse(h)); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
-      const its = JSON.parse(localStorage.getItem(KEY) || '[]');
+      const its = fixTrip(JSON.parse(localStorage.getItem(KEY) || '[]'));
       const merged = [...new Set([...f, ...its.map((i) => i.trip).filter(Boolean)])];
       setFolders(merged);
       const cur = localStorage.getItem('trippin.folder');
@@ -736,7 +738,7 @@ export default function Home() {
     setItems((prev) => prev.filter((i) => i.trip !== name));
     gone.forEach((id) => deletePhotosOf(id).catch(() => {}));
     setHotels((prev) => { const n = { ...prev }; delete n[name]; return n; });
-    const rest = folders.filter((f) => f !== name);
+    const rest = allFolders.filter((f) => f !== name);
     setFolders(rest);
     setTrip(rest[0] || '');
   }
@@ -887,6 +889,7 @@ export default function Home() {
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); deletePhotosOf(id).catch(() => {}); }
 
   const trips = folders;
+  const allFolders = [...new Set([...folders, ...items.map((i) => i.trip).filter(Boolean)])];
   const folderCounts = {};
   items.forEach((i) => { folderCounts[i.trip] = (folderCounts[i.trip] || 0) + 1; });
   const inTrip = items.filter((i) => i.trip === trip && (catFilter === 'すべて' || (catFilter === 'なし' ? !i.category : i.category === catFilter)));
@@ -956,10 +959,10 @@ export default function Home() {
                   <div className="dropdown move-dd">
                     <p className="dd-title">別のフォルダに移す</p>
                     <ul>
-                      {folders.filter((f) => f !== it.trip).map((f) => (
+                      {allFolders.filter((f) => f !== it.trip).map((f) => (
                         <li key={f}><button type="button" onClick={() => { update(it.id, { trip: f }); setMoveFor(null); }}>{f}</button></li>
                       ))}
-                      {folders.length < 2 && <li><p className="dd-title">ほかのフォルダがありません</p></li>}
+                      {allFolders.length < 2 && <li><p className="dd-title">ほかのフォルダがありません</p></li>}
                     </ul>
                   </div>
                 )}
@@ -1122,7 +1125,7 @@ export default function Home() {
 
       {tab !== 'search' && (
         <>
-          <FolderBar folders={folders} current={trip} counts={folderCounts} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
+          <FolderBar folders={allFolders} current={trip} counts={folderCounts} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
             onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} />
           {usedCats.length > 0 && (
             <div className="chips cat-filter">
