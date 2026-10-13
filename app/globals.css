@@ -225,3 +225,8 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .rv-label{margin:0;font-size:12px;font-weight:700;color:var(--sub)}
 .review-text{font:inherit;font-size:14px;text-align:left;white-space:pre-wrap;word-break:break-word;background:var(--copybg);border:1px solid var(--copyline);border-left:4px solid var(--go);border-radius:8px;padding:8px 10px;color:var(--ink);cursor:pointer;width:100%}
 .review-add{font:inherit;font-size:13px;font-weight:700;width:100%;border:1px dashed var(--go);background:none;color:var(--go);padding:9px;border-radius:10px;cursor:pointer}
+
+.side-confirm{display:flex;flex-direction:column;gap:6px;border:1px solid var(--accent);border-radius:12px;padding:6px}
+.side-confirm span{font-size:12px;font-weight:700;text-align:center;color:var(--ink)}
+.side-confirm button{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 4px;border-radius:999px;cursor:pointer}
+.side-confirm .del-yes{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}

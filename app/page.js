@@ -694,7 +694,15 @@ export default function Home() {
                 <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files, it.done ? 'visit' : 'memo'); e.target.value = ''; }} />
               </label>
               {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
-              <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
+              {confirmId === it.id ? (
+                <div className="side-confirm">
+                  <span>削除しますか？</span>
+                  <button className="del-yes" onClick={() => remove(it.id)}>削除する</button>
+                  <button onClick={() => setConfirmId(null)}>やめる</button>
+                </div>
+              ) : (
+                <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
+              )}
             </div>
           </div>
           <div className="body">
@@ -726,13 +734,7 @@ export default function Home() {
         ) : it.memo ? (
           <button type="button" className="memo" onClick={() => setMemoFor(it.id)} aria-label="メモを書き直す">{it.memo}</button>
         ) : null}
-        {confirmId === it.id ? (
-          <div className="confirm">
-            削除しますか？
-            <button className="btn" onClick={() => remove(it.id)}>削除する</button>
-            <button className="btn ghost" onClick={() => setConfirmId(null)}>やめる</button>
-          </div>
-        ) : null}
+
         {pickFor === 'l:' + it.id && (
           <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
             onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
