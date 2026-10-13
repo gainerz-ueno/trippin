@@ -112,9 +112,10 @@ function pickAlt(text, zhText) {
 }
 
 // Gemini で店名は読み方のカタカナ、住所は日本語表記に（使えないときは null）
+let lastAiError = '';
 async function geminiJapanese(jobs) {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
+  if (!key) { lastAiError = 'no key'; return null; }
   const items = jobs.map(([, field, src], i) => ({ i, kind: field === 'altName' ? 'name' : 'address', text: src }));
   const prompt = [
     '海外のお店の店名と住所を、日本人旅行者が読める日本語表記にしてください。',
@@ -137,10 +138,14 @@ async function geminiJapanese(jobs) {
       }
     );
     const data = await res.json();
+    if (!res.ok) { lastAiError = `${res.status} ${data?.error?.message || ''}`.slice(0, 300); return null; }
     const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
     const out = JSON.parse(text).out;
-    return Array.isArray(out) && out.length === jobs.length ? out : null;
-  } catch {
+    if (Array.isArray(out) && out.length === jobs.length) { lastAiError = ''; return out; }
+    lastAiError = 'unexpected output';
+    return null;
+  } catch (e) {
+    lastAiError = String(e?.message || e).slice(0, 300);
     return null;
   }
 }
@@ -213,7 +218,8 @@ export async function POST(req) {
     }
 
     const { places, next } = await searchPage(textQuery, minRating, decodeToken(pageToken), country);
-    return Response.json({ places: await fillTranslations(places), nextPageToken: encodeToken(next) });
+    const filled = await fillTranslations(places);
+    return Response.json({ places: filled, nextPageToken: encodeToken(next), aiStatus: lastAiError || 'ok' });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
   }
