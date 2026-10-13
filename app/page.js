@@ -414,49 +414,51 @@ export default function Home() {
     const src = sourceLabel(it.srcUrl);
     return (
       <article className={'item' + (it.done ? ' done' : '')}>
-        <div className="thumbwrap">
-          <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
-            {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
-          </button>
-          <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
-          <button type="button" className={'detailbtn' + (openDetail === 'l:' + it.id ? ' on' : '')} onClick={() => toggleDetail('l:' + it.id)}>{openDetail === 'l:' + it.id ? '閉じる' : '詳細'}</button>
-        </div>
-        <div className="body">
-          <div className="top">
-            <NameBlock p={it} />
-            {it.done && (
-              <button className={'star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
-            )}
+        <div className="item-top">
+          <div className="thumbwrap">
+            <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
+              {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+            </button>
+            <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
           </div>
-          <Rating p={it} />
-          <span className="meta">
-            <button type="button" className={'cat small' + (it.category ? ' sel' : ' none')} style={{ '--c': catColor(it.category) }} onClick={() => setPickFor(pickFor === 'l:' + it.id ? null : 'l:' + it.id)}>{it.category || 'カテゴリーなし'} ▾</button>
-            <span className="pill">{it.trip}</span>
-            {src && <span className="pill">{src}で発見</span>}
-            {it.done && it.rec && <span className="pill" style={{ color: 'var(--star)' }}>おすすめ</span>}
-          </span>
-          {confirmId === it.id ? (
-            <div className="confirm">
-              削除しますか？
-              <button className="btn" onClick={() => remove(it.id)}>削除する</button>
-              <button className="btn ghost" onClick={() => setConfirmId(null)}>やめる</button>
+          <div className="body">
+            <div className="top">
+              <NameBlock p={it} />
+              {it.done && (
+                <button className={'star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
+              )}
             </div>
-          ) : (
-            <div className="acts">
-              <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
-              {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
-              {it.done
-                ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
-                : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
-              <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
-            </div>
-          )}
-          {pickFor === 'l:' + it.id && (
-            <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
-              onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
-          )}
-          {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} />}
+            <Rating p={it} />
+            <span className="meta">
+              <button type="button" className={'cat small' + (it.category ? ' sel' : ' none')} style={{ '--c': catColor(it.category) }} onClick={() => setPickFor(pickFor === 'l:' + it.id ? null : 'l:' + it.id)}>{it.category || 'カテゴリーなし'} ▾</button>
+              <span className="pill">{it.trip}</span>
+              {src && <span className="pill">{src}で発見</span>}
+              {it.done && it.rec && <span className="pill" style={{ color: 'var(--star)' }}>おすすめ</span>}
+            </span>
+          </div>
         </div>
+        {confirmId === it.id ? (
+          <div className="confirm">
+            削除しますか？
+            <button className="btn" onClick={() => remove(it.id)}>削除する</button>
+            <button className="btn ghost" onClick={() => setConfirmId(null)}>やめる</button>
+          </div>
+        ) : (
+          <div className="acts">
+            <button className={openDetail === 'l:' + it.id ? 'on' : ''} onClick={() => toggleDetail('l:' + it.id)}>{openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細'}</button>
+            <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+            {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
+            {it.done
+              ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
+              : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
+            <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
+          </div>
+        )}
+        {pickFor === 'l:' + it.id && (
+          <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
+            onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
+        )}
+        {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} />}
       </article>
     );
   }
@@ -544,27 +546,29 @@ export default function Home() {
             {searched && !sorted.length && <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>}
             {sorted.map((p) => (
               <article className="item" key={p.placeId}>
-                <div className="thumbwrap">
-                  <button type="button" className="thumbbtn" onClick={() => toggleDetail('s:' + p.placeId)} aria-label="詳細を見る">
-                    {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
-                  </button>
-                  <button type="button" className={'detailbtn' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '閉じる' : '詳細'}</button>
-                </div>
-                <div className="body">
-                  <NameBlock p={p} />
-                  <Rating p={p} />
-                  <div className="acts">
-                    {savedIds.has(p.placeId)
-                      ? <button className="added" disabled>候補に追加済み</button>
-                      : <button className="add" onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加</button>}
-                    <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                <div className="item-top">
+                  <div className="thumbwrap">
+                    <button type="button" className="thumbbtn" onClick={() => toggleDetail('s:' + p.placeId)} aria-label="詳細を見る">
+                      {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+                    </button>
                   </div>
-                  {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
-                    <CategoryPicker title="カテゴリーを選んで追加" customCats={customCats} current={null} onAddCustom={addCustomCat}
-                      onPick={(c) => addCandidate(p, c)} onClose={() => setPickFor(null)} />
-                  )}
-                  {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
+                  <div className="body">
+                    <NameBlock p={p} />
+                    <Rating p={p} />
+                  </div>
                 </div>
+                <div className="acts">
+                  <button className={openDetail === 's:' + p.placeId ? 'on' : ''} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細'}</button>
+                  {savedIds.has(p.placeId)
+                    ? <button className="added" disabled>候補に追加済み</button>
+                    : <button className="add" onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加</button>}
+                  <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                </div>
+                {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
+                  <CategoryPicker title="カテゴリーを選んで追加" customCats={customCats} current={null} onAddCustom={addCustomCat}
+                    onPick={(c) => addCandidate(p, c)} onClose={() => setPickFor(null)} />
+                )}
+                {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
               </article>
             ))}
             {nextToken && <div ref={sentinel} className="more">{busy ? '読み込み中…' : ''}</div>}
