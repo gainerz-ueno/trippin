@@ -382,7 +382,7 @@ function PhotoStrip({ itemId, ver }) {
   return (
     <>
       <div className="myphotos">
-        <p className="mp-title">自分の写真 {photos.length}枚</p>
+        <p className="mp-title">写真 {photos.length}枚</p>
         <div className="mp-strip">
           {photos.map((p) => (
             <button type="button" key={p.id} onClick={() => { setBig(p); setConfirmDel(false); }}><img src={p.url} alt="" /></button>
@@ -456,6 +456,7 @@ export default function Home() {
   const [shotShops, setShotShops] = useState([]);
   const [shotMsg, setShotMsg] = useState('');
   const shotInput = useRef(null);
+  const shotFile = useRef(null); // 「スクショからさがす」で使ったスクショ（候補に追加したお店に付ける）
   const [results, setResults] = useState([]);
   const [nextToken, setNextToken] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -566,6 +567,7 @@ export default function Home() {
 
   async function readShot(file) {
     if (!file) return;
+    shotFile.current = file;
     setShotBusy(true); setShotShops([]); setShotMsg(''); setError('');
     try {
       const image = await shrink(file);
@@ -604,6 +606,10 @@ export default function Home() {
     if (savedIds.has(p.placeId)) return;
     setItems((prev) => [{ ...p, id: p.placeId, category, trip: area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
     setPickFor(null);
+    if (shotFile.current) {
+      const f = shotFile.current;
+      addPhotos(p.placeId, [f]).then(() => setPhotoVer((v) => v + 1)).catch(() => {});
+    }
   }
   const closePick = useCallback(() => setPickFor(null), []);
   const addCustomCat = (n) => setCustomCats((prev) => (prev.includes(n) ? prev : [...prev, n]));
@@ -677,7 +683,7 @@ export default function Home() {
                 : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
               <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
               <label className="photo-add">
-                {photoBusy === it.id ? '保存中…' : '写真を追加'}
+                {photoBusy === it.id ? '保存中…' : it.done ? '写真を追加' : 'メモ画像を追加'}
                 <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files); e.target.value = ''; }} />
               </label>
               {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
@@ -748,7 +754,7 @@ export default function Home() {
 
       {tab === 'search' && (
         <>
-          <form className="panel" onSubmit={(e) => { e.preventDefault(); runSearch(false); }}>
+          <form className="panel" onSubmit={(e) => { e.preventDefault(); shotFile.current = null; setShotShops([]); runSearch(false); }}>
             <h2>Googleマップでお店をさがす</h2>
             <label htmlFor="kw">キーワード・店名
               <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
