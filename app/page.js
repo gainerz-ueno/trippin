@@ -1088,7 +1088,7 @@ export default function Home() {
           <form className="panel" onSubmit={(e) => { e.preventDefault(); shotFile.current = null; setShotShops([]); runSearch(false); }}>
             <h2>Googleマップでお店をさがす</h2>
             {hotel && (
-              <label className="near-hotel"><input type="checkbox" checked={nearHotel} onChange={(e) => setNearHotel(e.target.checked)} />宿泊先の近いからさがす</label>
+              <label className="near-hotel"><input type="checkbox" checked={nearHotel} onChange={(e) => setNearHotel(e.target.checked)} />宿泊先の近い順にさがす</label>
             )}
             <label htmlFor="kw">キーワード・店名
               <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
