@@ -411,7 +411,7 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
         <ul className="hotel-list">
           {list.map((h) => (
             <li key={h.placeId}>
-              <button type="button" onClick={() => onPick({ placeId: h.placeId, name: h.name, altName: h.altName, address: h.address, lat: h.lat, lng: h.lng, mapsUrl: h.mapsUrl })}>
+              <button type="button" onClick={() => onPick({ placeId: h.placeId, name: h.name, altName: h.altName, address: h.address, lat: h.lat, lng: h.lng, mapsUrl: h.mapsUrl, country })}>
                 <b>{h.name}</b>
                 {h.altName && <span>{h.altName}</span>}
                 <span className="addr">{h.address}</span>
@@ -650,7 +650,7 @@ export default function Home() {
   const [minRating, setMinRating] = useState(0);
   const [minReviews, setMinReviews] = useState(0);
   const [sort, setSort] = useState('relevance');
-  const [nearHotel, setNearHotel] = useState(true); // 宿泊先の近くでさがす
+  const [nearHotel, setNearHotel] = useState(true); // 宿泊先の近い順にさがす
   const [here, setHere] = useState(null);
   const [hereMsg, setHereMsg] = useState('');
   const srcUrl = '';
@@ -697,6 +697,7 @@ export default function Home() {
   const [memoFor, setMemoFor] = useState(null);
   const [reviewFor, setReviewFor] = useState(null);
   const [hotel, setHotel] = useState(null); // 今回の宿泊先（1つ。すべての画面の軸）
+  const useNear = !!(hotel && nearHotel && hotel.lat != null);
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
   const [photoBusy, setPhotoBusy] = useState(null);
@@ -776,8 +777,10 @@ export default function Home() {
 
   async function runSearch(more = false, override = null) {
     if (busy) return;
-    const near = hotel && nearHotel && hotel.lat != null ? { lat: hotel.lat, lng: hotel.lng } : null;
-    const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews), near, ...(override || {}) };
+    // 宿泊先の近い順にさがす：国は宿泊先の国、場所は使わない（宿泊先のまわりを探す）
+    const near = useNear ? { lat: hotel.lat, lng: hotel.lng } : null;
+    const base = useNear ? { area: '', country: hotel.country || country } : { area, country };
+    const q = more ? lastQuery.current : { keyword, ...base, minRating: Number(minRating), minReviews: Number(minReviews), near, ...(override || {}) };
     if (!more && !String(q.keyword).trim() && !String(q.area).trim()) { setError('キーワードか場所を入力してください'); return; }
     if (!more && !q.country) { setError('国を選んでください'); return; }
     setBusy(true); setMoreBusy(more); setError('');
@@ -1072,7 +1075,7 @@ export default function Home() {
       </div>
       {hotelEdit && (
         <HotelPicker country={country} current={hotel}
-          onPick={(h) => { setHotel(h); setHotelEdit(false); }}
+          onPick={(h) => { setHotel(h); setHotelEdit(false); if (h.country) { setCountry(h.country); try { localStorage.setItem('trippin.country', h.country); } catch {} } }}
           onClear={() => { setHotel(null); setHotelEdit(false); if (sort === 'hotel') setSort('relevance'); }}
           onClose={() => setHotelEdit(false)} />
       )}
@@ -1093,7 +1096,7 @@ export default function Home() {
             <label htmlFor="kw">キーワード・店名
               <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
             </label>
-            <div className="row">
+            {!useNear && <div className="row">
               <label htmlFor="ct">国
                 <select id="ct" value={country} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
                   {!country && <option value="" disabled>国を選ぶ</option>}
@@ -1103,7 +1106,7 @@ export default function Home() {
               <label htmlFor="area">場所
                 <input id="area" value={area} onChange={(e) => setArea(e.target.value)} placeholder="例：台北" />
               </label>
-            </div>
+            </div>}
             <div className="row">
               <label htmlFor="mr">評価
                 <select id="mr" value={minRating} onChange={(e) => setMinRating(e.target.value)}>
@@ -1141,7 +1144,7 @@ export default function Home() {
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
             <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
-            <p className="hint">国を選ぶと、その国の中だけを探します。</p>
+            {!useNear && <p className="hint">国を選ぶと、その国の中だけを探します。</p>}
             {error && <p className="err">{error}</p>}
           </form>
 
