@@ -76,3 +76,28 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .alt-addr{padding-left:10px}
 .copy{font:inherit;font-size:11px;font-weight:700;flex:none;border:0;background:var(--copybtn);color:var(--copybtn-ink);padding:5px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
 .copy.ok{background:var(--go);color:#fff}
+
+/* お店の詳細 */
+.acts button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.detail{display:flex;flex-direction:column;gap:14px;margin-top:6px;padding-top:12px;border-top:1px dashed var(--line);min-width:0}
+.detail h3{font-family:var(--display);font-size:14px;margin:0 0 6px;display:flex;gap:8px;align-items:baseline}
+.detail h3 span{font-family:var(--body);font-size:12px;font-weight:500}
+.photos{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:4px;min-width:0}
+.photos figure{margin:0;flex:none;width:200px;scroll-snap-align:start}
+.photos img{width:200px;height:140px;object-fit:cover;border-radius:10px;background:var(--chip)}
+.photos figcaption{font-size:10px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hours{list-style:none;margin:0;padding:0;font-size:13px;font-variant-numeric:tabular-nums}
+.hours li{padding:2px 0;color:var(--sub)}
+.hours li.today{color:var(--ink);font-weight:700}
+.facts{display:flex;flex-direction:column;gap:4px;font-size:13px}
+.facts p{margin:0;display:flex;gap:10px;min-width:0}
+.facts b{flex:none;width:6.5em;color:var(--sub);font-weight:500}
+.facts a{color:var(--copybtn);word-break:break-all}
+.reviews{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.reviews li{background:var(--copybg);border-radius:10px;padding:10px 12px}
+.rv-head{margin:0 0 4px;font-size:12px}
+.stars{color:var(--star);letter-spacing:1px}
+.stars span{color:var(--line)}
+.rv-text{margin:0;font-size:13px;white-space:pre-wrap;word-break:break-word}
+.rv-orig{margin:6px 0 0;font-size:12px;color:var(--sub);white-space:pre-wrap;word-break:break-word}
+.btn.full{display:block;text-align:center;text-decoration:none}

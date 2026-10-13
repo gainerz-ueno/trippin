@@ -63,6 +63,85 @@ function NameBlock({ p, withAddress = true }) {
   );
 }
 
+// お店の詳細（Trippin の中で開く）
+const detailCache = new Map();
+
+function Stars({ n }) {
+  const r = Math.round(n || 0);
+  return <span className="stars" aria-label={`星${n}`}>{'★'.repeat(r)}<span>{'★'.repeat(5 - r)}</span></span>;
+}
+
+function DetailPanel({ id }) {
+  const [d, setD] = useState(detailCache.get(id) || null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    if (detailCache.has(id)) return;
+    let alive = true;
+    fetch(`/api/details?id=${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then((x) => {
+        if (!alive) return;
+        if (x.error) { setErr(x.error); return; }
+        detailCache.set(id, x);
+        setD(x);
+      })
+      .catch(() => alive && setErr('詳細を取得できませんでした'));
+    return () => { alive = false; };
+  }, [id]);
+
+  if (err) return <div className="detail"><p className="err">{err}</p></div>;
+  if (!d) return <div className="detail"><p className="hint">読み込み中…</p></div>;
+
+  return (
+    <div className="detail">
+      {d.photos.length > 0 && (
+        <div className="photos">
+          {d.photos.map((ph) => (
+            <figure key={ph.name}>
+              <img src={photoSrc(ph.name)} alt="" loading="lazy" />
+              {ph.by && <figcaption>写真: {ph.by}</figcaption>}
+            </figure>
+          ))}
+        </div>
+      )}
+
+      {d.hours.length > 0 && (
+        <section>
+          <h3>営業時間 {d.openNow === true && <span className="open">営業中</span>}{d.openNow === false && <span className="closed">営業時間外</span>}</h3>
+          <ul className="hours">
+            {d.hours.map((h, i) => <li key={i} className={i === d.todayIndex ? 'today' : ''}>{h}</li>)}
+          </ul>
+        </section>
+      )}
+
+      {(d.phone || d.website || d.price || d.priceRange) && (
+        <section className="facts">
+          {d.phone && <p><b>電話</b><a href={`tel:${d.phone.replace(/\s/g, '')}`}>{d.phone}</a></p>}
+          {d.website && <p><b>ホームページ</b><a href={d.website} target="_blank" rel="noopener">{d.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a></p>}
+          {(d.price || d.priceRange) && <p><b>価格帯</b><span>{[d.price, d.priceRange].filter(Boolean).join('　')}</span></p>}
+        </section>
+      )}
+
+      {d.reviews.length > 0 && (
+        <section>
+          <h3>口コミ</h3>
+          <ul className="reviews">
+            {d.reviews.map((r, i) => (
+              <li key={i}>
+                <p className="rv-head"><Stars n={r.rating} /> <span className="addr">{r.when}{r.author ? `・${r.author}` : ''}</span></p>
+                <p className="rv-text">{r.text}</p>
+                {r.original && <p className="rv-orig">{r.original}</p>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {d.mapsUrl && <a className="btn ghost full" href={d.mapsUrl} target="_blank" rel="noopener">Googleマップで全部見る</a>}
+    </div>
+  );
+}
+
 function Rating({ p }) {
   return (
     <span className="meta">
@@ -100,6 +179,8 @@ export default function Home() {
   // リスト
   const [trip, setTrip] = useState('すべて');
   const [confirmId, setConfirmId] = useState(null);
+  const [openDetail, setOpenDetail] = useState(null);
+  const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
 
   useEffect(() => {
     try { const s = localStorage.getItem(KEY); if (s) setItems(JSON.parse(s)); } catch {}
@@ -185,6 +266,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="acts">
+              <button className={openDetail === 'l:' + it.id ? 'on' : ''} onClick={() => toggleDetail('l:' + it.id)}>{openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細'}</button>
               <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
               {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
               {it.done
@@ -193,6 +275,7 @@ export default function Home() {
               <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
             </div>
           )}
+          {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} />}
         </div>
       </article>
     );
@@ -273,8 +356,10 @@ export default function Home() {
                     {savedIds.has(p.placeId)
                       ? <button className="added" disabled>候補に追加済み</button>
                       : <button className="add" onClick={() => addCandidate(p)}>候補に追加</button>}
+                    <button className={openDetail === 's:' + p.placeId ? 'on' : ''} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細'}</button>
                     <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
                   </div>
+                  {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
                 </div>
               </article>
             ))}
