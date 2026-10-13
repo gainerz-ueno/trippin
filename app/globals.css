@@ -156,3 +156,12 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .item-top{display:flex;gap:12px;min-width:0}
 .item .acts{padding-top:2px}
 .item .acts > *{padding:7px 13px}
+
+/* さがす画面：画像の下に 詳細・Googleマップ・候補に追加 を縦に並べる */
+.thumbwrap.side{width:104px;flex:none}
+.thumbwrap.side .thumb{width:104px;height:104px}
+.side-acts{display:flex;flex-direction:column;gap:6px}
+.side-acts > *{font:inherit;font-size:12px;font-weight:700;text-align:center;text-decoration:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 4px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.side-acts .on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.side-acts .add{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.side-acts .added{color:var(--sub);cursor:default}

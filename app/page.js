@@ -547,22 +547,22 @@ export default function Home() {
             {sorted.map((p) => (
               <article className="item" key={p.placeId}>
                 <div className="item-top">
-                  <div className="thumbwrap">
+                  <div className="thumbwrap side">
                     <button type="button" className="thumbbtn" onClick={() => toggleDetail('s:' + p.placeId)} aria-label="詳細を見る">
                       {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
                     </button>
+                    <div className="side-acts">
+                      <button className={openDetail === 's:' + p.placeId ? 'on' : ''} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '閉じる' : '詳細'}</button>
+                      <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                      {savedIds.has(p.placeId)
+                        ? <button className="added" disabled>追加済み</button>
+                        : <button className="add" onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加</button>}
+                    </div>
                   </div>
                   <div className="body">
                     <NameBlock p={p} />
                     <Rating p={p} />
                   </div>
-                </div>
-                <div className="acts">
-                  <button className={openDetail === 's:' + p.placeId ? 'on' : ''} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細'}</button>
-                  {savedIds.has(p.placeId)
-                    ? <button className="added" disabled>候補に追加済み</button>
-                    : <button className="add" onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加</button>}
-                  <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
                 </div>
                 {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
                   <CategoryPicker title="カテゴリーを選んで追加" customCats={customCats} current={null} onAddCustom={addCustomCat}
