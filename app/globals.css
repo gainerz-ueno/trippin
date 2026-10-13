@@ -208,3 +208,14 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .hotel-list b{font-size:14px}
 .hotel-list span{font-size:12px}
 .fromhotel{margin:0;font-size:12px;font-weight:700;color:var(--copybtn)}
+
+/* 自分の写真 */
+.side-acts .photo-add{font:inherit;font-size:12px;font-weight:700;text-align:center;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 4px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.myphotos{display:flex;flex-direction:column;gap:6px}
+.mp-title{margin:0;font-size:12px;font-weight:700;color:var(--sub)}
+.mp-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.mp-strip button{flex:none;padding:0;border:0;background:none;cursor:pointer;border-radius:8px;overflow:hidden}
+.mp-strip img{width:84px;height:84px;object-fit:cover;display:block}
+.viewer{position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+.viewer img{max-width:100%;max-height:75vh;border-radius:10px;object-fit:contain}
+.viewer-acts{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;color:#fff;font-size:14px}

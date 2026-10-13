@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapView from './MapView';
+import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 
 const KEY = 'trippin.v1';
 
@@ -357,6 +358,60 @@ function HotelPicker({ trip, current, onPick, onClear, onClose }) {
   );
 }
 
+// 自分で撮った写真（このスマホの中に保存）
+function PhotoStrip({ itemId, ver }) {
+  const [photos, setPhotos] = useState([]);
+  const [big, setBig] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const urls = useRef([]);
+  useEffect(() => {
+    let alive = true;
+    listPhotos(itemId)
+      .then((list) => {
+        if (!alive) return;
+        urls.current.forEach((u) => URL.revokeObjectURL(u));
+        const withUrl = list.map((p) => ({ ...p, url: URL.createObjectURL(p.blob) }));
+        urls.current = withUrl.map((p) => p.url);
+        setPhotos(withUrl);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [itemId, ver]);
+  useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
+  if (!photos.length) return null;
+  return (
+    <>
+      <div className="myphotos">
+        <p className="mp-title">自分の写真 {photos.length}枚</p>
+        <div className="mp-strip">
+          {photos.map((p) => (
+            <button type="button" key={p.id} onClick={() => { setBig(p); setConfirmDel(false); }}><img src={p.url} alt="" /></button>
+          ))}
+        </div>
+      </div>
+      {big && (
+        <div className="viewer" role="dialog" aria-label="写真" onClick={() => setBig(null)}>
+          <img src={big.url} alt="" onClick={(e) => e.stopPropagation()} />
+          <div className="viewer-acts" onClick={(e) => e.stopPropagation()}>
+            {confirmDel ? (
+              <>
+                <span>この写真を削除しますか？</span>
+                <button type="button" className="btn" onClick={async () => { await deletePhoto(big.id); setBig(null); setPhotos((ps) => ps.filter((x) => x.id !== big.id)); }}>削除する</button>
+                <button type="button" className="btn ghost" onClick={() => setConfirmDel(false)}>やめる</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn ghost" onClick={() => setConfirmDel(true)}>削除</button>
+                <button type="button" className="btn" onClick={() => setBig(null)}>閉じる</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // メモを書く（入力中の文字はここで持つ）
 function MemoEditor({ initial, onSave, onCancel }) {
   const [v, setV] = useState(initial || '');
@@ -430,6 +485,15 @@ export default function Home() {
   const [memoFor, setMemoFor] = useState(null);
   const [hotels, setHotels] = useState({}); // 旅行先 → ホテル
   const [hotelEdit, setHotelEdit] = useState(false);
+  const [photoVer, setPhotoVer] = useState(0);
+  const [photoBusy, setPhotoBusy] = useState(null);
+  async function onPhotos(itemId, files) {
+    if (!files?.length) return;
+    setPhotoBusy(itemId);
+    try { await addPhotos(itemId, Array.from(files)); } catch {}
+    setPhotoBusy(null);
+    setPhotoVer((v) => v + 1);
+  }
   const [, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 60000); return () => clearInterval(t); }, []);
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
@@ -576,7 +640,7 @@ export default function Home() {
   }, [items, loaded]);
 
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
-  function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); }
+  function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); deletePhotosOf(id).catch(() => {}); }
 
   const trips = [...new Set(items.map((i) => i.trip))];
   const inTrip = items.filter((i) => (trip === 'すべて' || i.trip === trip) && (catFilter === 'すべて' || (catFilter === 'なし' ? !i.category : i.category === catFilter)));
@@ -612,6 +676,10 @@ export default function Home() {
                 ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
                 : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
               <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
+              <label className="photo-add">
+                {photoBusy === it.id ? '保存中…' : '写真を追加'}
+                <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files); e.target.value = ''; }} />
+              </label>
               {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
               <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
             </div>
@@ -656,6 +724,7 @@ export default function Home() {
           <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
             onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
         )}
+        <PhotoStrip itemId={it.id} ver={photoVer} />
         <button type="button" className={'detailbar' + (openDetail === 'l:' + it.id ? ' on' : '')} onClick={() => toggleDetail('l:' + it.id)}>
           {openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細を開く'}
         </button>
