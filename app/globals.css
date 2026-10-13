@@ -194,3 +194,4 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .side-acts .go{background:var(--go);border-color:var(--go);color:#fff}
 .top{width:100%}
 .top .nb{flex:1;min-width:0}
+.side-acts .del{color:var(--sub)}

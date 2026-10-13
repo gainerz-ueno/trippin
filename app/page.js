@@ -527,6 +527,9 @@ export default function Home() {
               {it.done
                 ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
                 : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
+              <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
+              {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
+              <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
             </div>
           </div>
           <div className="body">
@@ -563,13 +566,7 @@ export default function Home() {
             <button className="btn" onClick={() => remove(it.id)}>削除する</button>
             <button className="btn ghost" onClick={() => setConfirmId(null)}>やめる</button>
           </div>
-        ) : (
-          <div className="acts">
-            <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
-            {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
-            <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
-          </div>
-        )}
+        ) : null}
         {pickFor === 'l:' + it.id && (
           <CategoryPicker title="カテゴリーを変える" customCats={customCats} current={it.category} onAddCustom={addCustomCat}
             onPick={(c) => { update(it.id, { category: c }); setPickFor(null); }} onClose={() => setPickFor(null)} />
