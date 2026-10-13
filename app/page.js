@@ -673,6 +673,12 @@ export default function Home() {
   const [trip, setTrip] = useState(''); // 今見ているフォルダ（＝追加先）
   const [folders, setFolders] = useState([]);
   const [moveFor, setMoveFor] = useState(null);
+  useEffect(() => {
+    if (!moveFor) return;
+    const out = (e) => { if (!e.target.closest?.('.move-wrap')) setMoveFor(null); };
+    document.addEventListener('pointerdown', out);
+    return () => document.removeEventListener('pointerdown', out);
+  }, [moveFor]);
   const [confirmId, setConfirmId] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
   const [customCats, setCustomCats] = useState([]);
@@ -905,8 +911,12 @@ export default function Home() {
   // タブの数字は全フォルダの合計
   const candTotal = items.filter((i) => !i.done).length;
   const doneTotal = items.filter((i) => i.done).length;
-  const inTrip = items.filter((i) => i.trip === trip && (catFilter === 'すべて' || (catFilter === 'なし' ? !i.category : i.category === catFilter)));
-  const usedCats = [...new Set(items.filter((i) => i.trip === trip).map((i) => i.category || 'なし'))];
+  // 今のフォルダ・今のタブのお店（カテゴリーの絞り込み前）
+  const inFolder = items.filter((i) => i.trip === trip && (tab === 'done') === !!i.done);
+  const usedCats = [...new Set(inFolder.map((i) => i.category || 'なし'))];
+  // 絞り込んでいたカテゴリーのお店がなくなったら「すべて」として扱う
+  const cf = catFilter === 'すべて' || usedCats.includes(catFilter) ? catFilter : 'すべて';
+  const inTrip = inFolder.filter((i) => cf === 'すべて' || (cf === 'なし' ? !i.category : i.category === cf));
   const catOrder = [...BASE_CATS.map(([n]) => n), ...customCats, 'なし'];
   usedCats.sort((a, b) => catOrder.indexOf(a) - catOrder.indexOf(b));
   const cand = inTrip.filter((i) => !i.done);
@@ -1111,7 +1121,7 @@ export default function Home() {
                     <div className="side-acts">
                       <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
                       {savedIds.has(p.placeId)
-                        ? <button className="added" disabled>追加済み</button>
+                        ? <button className="added" disabled>追加済み（{items.find((i) => i.placeId === p.placeId)?.trip}）</button>
                         : <button className="add" aria-expanded={pickFor === 's:' + p.placeId} onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加 ▾</button>}
                       {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
                         <CategoryDropdown customCats={customCats} onAddCustom={addCustomCat}
@@ -1143,14 +1153,14 @@ export default function Home() {
           {usedCats.length > 0 && (
             <div className="chips cat-filter">
               {['すべて', ...usedCats].map((c) => (
-                <button key={c} aria-pressed={c === catFilter} style={c !== 'すべて' && c !== 'なし' ? { '--c': catColor(c) } : undefined}
+                <button key={c} aria-pressed={c === cf} style={c !== 'すべて' && c !== 'なし' ? { '--c': catColor(c) } : undefined}
                   className={c !== 'すべて' && c !== 'なし' ? 'dot' : ''} onClick={() => setCatFilter(c)}>{c}</button>
               ))}
               <button className="edit-cats" aria-pressed={editCats} onClick={() => setEditCats((v) => !v)}>カテゴリーの編集</button>
             </div>
           )}
-          {tab === 'cand' && cand.length > 0 && (
-            <AiPanel items={cand} hotel={hotelTrip ? hotels[hotelTrip] : null} trip={hotelTrip || ''} customCats={customCats} onAddCustom={addCustomCat}
+          {tab === 'cand' && inFolder.length > 0 && (
+            <AiPanel items={inFolder} hotel={hotelTrip ? hotels[hotelTrip] : null} trip={trip === UNSORTED ? '' : trip} customCats={customCats} onAddCustom={addCustomCat}
               savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, trip || null)}
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
           )}
