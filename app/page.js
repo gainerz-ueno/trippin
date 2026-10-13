@@ -900,6 +900,17 @@ export default function Home() {
   }, [items, loaded]);
 
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
+  // カードの写真が出なかったら（写真の名前の期限切れ）、そのお店の写真の名前を1回だけ取り直す（無料）
+  const photoTried = useRef(new Set());
+  async function refreshPhoto(it) {
+    if (!it.placeId || photoTried.current.has(it.id)) return;
+    photoTried.current.add(it.id);
+    try {
+      const r = await fetch(`/api/photoname?id=${encodeURIComponent(it.placeId)}`);
+      const d = await r.json();
+      if (r.ok && d.photo !== undefined && d.photo !== it.photo) update(it.id, { photo: d.photo });
+    } catch {}
+  }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); deletePhotosOf(id).catch(() => {}); }
 
   const allFolders = [UNSORTED, ...new Set([...folders, ...items.map((i) => i.trip)].filter((f) => f && f !== UNSORTED))];
@@ -938,7 +949,7 @@ export default function Home() {
         <div className="item-top">
           <div className="thumbwrap side">
             <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
-              {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+              {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" onError={() => refreshPhoto(it)} /> : <div className="thumb" />}
             </button>
             <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
             {it.done && (
