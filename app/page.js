@@ -175,6 +175,15 @@ export default function Home() {
   const [searched, setSearched] = useState(false);
   const lastQuery = useRef(null);
   const sentinel = useRef(null);
+  const resultsTop = useRef(null);
+  const [searchSeq, setSearchSeq] = useState(0);
+  const [moreBusy, setMoreBusy] = useState(false);
+
+  // 検索が終わったら結果の先頭へ移動する
+  useEffect(() => {
+    if (!searchSeq || !resultsTop.current) return;
+    resultsTop.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [searchSeq]);
 
   // リスト
   const [trip, setTrip] = useState('すべて');
@@ -195,7 +204,7 @@ export default function Home() {
     if (busy) return;
     const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews) };
     if (!more && !keyword.trim() && !area.trim()) { setError('キーワードか場所を入力してください'); return; }
-    setBusy(true); setError('');
+    setBusy(true); setMoreBusy(more); setError('');
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
@@ -208,10 +217,11 @@ export default function Home() {
       setResults((prev) => (more ? prev.concat(data.places) : data.places));
       setNextToken(data.nextPageToken);
       setSearched(true);
+      if (!more) setSearchSeq((n) => n + 1);
     } catch (e) {
       setError(e.message);
     } finally {
-      setBusy(false);
+      setBusy(false); setMoreBusy(false);
     }
   }
 
@@ -339,12 +349,13 @@ export default function Home() {
             <label htmlFor="src">見つけた投稿のURL（任意・YouTubeやインスタ）
               <input id="src" type="url" inputMode="url" value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="https://" />
             </label>
-            <button className="btn" type="submit" disabled={busy}>{busy && !results.length ? 'さがしています…' : 'さがす'}</button>
+            <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
             <p className="hint">国を選ぶと、その国の中だけを探します。候補に追加したお店は、「場所」（空なら国）の名前のリストにまとまります。</p>
             {error && <p className="err">{error}</p>}
           </form>
 
-          <div className="list">
+          <div className="list" ref={resultsTop} style={{ scrollMarginTop: '72px' }}>
+            {searched && sorted.length > 0 && <p className="result-head">{sorted.length}{nextToken ? '件以上' : '件'}見つかりました</p>}
             {searched && !sorted.length && <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>}
             {sorted.map((p) => (
               <article className="item" key={p.placeId}>
