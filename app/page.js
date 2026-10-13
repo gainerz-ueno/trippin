@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapView from './MapView';
 
 const KEY = 'trippin.v1';
@@ -51,6 +51,40 @@ function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, tit
           <button className="btn" type="submit">作って選ぶ</button>
         </form>
       )}
+    </div>
+  );
+}
+
+// 「候補に追加」の下に出るカテゴリーのプルダウン
+function CategoryDropdown({ customCats, onPick, onAddCustom, onClose }) {
+  const ref = useRef(null);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const all = [...BASE_CATS.map(([n]) => n), ...customCats];
+  useEffect(() => {
+    const out = (e) => { const box = ref.current?.parentElement; if (box && !box.contains(e.target)) onClose(); };
+    document.addEventListener('pointerdown', out);
+    return () => document.removeEventListener('pointerdown', out);
+  }, [onClose]);
+  return (
+    <div className="dropdown" ref={ref} role="menu">
+      <p className="dd-title">カテゴリーを選んで追加</p>
+      <ul>
+        {all.map((c) => (
+          <li key={c}><button type="button" role="menuitem" onClick={() => onPick(c)}><i style={{ background: catColor(c) }} />{c}</button></li>
+        ))}
+        <li><button type="button" role="menuitem" className="dd-none" onClick={() => onPick('')}>なし</button></li>
+        <li>
+          {adding ? (
+            <form className="dd-new" onSubmit={(e) => { e.preventDefault(); const n = name.trim(); if (!n) return; if (!all.includes(n)) onAddCustom(n); onPick(n); }}>
+              <input id="ddnew" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="新しいカテゴリー" maxLength={12} />
+              <button className="btn" type="submit">追加</button>
+            </form>
+          ) : (
+            <button type="button" role="menuitem" className="dd-add" onClick={() => setAdding(true)}>＋ 新しいカテゴリー</button>
+          )}
+        </li>
+      </ul>
     </div>
   );
 }
@@ -429,6 +463,7 @@ export default function Home() {
     setItems((prev) => [{ ...p, id: p.placeId, category, trip: area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
     setPickFor(null);
   }
+  const closePick = useCallback(() => setPickFor(null), []);
   const addCustomCat = (n) => setCustomCats((prev) => (prev.includes(n) ? prev : [...prev, n]));
   function renameCat(from, to) {
     setCustomCats((prev) => prev.map((c) => (c === from ? to : c)).filter((c, i, a) => a.indexOf(c) === i));
@@ -635,7 +670,11 @@ export default function Home() {
                       <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
                       {savedIds.has(p.placeId)
                         ? <button className="added" disabled>追加済み</button>
-                        : <button className="add" onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加</button>}
+                        : <button className="add" aria-expanded={pickFor === 's:' + p.placeId} onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加 ▾</button>}
+                      {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
+                        <CategoryDropdown customCats={customCats} onAddCustom={addCustomCat}
+                          onPick={(c) => addCandidate(p, c)} onClose={closePick} />
+                      )}
                     </div>
                   </div>
                   <div className="body">
@@ -643,10 +682,6 @@ export default function Home() {
                     <Rating p={p} />
                   </div>
                 </div>
-                {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
-                  <CategoryPicker title="カテゴリーを選んで追加" customCats={customCats} current={null} onAddCustom={addCustomCat}
-                    onPick={(c) => addCandidate(p, c)} onClose={() => setPickFor(null)} />
-                )}
                 <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
                   {openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細を開く'}
                 </button>
