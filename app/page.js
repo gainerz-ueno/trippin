@@ -642,6 +642,8 @@ export default function Home() {
   const [minRating, setMinRating] = useState(0);
   const [minReviews, setMinReviews] = useState(0);
   const [sort, setSort] = useState('relevance');
+  const [here, setHere] = useState(null);
+  const [hereMsg, setHereMsg] = useState('');
   const srcUrl = '';
   const [shotBusy, setShotBusy] = useState(false);
   const [shotShops, setShotShops] = useState([]);
@@ -825,6 +827,15 @@ export default function Home() {
   const sorted = [...results];
   if (sort === 'rating') sorted.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
   if (sort === 'reviews') sorted.sort((a, b) => b.reviews - a.reviews);
+  if (sort === 'near' && here) sorted.sort((a, b) => (a.lat == null ? 1e9 : distanceKm(here, a)) - (b.lat == null ? 1e9 : distanceKm(here, b)));
+  async function changeSort(v) {
+    setSort(v); setHereMsg('');
+    if (v !== 'near') return;
+    setHereMsg('現在地を調べています…');
+    const h = await getHere();
+    if (h) { setHere(h); setHereMsg(''); }
+    else setHereMsg('現在地がわかりませんでした。スマホの位置情報をオンにしてください。');
+  }
 
   const savedIds = new Set(items.map((i) => i.placeId));
   function addCandidate(p, category = '', tripName = null) {
@@ -1037,10 +1048,11 @@ export default function Home() {
                 </select>
               </label>
               <label htmlFor="so">並び順
-                <select id="so" value={sort} onChange={(e) => setSort(e.target.value)}>
+                <select id="so" value={sort} onChange={(e) => changeSort(e.target.value)}>
                   <option value="relevance">おすすめ順</option>
-                  <option value="rating">評価が高い順</option>
+                  <option value="rating">点数が高い順</option>
                   <option value="reviews">レビューが多い順</option>
+                  <option value="near">近い順（現在地から）</option>
                 </select>
               </label>
             </div>
@@ -1068,6 +1080,7 @@ export default function Home() {
           </form>
 
           <div className="list" ref={resultsTop} style={{ scrollMarginTop: '72px' }}>
+            {hereMsg && <p className="hint">{hereMsg}</p>}
             {searched && sorted.length > 0 && <p className="result-head">{sorted.length}{nextToken ? '件以上' : '件'}見つかりました</p>}
             {searched && !sorted.length && <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>}
             {sorted.map((p) => (
@@ -1091,6 +1104,7 @@ export default function Home() {
                   <div className="body">
                     <NameBlock p={p} />
                     <Rating p={p} />
+                    {sort === 'near' && here && p.lat != null && <p className="dist">現在地から{distanceKm(here, p).toFixed(1)}km</p>}
                   </div>
                 </div>
                 <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
