@@ -415,8 +415,11 @@ export default function Home() {
     return (
       <article className={'item' + (it.done ? ' done' : '')}>
         <div className="thumbwrap">
-          {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+          <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
+            {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+          </button>
           <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
+          <button type="button" className={'detailbtn' + (openDetail === 'l:' + it.id ? ' on' : '')} onClick={() => toggleDetail('l:' + it.id)}>{openDetail === 'l:' + it.id ? '閉じる' : '詳細'}</button>
         </div>
         <div className="body">
           <div className="top">
@@ -440,7 +443,6 @@ export default function Home() {
             </div>
           ) : (
             <div className="acts">
-              <button className={openDetail === 'l:' + it.id ? 'on' : ''} onClick={() => toggleDetail('l:' + it.id)}>{openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細'}</button>
               <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
               {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
               {it.done
@@ -542,7 +544,12 @@ export default function Home() {
             {searched && !sorted.length && <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>}
             {sorted.map((p) => (
               <article className="item" key={p.placeId}>
-                {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+                <div className="thumbwrap">
+                  <button type="button" className="thumbbtn" onClick={() => toggleDetail('s:' + p.placeId)} aria-label="詳細を見る">
+                    {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+                  </button>
+                  <button type="button" className={'detailbtn' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '閉じる' : '詳細'}</button>
+                </div>
                 <div className="body">
                   <NameBlock p={p} />
                   <Rating p={p} />
@@ -550,7 +557,6 @@ export default function Home() {
                     {savedIds.has(p.placeId)
                       ? <button className="added" disabled>候補に追加済み</button>
                       : <button className="add" onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加</button>}
-                    <button className={openDetail === 's:' + p.placeId ? 'on' : ''} onClick={() => toggleDetail('s:' + p.placeId)}>{openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細'}</button>
                     <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
                   </div>
                   {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (

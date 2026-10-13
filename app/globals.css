@@ -145,3 +145,8 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .shot .btn{width:100%}
 .shot-shops{display:flex;flex-direction:column;gap:6px}
 .shot-lead{margin:0;font-family:var(--display);font-weight:700;font-size:15px;order:-1}
+
+.thumbwrap{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+.thumbbtn{padding:0;border:0;background:none;cursor:pointer;border-radius:10px;display:block}
+.detailbtn{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:4px 0;border-radius:999px;cursor:pointer;width:84px}
+.detailbtn.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
