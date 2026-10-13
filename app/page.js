@@ -286,6 +286,77 @@ function todayHours(h) {
   return h.hours[(day + 6) % 7] || '';
 }
 
+// ホテルからの距離（直線距離から、歩き・車のだいたいの時間を出す）
+function distanceKm(a, b) {
+  const R = 6371, rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function fromHotel(h, it) {
+  if (!h || h.lat == null || it.lat == null) return '';
+  const km = distanceKm(h, it);
+  const road = km * 1.3;
+  const dist = km < 1 ? `${Math.round(km * 1000 / 10) * 10}m` : `${km.toFixed(1)}km`;
+  if (road <= 3) return `ホテルから約${dist}・徒歩約${Math.max(1, Math.round((road / 4.5) * 60))}分`;
+  return `ホテルから約${dist}・車で約${Math.max(5, Math.round((road / 25) * 60))}分`;
+}
+
+// 泊まるホテルをGoogleマップから選ぶ
+function HotelPicker({ trip, current, onPick, onClear, onClose }) {
+  const [q, setQ] = useState('');
+  const [list, setList] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function search(e) {
+    e.preventDefault();
+    if (!q.trim()) return;
+    setBusy(true); setErr('');
+    try {
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ keyword: q.trim(), area: trip === '未分類' ? '' : trip }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || '検索に失敗しました');
+      setList(d.places.slice(0, 8));
+      if (!d.places.length) setErr('見つかりませんでした。ホテル名を変えて試してください。');
+    } catch (e2) {
+      setErr(e2.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="picker">
+      <div className="picker-head">
+        <b>{trip}で泊まるホテル</b>
+        <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
+      </div>
+      <form className="new-cat" onSubmit={search}>
+        <input id="hotelq" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="ホテル名（例：シェラトン）" />
+        <button className="btn" type="submit" disabled={busy}>{busy ? 'さがしています…' : 'さがす'}</button>
+      </form>
+      {err && <p className="err">{err}</p>}
+      {list.length > 0 && (
+        <ul className="hotel-list">
+          {list.map((h) => (
+            <li key={h.placeId}>
+              <button type="button" onClick={() => onPick({ placeId: h.placeId, name: h.name, altName: h.altName, address: h.address, lat: h.lat, lng: h.lng, mapsUrl: h.mapsUrl })}>
+                <b>{h.name}</b>
+                {h.altName && <span>{h.altName}</span>}
+                <span className="addr">{h.address}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {current && <button type="button" className="btn ghost" onClick={onClear}>ホテルの設定を外す</button>}
+    </div>
+  );
+}
+
 // メモを書く（入力中の文字はここで持つ）
 function MemoEditor({ initial, onSave, onCancel }) {
   const [v, setV] = useState(initial || '');
@@ -357,6 +428,8 @@ export default function Home() {
   const [editCats, setEditCats] = useState(false);
   const [view, setView] = useState('list'); // 'list' / 'map'
   const [memoFor, setMemoFor] = useState(null);
+  const [hotels, setHotels] = useState({}); // 旅行先 → ホテル
+  const [hotelEdit, setHotelEdit] = useState(false);
   const [, setTick] = useState(0);
   useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 60000); return () => clearInterval(t); }, []);
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
@@ -364,12 +437,17 @@ export default function Home() {
   useEffect(() => {
     try { const s = localStorage.getItem(KEY); if (s) setItems(JSON.parse(s)); } catch {}
     try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
+    try { const h = localStorage.getItem('trippin.hotels'); if (h) setHotels(JSON.parse(h)); } catch {}
     setLoaded(true);
   }, []);
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem(CATS_KEY, JSON.stringify(customCats)); } catch {}
   }, [customCats, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem('trippin.hotels', JSON.stringify(hotels)); } catch {}
+  }, [hotels, loaded]);
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
@@ -508,6 +586,12 @@ export default function Home() {
   const cand = inTrip.filter((i) => !i.done);
   const done = inTrip.filter((i) => i.done).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
   const shown = tab === 'cand' ? cand : done;
+  const hotelTrip = trip !== 'すべて' ? trip : trips.length === 1 ? trips[0] : null;
+  const mapHotels = useMemo(
+    () => (hotelTrip ? [hotels[hotelTrip]] : trips.map((t) => hotels[t])).filter(Boolean),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hotels, hotelTrip, trips.join('|')]
+  );
   const mapKey = shown.map((i) => `${i.id}:${i.category}:${i.done}:${i.rec}`).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const mapItems = useMemo(() => shown, [mapKey]);
@@ -547,6 +631,7 @@ export default function Home() {
                 <span>{todayHours(it.hoursInfo) ? '今日 ' + todayHours(it.hoursInfo).replace(/^[^:：]+[:：]\s*/, '') : '営業時間の情報なし'}</span>
               </p>
             )}
+            {fromHotel(hotels[it.trip], it) && <p className="fromhotel">{fromHotel(hotels[it.trip], it)}</p>}
             <span className="meta">
               <button type="button" className={'cat small' + (it.category ? ' sel' : ' none')} style={{ '--c': catColor(it.category) }} onClick={() => setPickFor(pickFor === 'l:' + it.id ? null : 'l:' + it.id)}>{it.category || 'カテゴリーなし'} ▾</button>
               <span className="pill">{it.trip}</span>
@@ -712,6 +797,33 @@ export default function Home() {
               <button className="edit-cats" aria-pressed={editCats} onClick={() => setEditCats((v) => !v)}>カテゴリーの編集</button>
             </div>
           )}
+          {trips.length > 0 && (
+            <div className="hotelbar">
+              {hotelTrip ? (
+                hotels[hotelTrip] ? (
+                  <>
+                    <span className="hb-label">ホテル</span>
+                    <span className="hb-name">{hotels[hotelTrip].name}</span>
+                    <button type="button" onClick={() => setHotelEdit((v) => !v)}>変更</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="hb-label">ホテル</span>
+                    <span className="hb-none">{hotelTrip}のホテルは未設定</span>
+                    <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>ホテルを設定</button>
+                  </>
+                )
+              ) : (
+                <span className="hb-none">上で旅行先を選ぶと、泊まるホテルを設定できます</span>
+              )}
+            </div>
+          )}
+          {hotelEdit && hotelTrip && (
+            <HotelPicker trip={hotelTrip} current={hotels[hotelTrip]}
+              onPick={(h) => { setHotels((prev) => ({ ...prev, [hotelTrip]: h })); setHotelEdit(false); }}
+              onClear={() => { setHotels((prev) => { const n = { ...prev }; delete n[hotelTrip]; return n; }); setHotelEdit(false); }}
+              onClose={() => setHotelEdit(false)} />
+          )}
           <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
             <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
@@ -722,7 +834,7 @@ export default function Home() {
               <CustomCatEditor customCats={customCats} onRename={renameCat} onDelete={deleteCat} />
             </div>
           )}
-          {view === 'map' && shown.length > 0 && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} />}
+          {view === 'map' && (shown.length > 0 || mapHotels.length > 0) && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} hotels={mapHotels} />}
           <div className="list">
             {shown.map((it, i) => ListCard({ it, no: i + 1 }))}
             {loaded && (tab === 'cand' ? cand : done).length === 0 && (

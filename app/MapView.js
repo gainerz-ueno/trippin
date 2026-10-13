@@ -30,7 +30,7 @@ function loadMaps() {
 const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // 候補・行ったのお店を、カテゴリーの色のピンで地図に並べる
-export default function MapView({ items, colorOf, photoSrc }) {
+export default function MapView({ items, colorOf, photoSrc, hotels = [] }) {
   const box = useRef(null);
   const map = useRef(null);
   const markers = useRef([]);
@@ -65,9 +65,33 @@ export default function MapView({ items, colorOf, photoSrc }) {
     markers.current.forEach((m) => m.setMap(null));
     markers.current = [];
     const pts = items.filter((i) => i.lat != null && i.lng != null);
-    if (!pts.length) return;
+    const hs = hotels.filter((h) => h && h.lat != null && h.lng != null);
+    if (!pts.length && !hs.length) return;
 
     const bounds = new maps.LatLngBounds();
+    // ホテル（黒い四角に「H」）
+    hs.forEach((h) => {
+      const pos = { lat: h.lat, lng: h.lng };
+      bounds.extend(pos);
+      const m = new maps.Marker({
+        position: pos,
+        map: map.current,
+        title: h.name,
+        icon: { path: 'M -11,-11 L 11,-11 L 11,11 L -11,11 Z', fillColor: '#1C2836', fillOpacity: 1, strokeColor: '#FFFFFF', strokeWeight: 2, scale: 1 },
+        label: { text: 'H', color: '#FFFFFF', fontSize: '13px', fontWeight: '700' },
+        zIndex: 2000,
+      });
+      m.addListener('click', () => {
+        info.current.setContent(
+          `<div style="max-width:220px;color:#1C2836"><div style="font-size:12px;color:#5E6E80">泊まるホテル</div>` +
+            `<div style="font-weight:700;font-size:14px">${esc(h.name)}</div>` +
+            (h.mapsUrl ? `<a href="${esc(h.mapsUrl)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:12px;color:#2F5D7C">Googleマップで開く</a>` : '') +
+            `</div>`
+        );
+        info.current.open({ map: map.current, anchor: m });
+      });
+      markers.current.push(m);
+    });
     pts.forEach((it) => {
       const no = items.indexOf(it) + 1;
       const pos = { lat: it.lat, lng: it.lng };
@@ -101,13 +125,14 @@ export default function MapView({ items, colorOf, photoSrc }) {
       });
       markers.current.push(m);
     });
-    if (pts.length === 1) {
-      map.current.setCenter({ lat: pts[0].lat, lng: pts[0].lng });
+    const all = [...pts, ...hs];
+    if (all.length === 1) {
+      map.current.setCenter({ lat: all[0].lat, lng: all[0].lng });
       map.current.setZoom(15);
     } else {
       map.current.fitBounds(bounds, 40);
     }
-  }, [ready, items, colorOf, photoSrc]);
+  }, [ready, items, colorOf, photoSrc, hotels]);
 
   if (err) return <div className="empty">{err}</div>;
   return (

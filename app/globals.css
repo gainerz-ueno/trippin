@@ -195,3 +195,16 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .top{width:100%}
 .top .nb{flex:1;min-width:0}
 .side-acts .del{color:var(--sub)}
+
+/* ホテル */
+.hotelbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 10px;font-size:13px}
+.hb-label{font-weight:700;background:var(--ink);color:var(--bg);border-radius:6px;padding:1px 7px;font-size:12px}
+.hb-name{flex:1;min-width:0;font-weight:700;word-break:break-word}
+.hb-none{flex:1;min-width:0;color:var(--sub)}
+.hotelbar button{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:none;color:var(--ink);padding:4px 12px;border-radius:999px;cursor:pointer}
+.hotelbar .hb-set{background:var(--copybtn);border-color:var(--copybtn);color:var(--copybtn-ink)}
+.hotel-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.hotel-list button{font:inherit;text-align:left;width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.hotel-list b{font-size:14px}
+.hotel-list span{font-size:12px}
+.fromhotel{margin:0;font-size:12px;font-weight:700;color:var(--copybtn)}
