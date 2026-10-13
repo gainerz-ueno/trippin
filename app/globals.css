@@ -140,3 +140,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 
 .thumbwrap{position:relative;flex:none;align-self:flex-start}
 .no{position:absolute;top:-6px;left:-6px;min-width:26px;height:26px;padding:0 6px;border-radius:999px;background:var(--c);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid var(--card);font-variant-numeric:tabular-nums}
+
+.shot{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px dashed var(--copyline);border-radius:12px;background:var(--copybg)}
+.shot .btn{width:100%}
+.shot-shops{display:flex;flex-direction:column;gap:6px}

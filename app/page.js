@@ -249,7 +249,11 @@ export default function Home() {
   const [minRating, setMinRating] = useState(0);
   const [minReviews, setMinReviews] = useState(0);
   const [sort, setSort] = useState('relevance');
-  const [srcUrl, setSrcUrl] = useState('');
+  const srcUrl = '';
+  const [shotBusy, setShotBusy] = useState(false);
+  const [shotShops, setShotShops] = useState([]);
+  const [shotMsg, setShotMsg] = useState('');
+  const shotInput = useRef(null);
   const [results, setResults] = useState([]);
   const [nextToken, setNextToken] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -292,10 +296,10 @@ export default function Home() {
     try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
   }, [items, loaded]);
 
-  async function runSearch(more = false) {
+  async function runSearch(more = false, override = null) {
     if (busy) return;
-    const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews) };
-    if (!more && !keyword.trim() && !area.trim()) { setError('キーワードか場所を入力してください'); return; }
+    const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews), ...(override || {}) };
+    if (!more && !String(q.keyword).trim() && !String(q.area).trim()) { setError('キーワードか場所を入力してください'); return; }
     setBusy(true); setMoreBusy(more); setError('');
     try {
       const res = await fetch('/api/search', {
@@ -314,6 +318,51 @@ export default function Home() {
       setError(e.message);
     } finally {
       setBusy(false); setMoreBusy(false);
+    }
+  }
+
+  // スクショを小さくしてから送る（長辺1600px・JPEG）
+  function shrink(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const k = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(img.src);
+        resolve(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      };
+      img.onerror = () => reject(new Error('画像を読み込めませんでした'));
+      img.src = URL.createObjectURL(file);
+    });
+  }
+
+  function searchShop(sh) {
+    setKeyword(sh.name); setArea(sh.city); setCountry(sh.country);
+    runSearch(false, { keyword: sh.name, area: sh.city, country: sh.country });
+  }
+
+  async function readShot(file) {
+    if (!file) return;
+    setShotBusy(true); setShotShops([]); setShotMsg(''); setError('');
+    try {
+      const image = await shrink(file);
+      const res = await fetch('/api/screenshot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, mimeType: 'image/jpeg' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '読み取りに失敗しました');
+      if (!data.shops.length) { setShotMsg('お店の名前を読み取れませんでした。店名が写っているスクショで試すか、キーワードに入れて探してください。'); return; }
+      setShotShops(data.shops);
+      if (data.shops.length === 1) searchShop(data.shops[0]);
+    } catch (e) {
+      setShotMsg(e.message);
+    } finally {
+      setShotBusy(false);
+      if (shotInput.current) shotInput.current.value = '';
     }
   }
 
@@ -465,11 +514,26 @@ export default function Home() {
                 </select>
               </label>
             </div>
-            <label htmlFor="src">お店を見つけた投稿のURL（任意・メモ用。検索には使いません）
-              <input id="src" type="url" inputMode="url" value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="https://" />
-            </label>
+<div className="shot">
+              <input ref={shotInput} id="shot" type="file" accept="image/*" hidden onChange={(e) => readShot(e.target.files?.[0])} />
+              <button type="button" className="btn ghost" disabled={shotBusy} onClick={() => shotInput.current?.click()}>
+                {shotBusy ? 'スクショを読み取っています…' : 'スクショからさがす'}
+              </button>
+              <p className="hint">インスタなどのスクショを選ぶと、AIが店名・街・国を読み取って検索します。</p>
+              {shotShops.length > 1 && (
+                <div className="shot-shops">
+                  <p className="hint">読み取ったお店（押すと検索します）</p>
+                  <div className="cat-chips">
+                    {shotShops.map((sh, i) => (
+                      <button type="button" key={i} className="cat" onClick={() => searchShop(sh)}>{sh.name}{sh.city ? `（${sh.city}）` : ''}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {shotMsg && <p className="err">{shotMsg}</p>}
+            </div>
             <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
-            <p className="hint">国を選ぶと、その国の中だけを探します。投稿のURLは、このあと「候補に追加」したお店に「元の投稿」として付きます。候補は「場所」（空なら国）の名前のリストにまとまります。</p>
+            <p className="hint">国を選ぶと、その国の中だけを探します。候補に追加したお店は、「場所」（空なら国）の名前のリストにまとまります。</p>
             {error && <p className="err">{error}</p>}
           </form>
 
