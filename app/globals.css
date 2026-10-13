@@ -166,5 +166,5 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .side-acts .add{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .side-acts .added{color:var(--sub);cursor:default}
 
-.detailbar{font:inherit;font-size:14px;font-weight:700;width:100%;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px;border-radius:10px;cursor:pointer}
-.detailbar.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.detailbar{font:inherit;font-size:14px;font-weight:700;width:100%;border:1px solid var(--copybtn);background:var(--copybtn);color:var(--copybtn-ink);padding:9px;border-radius:10px;cursor:pointer}
+.detailbar.on{background:var(--card);color:var(--copybtn);border-color:var(--copybtn)}
