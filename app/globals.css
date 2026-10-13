@@ -230,3 +230,6 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .side-confirm span{font-size:12px;font-weight:700;text-align:center;color:var(--ink)}
 .side-confirm button{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 4px;border-radius:999px;cursor:pointer}
 .side-confirm .del-yes{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+/* 住所のコピー欄は1行だけ表示（コピーは全文） */
+.addr-line .addr{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
