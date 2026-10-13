@@ -420,6 +420,125 @@ function PhotoStrip({ itemId, ver, kind }) {
   );
 }
 
+// AIおすすめ（候補タブ）
+const AI_PRESETS = ['このあとどこ行く？', '近くで今開いているお店は？', '夕食どこがいい？', 'カフェで休憩したい'];
+
+function localTimeLabel(offset) {
+  const d = offset == null ? new Date() : new Date(Date.now() + offset * 60000);
+  const get = (k) => (offset == null ? d[`get${k}`]() : d[`getUTC${k}`]());
+  const wd = '日月火水木金土'[get('Day')];
+  return `${get('Month') + 1}月${get('Date')}日(${wd}) ${String(get('Hours')).padStart(2, '0')}:${String(get('Minutes')).padStart(2, '0')}`;
+}
+
+function getHere() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
+  });
+}
+
+function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds, onShow }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState('');
+  const [hereUsed, setHereUsed] = useState(null);
+  const [pick, setPick] = useState(null);
+
+  async function ask(question) {
+    setBusy(true); setErr(''); setRes(null);
+    try {
+      const here = await getHere();
+      setHereUsed(here ? 'here' : hotel ? 'hotel' : 'none');
+      const offset = items.find((i) => i.hoursInfo)?.hoursInfo.offset;
+      const payload = items.map((it) => ({
+        id: it.id, name: it.name, altName: it.altName, category: it.category, rating: it.rating, memo: it.memo,
+        open: it.hoursInfo ? openState(it.hoursInfo) : null,
+        today: it.hoursInfo ? todayHours(it.hoursInfo) : '',
+        fromHere: here && it.lat != null ? `${distanceKm(here, it).toFixed(1)}km` : '',
+        fromHotel: fromHotel(hotel, it),
+      }));
+      const r = await fetch('/api/recommend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, here, hotel, items: payload, localTime: localTimeLabel(offset), trip }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'AIに聞けませんでした');
+      setRes(d);
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) return <button type="button" className="ai-open" onClick={() => setOpen(true)}>AIに聞く（このあとどこ行く？）</button>;
+  const byId = new Map(items.map((i) => [i.id, i]));
+  return (
+    <div className="ai">
+      <div className="picker-head">
+        <b>AIに聞く{trip ? `（${trip}）` : ''}</b>
+        <button type="button" className="x" onClick={() => setOpen(false)} aria-label="閉じる">×</button>
+      </div>
+      <div className="cat-chips">
+        {AI_PRESETS.map((t) => <button type="button" key={t} className="cat" disabled={busy} onClick={() => { setQ(t); ask(t); }}>{t}</button>)}
+      </div>
+      <form className="new-cat" onSubmit={(e) => { e.preventDefault(); ask(q); }}>
+        <input id="aiq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="例：甘いものが食べたい" />
+        <button className="btn" type="submit" disabled={busy}>{busy ? '考えています…' : '聞く'}</button>
+      </form>
+      <p className="hint">今いる場所（スマホの位置）・現地の時間・ホテル・候補のお店をもとに答えます。</p>
+      {err && <p className="err">{err}</p>}
+      {res && (
+        <div className="ai-res">
+          {hereUsed === 'hotel' && <p className="hint">今いる場所がわからなかったので、ホテルの近くとして考えました。</p>}
+          {hereUsed === 'none' && <p className="hint">今いる場所がわからなかったので、距離は考えていません。</p>}
+          <p className="ai-answer">{res.answer}</p>
+          {res.picks.map((pk, i) => {
+            if (pk.kind === 'list') {
+              const it = byId.get(pk.id);
+              if (!it) return null;
+              return (
+                <div className="ai-pick" key={i}>
+                  <p className="ai-pick-name"><span className="ai-tag">候補</span>{it.altName || it.name}</p>
+                  <p className="ai-reason">{pk.reason}</p>
+                  <div className="acts">
+                    <button type="button" onClick={() => onShow(it.id)}>リストで見る</button>
+                    <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                  </div>
+                </div>
+              );
+            }
+            const pl = pk.place;
+            return (
+              <div className="ai-pick" key={i}>
+                <p className="ai-pick-name"><span className="ai-tag near">近く</span>{pl.altName || pl.name}</p>
+                <p className="ai-sub">{pl.name}{pl.rating != null ? `　★${pl.rating.toFixed(1)}（${pl.reviews.toLocaleString()}件）` : ''}</p>
+                <p className="ai-reason">{pk.reason}</p>
+                <div className="acts side-acts-inline">
+                  <a href={pl.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                  {savedIds.has(pl.placeId)
+                    ? <button type="button" disabled>追加済み</button>
+                    : <button type="button" className="add" onClick={() => setPick(pick === pl.placeId ? null : pl.placeId)}>候補に追加 ▾</button>}
+                  {pick === pl.placeId && !savedIds.has(pl.placeId) && (
+                    <CategoryDropdown customCats={customCats} onAddCustom={onAddCustom} onPick={(c) => { onAdd(pl, c); setPick(null); }} onClose={() => setPick(null)} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // メモを書く（入力中の文字はここで持つ）
 function MemoEditor({ initial, onSave, onCancel, placeholder = '例：並ぶので朝イチで行く。豆乳は甘いのを頼む' }) {
   const [v, setV] = useState(initial || '');
@@ -611,11 +730,11 @@ export default function Home() {
   if (sort === 'reviews') sorted.sort((a, b) => b.reviews - a.reviews);
 
   const savedIds = new Set(items.map((i) => i.placeId));
-  function addCandidate(p, category = '') {
+  function addCandidate(p, category = '', tripName = null) {
     if (savedIds.has(p.placeId)) return;
-    setItems((prev) => [{ ...p, id: p.placeId, category, trip: area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
+    setItems((prev) => [{ ...p, id: p.placeId, category, trip: tripName || area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
     setPickFor(null);
-    if (shotFile.current) {
+    if (!tripName && shotFile.current) {
       const f = shotFile.current;
       addPhotos(p.placeId, [f], 'memo').then(() => setPhotoVer((v) => v + 1)).catch(() => {});
     }
@@ -678,7 +797,7 @@ export default function Home() {
   function ListCard({ it, no }) {
     const src = sourceLabel(it.srcUrl);
     return (
-      <article key={it.id} className={'item' + (it.done ? ' done' : '')}>
+      <article key={it.id} id={'item-' + it.id} className={'item' + (it.done ? ' done' : '')}>
         <div className="item-top">
           <div className="thumbwrap side">
             <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
@@ -892,6 +1011,11 @@ export default function Home() {
               ))}
               <button className="edit-cats" aria-pressed={editCats} onClick={() => setEditCats((v) => !v)}>カテゴリーの編集</button>
             </div>
+          )}
+          {tab === 'cand' && cand.length > 0 && (
+            <AiPanel items={cand} hotel={hotelTrip ? hotels[hotelTrip] : null} trip={hotelTrip || ''} customCats={customCats} onAddCustom={addCustomCat}
+              savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, hotelTrip || trips[0] || '未分類')}
+              onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
           )}
           {trips.length > 0 && (
             <div className="hotelbar">

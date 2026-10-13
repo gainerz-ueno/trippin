@@ -247,3 +247,17 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 
 .line .name,.addr-line .addr{cursor:pointer}
 .line .name.full,.addr-line .addr.full{white-space:normal;overflow:visible;text-overflow:clip}
+
+/* AIおすすめ */
+.ai-open{font:inherit;font-size:14px;font-weight:700;width:100%;border:0;background:linear-gradient(90deg,var(--copybtn),var(--go));color:#fff;padding:11px;border-radius:12px;cursor:pointer}
+.ai{background:var(--card);border:1.5px solid var(--copybtn);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.ai .cat:disabled{opacity:.5}
+.ai-res{display:flex;flex-direction:column;gap:8px}
+.ai-answer{margin:0;font-size:14px;line-height:1.7;white-space:pre-wrap}
+.ai-pick{background:var(--copybg);border:1px solid var(--copyline);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:4px;position:relative}
+.ai-pick-name{margin:0;font-weight:700;font-size:15px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ai-tag{font-size:11px;font-weight:700;background:var(--copybtn);color:var(--copybtn-ink);border-radius:6px;padding:1px 7px}
+.ai-tag.near{background:var(--go);color:#fff}
+.ai-sub{margin:0;font-size:12px;color:var(--sub)}
+.ai-reason{margin:0;font-size:13px}
+.side-acts-inline{position:relative}
