@@ -261,3 +261,17 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .ai-sub{margin:0;font-size:12px;color:var(--sub)}
 .ai-reason{margin:0;font-size:13px}
 .side-acts-inline{position:relative}
+
+/* フォルダ */
+.folderbar{display:flex;flex-direction:column;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+.fb-row{display:flex;gap:8px;align-items:flex-start}
+.fb-label{flex:none;font-size:12px;font-weight:700;background:var(--copybtn);color:var(--copybtn-ink);border-radius:6px;padding:2px 8px;margin-top:5px}
+.fb-chips{display:flex;flex-wrap:wrap;gap:6px;min-width:0}
+.fb-chips button{font:inherit;font-size:13px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:5px 12px;border-radius:999px;cursor:pointer;display:flex;gap:6px;align-items:center}
+.fb-chips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:700}
+.fb-count{font-size:11px;opacity:.7;font-variant-numeric:tabular-nums}
+.fb-chips .fb-new{border-style:dashed;color:var(--sub)}
+.fb-edit{font:inherit;font-size:12px;align-self:flex-end;border:0;background:none;color:var(--sub);text-decoration:underline;cursor:pointer;padding:0}
+.move-wrap{position:relative;display:inline-block}
+.pill-btn{font:inherit;font-size:12px;border:0;cursor:pointer}
+.move-dd{left:auto;right:0;width:200px}

@@ -90,6 +90,63 @@ function CategoryDropdown({ customCats, onPick, onAddCustom, onClose }) {
   );
 }
 
+// フォルダ（旅行ごとに自分で名前を付けて分ける）
+function FolderBar({ folders, current, counts, onSelect, onCreate, onRename, onDelete }) {
+  const [mode, setMode] = useState(null); // 'new' / 'edit'
+  const [name, setName] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  function submitNew(e) {
+    e.preventDefault();
+    const n = name.trim();
+    if (!n) return;
+    onCreate(n); setName(''); setMode(null);
+  }
+  function submitRename(e) {
+    e.preventDefault();
+    const n = name.trim();
+    if (n && n !== current) onRename(current, n);
+    setMode(null);
+  }
+  return (
+    <div className="folderbar">
+      <div className="fb-row">
+        <span className="fb-label">フォルダ</span>
+        <div className="fb-chips">
+          {folders.map((f) => (
+            <button type="button" key={f} aria-pressed={f === current} onClick={() => { onSelect(f); setMode(null); }}>
+              {f}<span className="fb-count">{counts[f] || 0}</span>
+            </button>
+          ))}
+          <button type="button" className="fb-new" onClick={() => { setMode(mode === 'new' ? null : 'new'); setName(''); }}>＋ 新しいフォルダ</button>
+        </div>
+      </div>
+      {current && mode !== 'new' && (
+        <button type="button" className="fb-edit" onClick={() => { setMode(mode === 'edit' ? null : 'edit'); setName(current); setConfirm(false); }}>「{current}」の名前の変更・削除</button>
+      )}
+      {mode === 'new' && (
+        <form className="new-cat" onSubmit={submitNew}>
+          <input id="newfolder" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例：台湾 2026年3月" maxLength={30} />
+          <button className="btn" type="submit">作る</button>
+        </form>
+      )}
+      {mode === 'edit' && (
+        confirm ? (
+          <div className="confirm">「{current}」とその中のお店{counts[current] || 0}件を削除しますか？
+            <button className="btn" type="button" onClick={() => { onDelete(current); setConfirm(false); setMode(null); }}>削除する</button>
+            <button className="btn ghost" type="button" onClick={() => setConfirm(false)}>やめる</button>
+          </div>
+        ) : (
+          <form className="new-cat" onSubmit={submitRename}>
+            <input id="renfolder" autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={30} />
+            <button className="btn" type="submit">名前を保存</button>
+            <button className="btn ghost" type="button" onClick={() => setConfirm(true)}>削除</button>
+          </form>
+        )
+      )}
+    </div>
+  );
+}
+
 // 自分で作ったカテゴリーの名前変更・削除
 function CustomCatEditor({ customCats, onRename, onDelete }) {
   const [editing, setEditing] = useState(null);
@@ -602,7 +659,11 @@ export default function Home() {
   }, [searchSeq]);
 
   // リスト
-  const [trip, setTrip] = useState('すべて');
+  const [trip, setTrip] = useState(''); // 今見ているフォルダ（＝追加先）
+  const [folders, setFolders] = useState([]);
+  const [moveFor, setMoveFor] = useState(null);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
   const [confirmId, setConfirmId] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
   const [customCats, setCustomCats] = useState([]);
@@ -631,6 +692,14 @@ export default function Home() {
     try { const s = localStorage.getItem(KEY); if (s) setItems(JSON.parse(s)); } catch {}
     try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
     try { const h = localStorage.getItem('trippin.hotels'); if (h) setHotels(JSON.parse(h)); } catch {}
+    try {
+      const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
+      const its = JSON.parse(localStorage.getItem(KEY) || '[]');
+      const merged = [...new Set([...f, ...its.map((i) => i.trip).filter(Boolean)])];
+      setFolders(merged);
+      const cur = localStorage.getItem('trippin.folder');
+      setTrip(cur && merged.includes(cur) ? cur : merged[0] || '');
+    } catch {}
     setLoaded(true);
   }, []);
   useEffect(() => {
@@ -641,6 +710,29 @@ export default function Home() {
     if (!loaded) return;
     try { localStorage.setItem('trippin.hotels', JSON.stringify(hotels)); } catch {}
   }, [hotels, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem('trippin.folders', JSON.stringify(folders)); localStorage.setItem('trippin.folder', trip); } catch {}
+  }, [folders, trip, loaded]);
+  function createFolder(n) {
+    setFolders((prev) => (prev.includes(n) ? prev : [...prev, n]));
+    setTrip(n);
+  }
+  function renameFolder(from, to) {
+    setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
+    setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to } : i)));
+    setHotels((prev) => { const n = { ...prev }; if (n[from]) { n[to] = n[from]; delete n[from]; } return n; });
+    setTrip(to);
+  }
+  function deleteFolder(name) {
+    const gone = items.filter((i) => i.trip === name).map((i) => i.id);
+    setItems((prev) => prev.filter((i) => i.trip !== name));
+    gone.forEach((id) => deletePhotosOf(id).catch(() => {}));
+    setHotels((prev) => { const n = { ...prev }; delete n[name]; return n; });
+    const rest = folders.filter((f) => f !== name);
+    setFolders(rest);
+    setTrip(rest[0] || '');
+  }
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
@@ -732,7 +824,9 @@ export default function Home() {
   const savedIds = new Set(items.map((i) => i.placeId));
   function addCandidate(p, category = '', tripName = null) {
     if (savedIds.has(p.placeId)) return;
-    setItems((prev) => [{ ...p, id: p.placeId, category, trip: tripName || area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
+    let folder = tripName || trip;
+    if (!folder) { folder = area.trim() || countryName(country) || '未分類'; createFolder(folder); }
+    setItems((prev) => [{ ...p, id: p.placeId, category, trip: folder, srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
     setPickFor(null);
     if (!tripName && shotFile.current) {
       const f = shotFile.current;
@@ -776,20 +870,18 @@ export default function Home() {
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); deletePhotosOf(id).catch(() => {}); }
 
-  const trips = [...new Set(items.map((i) => i.trip))];
-  const inTrip = items.filter((i) => (trip === 'すべて' || i.trip === trip) && (catFilter === 'すべて' || (catFilter === 'なし' ? !i.category : i.category === catFilter)));
-  const usedCats = [...new Set(items.filter((i) => trip === 'すべて' || i.trip === trip).map((i) => i.category || 'なし'))];
+  const trips = folders;
+  const folderCounts = {};
+  items.forEach((i) => { folderCounts[i.trip] = (folderCounts[i.trip] || 0) + 1; });
+  const inTrip = items.filter((i) => i.trip === trip && (catFilter === 'すべて' || (catFilter === 'なし' ? !i.category : i.category === catFilter)));
+  const usedCats = [...new Set(items.filter((i) => i.trip === trip).map((i) => i.category || 'なし'))];
   const catOrder = [...BASE_CATS.map(([n]) => n), ...customCats, 'なし'];
   usedCats.sort((a, b) => catOrder.indexOf(a) - catOrder.indexOf(b));
   const cand = inTrip.filter((i) => !i.done);
   const done = inTrip.filter((i) => i.done).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
   const shown = tab === 'cand' ? cand : done;
-  const hotelTrip = trip !== 'すべて' ? trip : trips.length === 1 ? trips[0] : null;
-  const mapHotels = useMemo(
-    () => (hotelTrip ? [hotels[hotelTrip]] : trips.map((t) => hotels[t])).filter(Boolean),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [hotels, hotelTrip, trips.join('|')]
-  );
+  const hotelTrip = trip || null;
+  const mapHotels = useMemo(() => [hotelTrip && hotels[hotelTrip]].filter(Boolean), [hotels, hotelTrip]);
   const mapKey = shown.map((i) => `${i.id}:${i.category}:${i.done}:${i.rec}`).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const mapItems = useMemo(() => shown, [mapKey]);
@@ -842,7 +934,20 @@ export default function Home() {
             {fromHotel(hotels[it.trip], it) && <p className="fromhotel">{fromHotel(hotels[it.trip], it)}</p>}
             <span className="meta">
               <button type="button" className={'cat small' + (it.category ? ' sel' : ' none')} style={{ '--c': catColor(it.category) }} onClick={() => setPickFor(pickFor === 'l:' + it.id ? null : 'l:' + it.id)}>{it.category || 'カテゴリーなし'} ▾</button>
-              <span className="pill">{it.trip}</span>
+              <span className="move-wrap">
+                <button type="button" className="pill pill-btn" onClick={() => setMoveFor(moveFor === it.id ? null : it.id)}>{it.trip} ▾</button>
+                {moveFor === it.id && (
+                  <div className="dropdown move-dd">
+                    <p className="dd-title">別のフォルダに移す</p>
+                    <ul>
+                      {folders.filter((f) => f !== it.trip).map((f) => (
+                        <li key={f}><button type="button" onClick={() => { update(it.id, { trip: f }); setMoveFor(null); }}>{f}</button></li>
+                      ))}
+                      {folders.length < 2 && <li><p className="dd-title">ほかのフォルダがありません</p></li>}
+                    </ul>
+                  </div>
+                )}
+              </span>
               {src && <span className="pill">{src}で発見</span>}
               {it.done && it.rec && <span className="pill" style={{ color: 'var(--star)' }}>おすすめ</span>}
             </span>
@@ -953,7 +1058,23 @@ export default function Home() {
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
             <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
-            <p className="hint">国を選ぶと、その国の中だけを探します。候補に追加したお店は、「場所」（空なら国）の名前のリストにまとまります。</p>
+            <label htmlFor="addfolder">候補の追加先フォルダ
+              <select id="addfolder" value={trip} onChange={(e) => {
+                if (e.target.value === '__new__') { const n = (area.trim() || countryName(country) || '新しいフォルダ'); setNewFolderName(n); setNewFolderOpen(true); return; }
+                setTrip(e.target.value);
+              }}>
+                {!folders.length && <option value="">（はじめて追加したときに作ります）</option>}
+                {folders.map((f) => <option key={f} value={f}>{f}</option>)}
+                <option value="__new__">＋ 新しいフォルダを作る</option>
+              </select>
+            </label>
+            {newFolderOpen && (
+              <div className="new-cat">
+                <input id="newfolder2" autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="例：台湾 2026年3月" maxLength={30} />
+                <button className="btn" type="button" onClick={() => { const n = newFolderName.trim(); if (n) createFolder(n); setNewFolderOpen(false); }}>作る</button>
+              </div>
+            )}
+            <p className="hint">国を選ぶと、その国の中だけを探します。</p>
             {error && <p className="err">{error}</p>}
           </form>
 
@@ -996,13 +1117,8 @@ export default function Home() {
 
       {tab !== 'search' && (
         <>
-          {trips.length > 1 && (
-            <div className="chips">
-              {['すべて', ...trips].map((t) => (
-                <button key={t} aria-pressed={t === trip} onClick={() => setTrip(t)}>{t}</button>
-              ))}
-            </div>
-          )}
+          <FolderBar folders={folders} current={trip} counts={folderCounts} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
+            onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} />
           {usedCats.length > 0 && (
             <div className="chips cat-filter">
               {['すべて', ...usedCats].map((c) => (
@@ -1014,7 +1130,7 @@ export default function Home() {
           )}
           {tab === 'cand' && cand.length > 0 && (
             <AiPanel items={cand} hotel={hotelTrip ? hotels[hotelTrip] : null} trip={hotelTrip || ''} customCats={customCats} onAddCustom={addCustomCat}
-              savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, hotelTrip || trips[0] || '未分類')}
+              savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, trip || null)}
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
           )}
           {trips.length > 0 && (
