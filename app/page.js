@@ -1096,17 +1096,17 @@ export default function Home() {
             <label htmlFor="kw">キーワード・店名
               <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
             </label>
-            {!useNear && <div className="row">
+            <div className="row">
               <label htmlFor="ct">国
-                <select id="ct" value={country} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
+                <select id="ct" value={useNear ? hotel.country || country : country} disabled={useNear} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
                   {!country && <option value="" disabled>国を選ぶ</option>}
                   {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </label>
               <label htmlFor="area">場所
-                <input id="area" value={area} onChange={(e) => setArea(e.target.value)} placeholder="例：台北" />
+                <input id="area" value={useNear ? '' : area} disabled={useNear} onChange={(e) => setArea(e.target.value)} placeholder="例：台北" />
               </label>
-            </div>}
+            </div>
             <div className="row">
               <label htmlFor="mr">評価
                 <select id="mr" value={minRating} onChange={(e) => setMinRating(e.target.value)}>
@@ -1144,7 +1144,7 @@ export default function Home() {
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
             <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
-            {!useNear && <p className="hint">国を選ぶと、その国の中だけを探します。</p>}
+            <p className="hint">国を選ぶと、その国の中だけを探します。</p>
             {error && <p className="err">{error}</p>}
           </form>
 
