@@ -48,10 +48,11 @@ function shrink(file) {
   });
 }
 
-export async function addPhotos(itemId, files) {
+// kind: 'memo'（行く前のメモ画像）/ 'visit'（行った写真）
+export async function addPhotos(itemId, files, kind = 'memo') {
   for (const f of files) {
     const blob = await shrink(f);
-    await tx('readwrite', (st) => st.add({ itemId, blob, at: Date.now() }));
+    await tx('readwrite', (st) => st.add({ itemId, blob, kind, at: Date.now() }));
   }
 }
 

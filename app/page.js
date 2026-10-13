@@ -379,16 +379,22 @@ function PhotoStrip({ itemId, ver }) {
   }, [itemId, ver]);
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
   if (!photos.length) return null;
+  const groups = [
+    ['メモ画像', photos.filter((p) => (p.kind || 'memo') === 'memo')],
+    ['行った写真', photos.filter((p) => p.kind === 'visit')],
+  ].filter(([, l]) => l.length);
   return (
     <>
-      <div className="myphotos">
-        <p className="mp-title">写真 {photos.length}枚</p>
-        <div className="mp-strip">
-          {photos.map((p) => (
-            <button type="button" key={p.id} onClick={() => { setBig(p); setConfirmDel(false); }}><img src={p.url} alt="" /></button>
-          ))}
+      {groups.map(([title, list]) => (
+        <div className="myphotos" key={title}>
+          <p className="mp-title">{title} {list.length}枚</p>
+          <div className="mp-strip">
+            {list.map((p) => (
+              <button type="button" key={p.id} onClick={() => { setBig(p); setConfirmDel(false); }}><img src={p.url} alt="" /></button>
+            ))}
+          </div>
         </div>
-      </div>
+      ))}
       {big && (
         <div className="viewer" role="dialog" aria-label="写真" onClick={() => setBig(null)}>
           <img src={big.url} alt="" onClick={(e) => e.stopPropagation()} />
@@ -488,10 +494,10 @@ export default function Home() {
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
   const [photoBusy, setPhotoBusy] = useState(null);
-  async function onPhotos(itemId, files) {
+  async function onPhotos(itemId, files, kind) {
     if (!files?.length) return;
     setPhotoBusy(itemId);
-    try { await addPhotos(itemId, Array.from(files)); } catch {}
+    try { await addPhotos(itemId, Array.from(files), kind); } catch {}
     setPhotoBusy(null);
     setPhotoVer((v) => v + 1);
   }
@@ -608,7 +614,7 @@ export default function Home() {
     setPickFor(null);
     if (shotFile.current) {
       const f = shotFile.current;
-      addPhotos(p.placeId, [f]).then(() => setPhotoVer((v) => v + 1)).catch(() => {});
+      addPhotos(p.placeId, [f], 'memo').then(() => setPhotoVer((v) => v + 1)).catch(() => {});
     }
   }
   const closePick = useCallback(() => setPickFor(null), []);
@@ -684,7 +690,7 @@ export default function Home() {
               <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
               <label className="photo-add">
                 {photoBusy === it.id ? '保存中…' : it.done ? '写真を追加' : 'メモ画像を追加'}
-                <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files); e.target.value = ''; }} />
+                <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files, it.done ? 'visit' : 'memo'); e.target.value = ''; }} />
               </label>
               {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
               <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
