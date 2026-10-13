@@ -164,16 +164,18 @@ function CopyBtn({ text, label }) {
 
 // 現地の店名・住所（コピー付き）と、日本語の表記
 function NameBlock({ p, withAddress = true }) {
+  const [openName, setOpenName] = useState(false);
+  const [openAddr, setOpenAddr] = useState(false);
   return (
     <div className="nb">
       <div className="line">
-        <p className="name">{p.name}</p>
+        <p className={'name' + (openName ? ' full' : '')} onClick={() => setOpenName((v) => !v)} title="押すと全文">{p.name}</p>
         <CopyBtn text={p.name} label="店名" />
       </div>
       {p.altName && <p className="alt">{p.altName}</p>}
       {withAddress && p.address && (
         <div className="line addr-line">
-          <p className="addr">{p.address}</p>
+          <p className={'addr' + (openAddr ? ' full' : '')} onClick={() => setOpenAddr((v) => !v)} title="押すと全文">{p.address}</p>
           <CopyBtn text={p.address} label="住所" />
         </div>
       )}

@@ -244,3 +244,6 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 
 /* 店名のコピー欄も1行だけ表示（コピーは全文） */
 .line .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.line .name,.addr-line .addr{cursor:pointer}
+.line .name.full,.addr-line .addr.full{white-space:normal;overflow:visible;text-overflow:clip}
