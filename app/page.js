@@ -669,8 +669,6 @@ export default function Home() {
   const [trip, setTrip] = useState(''); // 今見ているフォルダ（＝追加先）
   const [folders, setFolders] = useState([]);
   const [moveFor, setMoveFor] = useState(null);
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
   const [confirmId, setConfirmId] = useState(null);
   const [openDetail, setOpenDetail] = useState(null);
   const [customCats, setCustomCats] = useState([]);
@@ -1065,22 +1063,6 @@ export default function Home() {
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
             <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
-            <label htmlFor="addfolder">候補の追加先フォルダ
-              <select id="addfolder" value={trip} onChange={(e) => {
-                if (e.target.value === '__new__') { const n = (area.trim() || countryName(country) || '新しいフォルダ'); setNewFolderName(n); setNewFolderOpen(true); return; }
-                setTrip(e.target.value);
-              }}>
-                {!folders.length && <option value="">（はじめて追加したときに作ります）</option>}
-                {folders.map((f) => <option key={f} value={f}>{f}</option>)}
-                <option value="__new__">＋ 新しいフォルダを作る</option>
-              </select>
-            </label>
-            {newFolderOpen && (
-              <div className="new-cat">
-                <input id="newfolder2" autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} placeholder="例：台湾 2026年3月" maxLength={30} />
-                <button className="btn" type="button" onClick={() => { const n = newFolderName.trim(); if (n) createFolder(n); setNewFolderOpen(false); }}>作る</button>
-              </div>
-            )}
             <p className="hint">国を選ぶと、その国の中だけを探します。</p>
             {error && <p className="err">{error}</p>}
           </form>
