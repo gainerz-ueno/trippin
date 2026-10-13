@@ -1030,7 +1030,7 @@ export default function Home() {
                 <input id="area" value={area} onChange={(e) => setArea(e.target.value)} placeholder="例：台北" />
               </label>
             </div>
-            <div className="row3">
+            <div className="row">
               <label htmlFor="mr">評価
                 <select id="mr" value={minRating} onChange={(e) => setMinRating(e.target.value)}>
                   <option value={0}>指定なし</option>
@@ -1045,14 +1045,6 @@ export default function Home() {
                   <option value={100}>100件以上</option>
                   <option value={500}>500件以上</option>
                   <option value={1000}>1000件以上</option>
-                </select>
-              </label>
-              <label htmlFor="so">並び順
-                <select id="so" value={sort} onChange={(e) => changeSort(e.target.value)}>
-                  <option value="relevance">おすすめ順</option>
-                  <option value="rating">点数が高い順</option>
-                  <option value="reviews">レビューが多い順</option>
-                  <option value="near">近い順（現在地から）</option>
                 </select>
               </label>
             </div>
@@ -1080,8 +1072,18 @@ export default function Home() {
           </form>
 
           <div className="list" ref={resultsTop} style={{ scrollMarginTop: '72px' }}>
+            {searched && sorted.length > 0 && (
+              <div className="result-bar">
+                <p className="result-head">{sorted.length}{nextToken ? '件以上' : '件'}見つかりました</p>
+                <select id="so" aria-label="並び順" value={sort} onChange={(e) => changeSort(e.target.value)}>
+                  <option value="relevance">おすすめ順</option>
+                  <option value="rating">点数が高い順</option>
+                  <option value="reviews">レビューが多い順</option>
+                  <option value="near">近い順（現在地から）</option>
+                </select>
+              </div>
+            )}
             {hereMsg && <p className="hint">{hereMsg}</p>}
-            {searched && sorted.length > 0 && <p className="result-head">{sorted.length}{nextToken ? '件以上' : '件'}見つかりました</p>}
             {searched && !sorted.length && <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>}
             {sorted.map((p) => (
               <article className="item" key={p.placeId}>

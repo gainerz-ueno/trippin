@@ -281,3 +281,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .ai .ai-move input { width: 18px; margin: 0; flex: none; height: 18px; accent-color: var(--accent, #2F5D7C); }
 
 .dist { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--muted, #5E6E80); }
+
+.result-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; }
+.result-bar .result-head { margin: 0; }
+.result-bar select { width: auto; flex: none; font-size: 14px; padding: 6px 8px; }
