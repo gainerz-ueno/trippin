@@ -3,6 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 
 const KEY = 'trippin.v1';
 
+const COUNTRY_LIST = [
+  ['', '指定なし'], ['TW', '台湾'], ['KR', '韓国'], ['HK', '香港'], ['CN', '中国'], ['VN', 'ベトナム'],
+  ['TH', 'タイ'], ['SG', 'シンガポール'], ['MY', 'マレーシア'], ['PH', 'フィリピン'], ['JP', '日本'],
+];
+const countryName = (c) => (COUNTRY_LIST.find(([k]) => k === c) || [, ''])[1];
+
 function sourceLabel(u) {
   if (!u) return null;
   if (/youtube\.com|youtu\.be/.test(u)) return 'YouTube';
@@ -36,6 +42,7 @@ export default function Home() {
   // 検索
   const [keyword, setKeyword] = useState('');
   const [area, setArea] = useState('');
+  const [country, setCountry] = useState('');
   const [minRating, setMinRating] = useState(0);
   const [minReviews, setMinReviews] = useState(0);
   const [sort, setSort] = useState('relevance');
@@ -63,7 +70,7 @@ export default function Home() {
 
   async function runSearch(more = false) {
     if (busy) return;
-    const q = more ? lastQuery.current : { keyword, area, minRating: Number(minRating), minReviews: Number(minReviews) };
+    const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews) };
     if (!more && !keyword.trim() && !area.trim()) { setError('キーワードか場所を入力してください'); return; }
     setBusy(true); setError('');
     try {
@@ -100,7 +107,7 @@ export default function Home() {
   const savedIds = new Set(items.map((i) => i.placeId));
   function addCandidate(p) {
     if (savedIds.has(p.placeId)) return;
-    setItems((prev) => [{ ...p, id: p.placeId, trip: area.trim() || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
+    setItems((prev) => [{ ...p, id: p.placeId, trip: area.trim() || countryName(country) || '未分類', srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
   }
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); }
@@ -169,9 +176,14 @@ export default function Home() {
         <>
           <form className="panel" onSubmit={(e) => { e.preventDefault(); runSearch(false); }}>
             <h2>Googleマップでお店をさがす</h2>
+            <label htmlFor="kw">キーワード・店名
+              <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
+            </label>
             <div className="row">
-              <label htmlFor="kw">キーワード・店名
-                <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
+              <label htmlFor="ct">国（任意）
+                <select id="ct" value={country} onChange={(e) => setCountry(e.target.value)}>
+                  {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
               </label>
               <label htmlFor="area">場所
                 <input id="area" value={area} onChange={(e) => setArea(e.target.value)} placeholder="例：台北" />
@@ -206,7 +218,7 @@ export default function Home() {
               <input id="src" type="url" inputMode="url" value={srcUrl} onChange={(e) => setSrcUrl(e.target.value)} placeholder="https://" />
             </label>
             <button className="btn" type="submit" disabled={busy}>{busy && !results.length ? 'さがしています…' : 'さがす'}</button>
-            <p className="hint">候補に追加したお店は、「場所」に入れた名前のリストにまとまります。</p>
+            <p className="hint">国を選ぶと、その国の中だけを探します。候補に追加したお店は、「場所」（空なら国）の名前のリストにまとまります。</p>
             {error && <p className="err">{error}</p>}
           </form>
 
