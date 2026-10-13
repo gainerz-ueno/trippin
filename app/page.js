@@ -1161,7 +1161,7 @@ export default function Home() {
                   </>
                 ) : (
                   <div className="hb-first">
-                    <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>宿泊先（ホテル）を登録</button>
+                    <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>今回の宿泊先（ホテル）を登録</button>
                     <p className="hb-note">※登録すると宿泊先を軸に行動しやすくなります</p>
                   </div>
                 )
