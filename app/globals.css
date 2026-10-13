@@ -277,5 +277,5 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .move-dd{left:auto;right:0;width:200px}
 
 .ai-move { display: flex; gap: 16px; margin: 4px 0 8px; }
-.ai-move label { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
-.ai-move input { width: 18px; height: 18px; accent-color: var(--accent, #2F5D7C); }
+.ai .ai-move label { display: inline-flex; flex-direction: row; margin: 0; color: var(--ink); align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
+.ai .ai-move input { width: 18px; margin: 0; flex: none; height: 18px; accent-color: var(--accent, #2F5D7C); }
