@@ -5,7 +5,10 @@ export async function POST(req) {
     return Response.json({ error: 'APIキーが設定されていません' }, { status: 500 });
   }
   try {
-    const { keyword = '', area = '', country = '', minRating = 0, minReviews = 0, pageToken = null } = await req.json();
+    const { keyword = '', area = '', country = '', minRating = 0, minReviews = 0, pageToken = null, jaOnly = false } = await req.json();
+    // 国を決めずに探すとGoogleへの検索が2回になるので、国は必ず選んでもらう（ホテル探しは日本語1回だけ）
+    if (!country && !jaOnly) return Response.json({ error: '国を選んでください' }, { status: 400 });
+    const opts = { jaOnly: !!jaOnly };
     const textQuery = [keyword, area].map((s) => String(s).trim()).filter(Boolean).join(' ');
     if (!textQuery) return Response.json({ error: 'キーワードか場所を入力してください' }, { status: 400 });
 
@@ -14,7 +17,7 @@ export async function POST(req) {
       let all = [];
       let tokens = null;
       for (let i = 0; i < 3; i++) {
-        const { places, next } = await searchPage(textQuery, minRating, tokens, country);
+        const { places, next } = await searchPage(textQuery, minRating, tokens, country, {}, opts);
         all = all.concat(places);
         tokens = next;
         if (!tokens) break;
@@ -23,7 +26,7 @@ export async function POST(req) {
       return Response.json({ places: await fillTranslations(filtered), nextPageToken: null });
     }
 
-    const { places, next } = await searchPage(textQuery, minRating, decodeToken(pageToken), country);
+    const { places, next } = await searchPage(textQuery, minRating, decodeToken(pageToken), country, {}, opts);
     const filled = await fillTranslations(places);
     return Response.json({ places: filled, nextPageToken: encodeToken(next),  });
   } catch (e) {

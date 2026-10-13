@@ -6,7 +6,7 @@ import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 const KEY = 'trippin.v1';
 
 const COUNTRY_LIST = [
-  ['', '指定なし'], ['TW', '台湾'], ['KR', '韓国'], ['HK', '香港'], ['CN', '中国'], ['VN', 'ベトナム'],
+  ['TW', '台湾'], ['KR', '韓国'], ['HK', '香港'], ['CN', '中国'], ['VN', 'ベトナム'],
   ['TH', 'タイ'], ['SG', 'シンガポール'], ['MY', 'マレーシア'], ['PH', 'フィリピン'], ['JP', '日本'],
 ];
 // 基本カテゴリー（色は地図のピンにも使う）
@@ -185,7 +185,6 @@ function CustomCatEditor({ customCats, onRename, onDelete }) {
   );
 }
 
-const countryName = (c) => (c ? (COUNTRY_LIST.find(([k]) => k === c) || [, ''])[1] : '');
 
 function sourceLabel(u) {
   if (!u) return null;
@@ -378,7 +377,7 @@ function HotelPicker({ trip, current, onPick, onClear, onClose }) {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: q.trim(), area: trip === '未分類' ? '' : trip }),
+        body: JSON.stringify({ keyword: q.trim(), area: trip === '未分類' ? '' : trip, jaOnly: true }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || '検索に失敗しました');
@@ -711,6 +710,7 @@ export default function Home() {
     try { const s = localStorage.getItem(KEY); if (s) setItems(fixTrip(JSON.parse(s))); } catch {}
     try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
     try { const h = localStorage.getItem('trippin.hotels'); if (h) setHotels(JSON.parse(h)); } catch {}
+    try { const c = localStorage.getItem('trippin.country'); if (c && COUNTRY_LIST.some(([k]) => k === c)) setCountry(c); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
       const its = fixTrip(JSON.parse(localStorage.getItem(KEY) || '[]'));
@@ -763,6 +763,7 @@ export default function Home() {
     if (busy) return;
     const q = more ? lastQuery.current : { keyword, area, country, minRating: Number(minRating), minReviews: Number(minReviews), ...(override || {}) };
     if (!more && !String(q.keyword).trim() && !String(q.area).trim()) { setError('キーワードか場所を入力してください'); return; }
+    if (!more && !q.country) { setError('国を選んでください'); return; }
     setBusy(true); setMoreBusy(more); setError('');
     try {
       const res = await fetch('/api/search', {
@@ -802,8 +803,9 @@ export default function Home() {
   }
 
   function searchShop(sh) {
-    setKeyword(sh.name); setArea(sh.city); setCountry(sh.country);
-    runSearch(false, { keyword: sh.name, area: sh.city, country: sh.country });
+    const c = sh.country || country;
+    setKeyword(sh.name); setArea(sh.city); setCountry(c);
+    runSearch(false, { keyword: sh.name, area: sh.city, country: c });
   }
 
   async function readShot(file) {
@@ -1048,8 +1050,9 @@ export default function Home() {
               <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
             </label>
             <div className="row">
-              <label htmlFor="ct">国（任意）
-                <select id="ct" value={country} onChange={(e) => setCountry(e.target.value)}>
+              <label htmlFor="ct">国
+                <select id="ct" value={country} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
+                  {!country && <option value="" disabled>国を選ぶ</option>}
                   {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </label>
