@@ -224,6 +224,46 @@ function DetailPanel({ id }) {
   );
 }
 
+// 営業時間（お店の現地時間で計算）
+function localNow(offset = 0) {
+  const d = new Date(Date.now() + offset * 60000);
+  return { day: d.getUTCDay(), min: d.getUTCHours() * 60 + d.getUTCMinutes() };
+}
+function openState(h) {
+  if (!h?.periods?.length) return null;
+  if (h.periods.length === 1 && !h.periods[0].close) return true; // 24時間営業
+  const { day, min } = localNow(h.offset);
+  const now = day * 1440 + min;
+  const W = 7 * 1440;
+  for (const p of h.periods) {
+    if (!p.open || !p.close) continue;
+    const o = p.open.day * 1440 + p.open.hour * 60 + (p.open.minute || 0);
+    let c = p.close.day * 1440 + p.close.hour * 60 + (p.close.minute || 0);
+    if (c <= o) c += W;
+    if ((now >= o && now < c) || (now + W >= o && now + W < c)) return true;
+  }
+  return false;
+}
+function todayHours(h) {
+  if (!h?.hours?.length) return '';
+  const { day } = localNow(h.offset);
+  return h.hours[(day + 6) % 7] || '';
+}
+
+// メモを書く（入力中の文字はここで持つ）
+function MemoEditor({ initial, onSave, onCancel }) {
+  const [v, setV] = useState(initial || '');
+  return (
+    <div className="memo-edit">
+      <textarea id="memo" autoFocus rows={3} value={v} onChange={(e) => setV(e.target.value)} placeholder="例：並ぶので朝イチで行く。豆乳は甘いのを頼む" />
+      <div className="memo-acts">
+        <button type="button" className="btn" onClick={() => onSave(v.trim())}>保存</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>やめる</button>
+      </div>
+    </div>
+  );
+}
+
 function Rating({ p }) {
   return (
     <span className="meta">
@@ -280,6 +320,9 @@ export default function Home() {
   const [catFilter, setCatFilter] = useState('すべて');
   const [editCats, setEditCats] = useState(false);
   const [view, setView] = useState('list'); // 'list' / 'map'
+  const [memoFor, setMemoFor] = useState(null);
+  const [, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 60000); return () => clearInterval(t); }, []);
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
 
   useEffect(() => {
@@ -395,6 +438,28 @@ export default function Home() {
     setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: '' } : i)));
     if (catFilter === name) setCatFilter('すべて');
   }
+  // 候補・行ったのお店の営業時間を取っておく（7日たったら取り直す）
+  const hoursBusy = useRef(false);
+  useEffect(() => {
+    if (!loaded || hoursBusy.current) return;
+    const need = items.filter((i) => i.placeId && (!i.hoursInfo || Date.now() - i.hoursInfo.at > 7 * 864e5));
+    if (!need.length) return;
+    hoursBusy.current = true;
+    (async () => {
+      for (const it of need) {
+        try {
+          const r = await fetch(`/api/details?id=${encodeURIComponent(it.placeId)}`);
+          const d = await r.json();
+          if (d.error) continue;
+          detailCache.set(it.placeId, d);
+          const hoursInfo = { hours: d.hours || [], periods: d.periods || [], offset: d.offset || 0, at: Date.now() };
+          setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, hoursInfo } : x)));
+        } catch {}
+      }
+      hoursBusy.current = false;
+    })();
+  }, [items, loaded]);
+
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); }
 
@@ -413,7 +478,7 @@ export default function Home() {
   function ListCard({ it, no }) {
     const src = sourceLabel(it.srcUrl);
     return (
-      <article className={'item' + (it.done ? ' done' : '')}>
+      <article key={it.id} className={'item' + (it.done ? ' done' : '')}>
         <div className="item-top">
           <div className="thumbwrap">
             <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
@@ -428,7 +493,14 @@ export default function Home() {
                 <button className={'star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
               )}
             </div>
-            <Rating p={it} />
+            <Rating p={{ ...it, openNow: undefined }} />
+            {it.hoursInfo && (
+              <p className="today">
+                {openState(it.hoursInfo) === true && <span className="open">営業中</span>}
+                {openState(it.hoursInfo) === false && <span className="closed">営業時間外</span>}
+                <span>{todayHours(it.hoursInfo) ? '今日 ' + todayHours(it.hoursInfo).replace(/^[^:：]+[:：]\s*/, '') : '営業時間の情報なし'}</span>
+              </p>
+            )}
             <span className="meta">
               <button type="button" className={'cat small' + (it.category ? ' sel' : ' none')} style={{ '--c': catColor(it.category) }} onClick={() => setPickFor(pickFor === 'l:' + it.id ? null : 'l:' + it.id)}>{it.category || 'カテゴリーなし'} ▾</button>
               <span className="pill">{it.trip}</span>
@@ -437,6 +509,11 @@ export default function Home() {
             </span>
           </div>
         </div>
+        {memoFor === it.id ? (
+          <MemoEditor initial={it.memo} onSave={(v) => { update(it.id, { memo: v }); setMemoFor(null); }} onCancel={() => setMemoFor(null)} />
+        ) : it.memo ? (
+          <button type="button" className="memo" onClick={() => setMemoFor(it.id)} aria-label="メモを書き直す">{it.memo}</button>
+        ) : null}
         {confirmId === it.id ? (
           <div className="confirm">
             削除しますか？
@@ -447,6 +524,7 @@ export default function Home() {
           <div className="acts">
             <button className={openDetail === 'l:' + it.id ? 'on' : ''} onClick={() => toggleDetail('l:' + it.id)}>{openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細'}</button>
             <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+            <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
             {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
             {it.done
               ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
@@ -608,7 +686,7 @@ export default function Home() {
           )}
           {view === 'map' && shown.length > 0 && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} />}
           <div className="list">
-            {shown.map((it, i) => <ListCard key={it.id} it={it} no={i + 1} />)}
+            {shown.map((it, i) => ListCard({ it, no: i + 1 }))}
             {loaded && (tab === 'cand' ? cand : done).length === 0 && (
               <div className="empty">
                 {tab === 'cand'
