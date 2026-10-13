@@ -111,7 +111,41 @@ function pickAlt(text, zhText) {
   return 'translate';
 }
 
-// 翻訳が必要なものをまとめて日本語に（翻訳が使えないときは並べない）
+// Gemini で店名は読み方のカタカナ、住所は日本語表記に（使えないときは null）
+async function geminiJapanese(jobs) {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return null;
+  const items = jobs.map(([, field, src], i) => ({ i, kind: field === 'altName' ? 'name' : 'address', text: src }));
+  const prompt = [
+    '海外のお店の店名と住所を、日本人旅行者が読める日本語表記にしてください。',
+    '- name（店名）: 固有名詞は意味で訳さず、現地の読み方をカタカナにする（例: "Phở Thìn" → "フォー・ティン", "Family pho" → "ファミリー・フォー"）。料理の種類などを説明する部分だけ自然な日本語にしてよい。',
+    '- address（住所）: 通り名・地区名・都市名はカタカナ、番地の数字はそのまま、国名は日本語。区切りは「、」。',
+    '入力と同じ順番・同じ件数で、{"out": ["...", ...]} のJSONだけを返す。',
+    JSON.stringify(items),
+  ].join('\n');
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+        }),
+        cache: 'no-store',
+      }
+    );
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '';
+    const out = JSON.parse(text).out;
+    return Array.isArray(out) && out.length === jobs.length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+// 翻訳が必要なものをまとめて日本語に（Gemini → だめならGoogle翻訳 → だめなら並べない）
 async function fillTranslations(places) {
   const jobs = [];
   for (const p of places) {
@@ -119,6 +153,14 @@ async function fillTranslations(places) {
     if (p.altAddress === 'translate') jobs.push([p, 'altAddress', p.address]);
   }
   if (!jobs.length) return places;
+  const ai = await geminiJapanese(jobs);
+  if (ai) {
+    jobs.forEach(([p, field, src], i) => {
+      const t = String(ai[i] || '').trim();
+      p[field] = t && t !== src ? t : '';
+    });
+    return places;
+  }
   try {
     const res = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${KEY()}`, {
       method: 'POST',
