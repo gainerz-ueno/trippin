@@ -360,8 +360,8 @@ function fromHotel(h, it) {
   const km = distanceKm(h, it);
   const road = km * 1.3;
   const dist = km < 1 ? `${Math.round(km * 1000 / 10) * 10}m` : `${km.toFixed(1)}km`;
-  if (road <= 3) return `宿泊先から約${dist}・徒歩約${Math.max(1, Math.round((road / 4.5) * 60))}分`;
-  return `宿泊先から約${dist}・車で約${Math.max(5, Math.round((road / 25) * 60))}分`;
+  if (road <= 3) return `ホテルから約${dist}・徒歩約${Math.max(1, Math.round((road / 4.5) * 60))}分`;
+  return `ホテルから約${dist}・車で約${Math.max(5, Math.round((road / 25) * 60))}分`;
 }
 
 // 泊まるホテルをGoogleマップから選ぶ
@@ -394,7 +394,7 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
   return (
     <div className="picker">
       <div className="picker-head">
-        <b>今回の宿泊先（ホテル）</b>
+        <b>今回の宿泊先（ホテル）を登録</b>
         <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
       </div>
       <label htmlFor="hotelct">国
@@ -1059,7 +1059,7 @@ export default function Home() {
       <div className="hotelbar top-hotel">
         {hotel ? (
           <>
-            <span className="hb-label">宿泊先</span>
+            <span className="hb-label">ホテル</span>
             <span className="hb-name">{hotel.name}</span>
             <button type="button" onClick={() => setHotelEdit((v) => !v)}>変更</button>
           </>
