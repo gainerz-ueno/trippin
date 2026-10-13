@@ -478,7 +478,8 @@ function PhotoStrip({ itemId, ver, kind }) {
 }
 
 // AIおすすめ（候補タブ）
-const AI_PRESETS = ['このあとどこ行く？', '近くで今開いているお店は？', '夕食どこがいい？', 'カフェで休憩したい'];
+const AI_PRESETS = ['食事', 'カフェ', 'スイーツ', '娯楽', '夜市', 'お酒', 'マッサージ'];
+const moodQuestion = (m) => `この後は「${m}」の気分。どこがいい？`;
 
 function localTimeLabel(offset) {
   const d = offset == null ? new Date() : new Date(Date.now() + offset * 60000);
@@ -535,16 +536,16 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
     }
   }
 
-  if (!open) return <button type="button" className="ai-open" onClick={() => setOpen(true)}>AIに聞く（このあとどこ行く？）</button>;
+  if (!open) return <button type="button" className="ai-open" onClick={() => setOpen(true)}>AIナビゲーター（この後どんな気分）</button>;
   const byId = new Map(items.map((i) => [i.id, i]));
   return (
     <div className="ai">
       <div className="picker-head">
-        <b>AIに聞く{trip ? `（${trip}）` : ''}</b>
+        <b>AIナビゲーター{trip ? `（${trip}）` : ''}</b>
         <button type="button" className="x" onClick={() => setOpen(false)} aria-label="閉じる">×</button>
       </div>
       <div className="cat-chips">
-        {AI_PRESETS.map((t) => <button type="button" key={t} className="cat" disabled={busy} onClick={() => { setQ(t); ask(t); }}>{t}</button>)}
+        {AI_PRESETS.map((t) => <button type="button" key={t} className="cat" disabled={busy} onClick={() => { setQ(''); ask(moodQuestion(t)); }}>{t}</button>)}
       </div>
       <form className="new-cat" onSubmit={(e) => { e.preventDefault(); ask(q); }}>
         <input id="aiq" value={q} onChange={(e) => setQ(e.target.value)} placeholder="例：甘いものが食べたい" />
