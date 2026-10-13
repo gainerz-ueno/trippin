@@ -91,6 +91,8 @@ function CategoryDropdown({ customCats, onPick, onAddCustom, onClose }) {
 }
 
 // フォルダ（旅行ごとに自分で名前を付けて分ける）
+const UNSORTED = '未分類';
+
 function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, onRename, onDelete }) {
   const [mode, setMode] = useState(null); // 'new' / 'edit'
   const [name, setName] = useState('');
@@ -120,7 +122,7 @@ function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, 
           <button type="button" className="fb-new" onClick={() => { setMode(mode === 'new' ? null : 'new'); setName(''); }}>＋ 新しいフォルダ</button>
         </div>
       </div>
-      {current && mode !== 'new' && (
+      {current && current !== UNSORTED && mode !== 'new' && (
         <button type="button" className="fb-edit" onClick={() => { setMode(mode === 'edit' ? null : 'edit'); setName(current); setConfirm(false); }}>「{current}」の名前の変更・削除</button>
       )}
       {mode === 'new' && (
@@ -697,7 +699,7 @@ export default function Home() {
 
   useEffect(() => {
     // フォルダが決まっていないお店は「未分類」に入れる（消えて見えないように）
-    const fixTrip = (arr) => arr.map((i) => (i.trip ? i : { ...i, trip: '未分類' }));
+    const fixTrip = (arr) => arr.map((i) => (i.trip ? i : { ...i, trip: UNSORTED }));
     try { const s = localStorage.getItem(KEY); if (s) setItems(fixTrip(JSON.parse(s))); } catch {}
     try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
     try { const h = localStorage.getItem('trippin.hotels'); if (h) setHotels(JSON.parse(h)); } catch {}
@@ -707,7 +709,7 @@ export default function Home() {
       const merged = [...new Set([...f, ...its.map((i) => i.trip).filter(Boolean)])];
       setFolders(merged);
       const cur = localStorage.getItem('trippin.folder');
-      setTrip(cur && merged.includes(cur) ? cur : merged[0] || '');
+      setTrip(cur && (cur === UNSORTED || merged.includes(cur)) ? cur : UNSORTED);
     } catch {}
     setLoaded(true);
   }, []);
@@ -724,10 +726,12 @@ export default function Home() {
     try { localStorage.setItem('trippin.folders', JSON.stringify(folders)); localStorage.setItem('trippin.folder', trip); } catch {}
   }, [folders, trip, loaded]);
   function createFolder(n) {
+    if (n === UNSORTED) { setTrip(UNSORTED); return; }
     setFolders((prev) => (prev.includes(n) ? prev : [...prev, n]));
     setTrip(n);
   }
   function renameFolder(from, to) {
+    if (from === UNSORTED || to === UNSORTED) return;
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
     setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to } : i)));
     setHotels((prev) => { const n = { ...prev }; if (n[from]) { n[to] = n[from]; delete n[from]; } return n; });
@@ -740,7 +744,7 @@ export default function Home() {
     setHotels((prev) => { const n = { ...prev }; delete n[name]; return n; });
     const rest = allFolders.filter((f) => f !== name);
     setFolders(rest);
-    setTrip(rest[0] || '');
+    setTrip(UNSORTED);
   }
   useEffect(() => {
     if (!loaded) return;
@@ -842,8 +846,9 @@ export default function Home() {
   const savedIds = new Set(items.map((i) => i.placeId));
   function addCandidate(p, category = '', tripName = null) {
     if (savedIds.has(p.placeId)) return;
-    let folder = tripName || trip;
-    if (!folder) { folder = area.trim() || countryName(country) || '未分類'; createFolder(folder); }
+    // さがす画面から入れたお店は「未分類」へ。フォルダ分けは候補タブで自分でする
+    const folder = tripName || UNSORTED;
+    if (!tripName) setTrip(UNSORTED);
     setItems((prev) => [{ ...p, id: p.placeId, category, trip: folder, srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
     setPickFor(null);
     if (!tripName && shotFile.current) {
@@ -888,7 +893,7 @@ export default function Home() {
   function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); deletePhotosOf(id).catch(() => {}); }
 
-  const allFolders = [...new Set([...folders, ...items.map((i) => i.trip).filter(Boolean)])];
+  const allFolders = [UNSORTED, ...new Set([...folders, ...items.map((i) => i.trip)].filter((f) => f && f !== UNSORTED))];
   const trips = allFolders;
   // フォルダの数字は今のタブ（候補／行った）の件数、削除の確認は全部の件数
   const folderCounts = {};
@@ -1149,7 +1154,7 @@ export default function Home() {
               savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, trip || null)}
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
           )}
-          {trips.length > 0 && (
+          {trips.length > 0 && trip !== UNSORTED && (
             <div className="hotelbar">
               {hotelTrip ? (
                 hotels[hotelTrip] ? (
