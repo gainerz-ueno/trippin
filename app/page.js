@@ -1150,6 +1150,32 @@ export default function Home() {
         <>
           <FolderBar folders={allFolders} current={trip} counts={folderCounts} totals={folderTotals} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
             onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} />
+          {trips.length > 0 && trip !== UNSORTED && (
+            <div className="hotelbar">
+              {hotelTrip ? (
+                hotels[hotelTrip] ? (
+                  <>
+                    <span className="hb-label">ホテル</span>
+                    <span className="hb-name">{hotels[hotelTrip].name}</span>
+                    <button type="button" onClick={() => setHotelEdit((v) => !v)}>変更</button>
+                  </>
+                ) : (
+                  <div className="hb-first">
+                    <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>宿泊先（ホテル）を登録</button>
+                    <p className="hb-note">※登録すると宿泊先を軸に行動しやすくなります</p>
+                  </div>
+                )
+              ) : (
+                <span className="hb-none">上で旅行先を選ぶと、泊まるホテルを設定できます</span>
+              )}
+            </div>
+          )}
+          {hotelEdit && hotelTrip && (
+            <HotelPicker trip={hotelTrip} current={hotels[hotelTrip]}
+              onPick={(h) => { setHotels((prev) => ({ ...prev, [hotelTrip]: h })); setHotelEdit(false); }}
+              onClear={() => { setHotels((prev) => { const n = { ...prev }; delete n[hotelTrip]; return n; }); setHotelEdit(false); }}
+              onClose={() => setHotelEdit(false)} />
+          )}
           {usedCats.length > 0 && (
             <div className="chips cat-filter">
               {['すべて', ...usedCats].map((c) => (
@@ -1163,33 +1189,6 @@ export default function Home() {
             <AiPanel items={inFolder} hotel={hotelTrip ? hotels[hotelTrip] : null} trip={trip === UNSORTED ? '' : trip} customCats={customCats} onAddCustom={addCustomCat}
               savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, trip || null)}
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
-          )}
-          {trips.length > 0 && trip !== UNSORTED && (
-            <div className="hotelbar">
-              {hotelTrip ? (
-                hotels[hotelTrip] ? (
-                  <>
-                    <span className="hb-label">ホテル</span>
-                    <span className="hb-name">{hotels[hotelTrip].name}</span>
-                    <button type="button" onClick={() => setHotelEdit((v) => !v)}>変更</button>
-                  </>
-                ) : (
-                  <>
-                    <span className="hb-label">ホテル</span>
-                    <span className="hb-none">{hotelTrip}のホテルは未設定</span>
-                    <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>ホテルを設定</button>
-                  </>
-                )
-              ) : (
-                <span className="hb-none">上で旅行先を選ぶと、泊まるホテルを設定できます</span>
-              )}
-            </div>
-          )}
-          {hotelEdit && hotelTrip && (
-            <HotelPicker trip={hotelTrip} current={hotels[hotelTrip]}
-              onPick={(h) => { setHotels((prev) => ({ ...prev, [hotelTrip]: h })); setHotelEdit(false); }}
-              onClear={() => { setHotels((prev) => { const n = { ...prev }; delete n[hotelTrip]; return n; }); setHotelEdit(false); }}
-              onClose={() => setHotelEdit(false)} />
           )}
           <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
