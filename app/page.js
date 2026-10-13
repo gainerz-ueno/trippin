@@ -22,6 +22,8 @@ const catColor = (c) => (BASE_CATS.find(([n]) => n === c) || [, CUSTOM_COLOR])[1
 function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, title }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
+  const boxRef = useRef(null);
+  useEffect(() => { boxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, []);
   const all = [...BASE_CATS.map(([n]) => n), ...customCats];
   function submitNew(e) {
     e.preventDefault();
@@ -31,7 +33,7 @@ function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, tit
     onPick(n);
   }
   return (
-    <div className="picker">
+    <div className="picker" ref={boxRef}>
       <div className="picker-head">
         <b>{title}</b>
         <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
@@ -641,13 +643,13 @@ export default function Home() {
                     <Rating p={p} />
                   </div>
                 </div>
-                <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
-                  {openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細を開く'}
-                </button>
                 {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
                   <CategoryPicker title="カテゴリーを選んで追加" customCats={customCats} current={null} onAddCustom={addCustomCat}
                     onPick={(c) => addCandidate(p, c)} onClose={() => setPickFor(null)} />
                 )}
+                <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
+                  {openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細を開く'}
+                </button>
                 {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
               </article>
             ))}
