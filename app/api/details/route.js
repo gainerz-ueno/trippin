@@ -53,7 +53,7 @@ export async function GET(req) {
       : '';
 
     return Response.json({
-      photos: (p.photos || []).slice(0, 10).map((ph) => ({
+      photos: (p.photos || []).slice(0, 3).map((ph) => ({
         name: ph.name,
         by: ph.authorAttributions?.[0]?.displayName || '',
       })),

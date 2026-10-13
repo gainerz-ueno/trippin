@@ -252,7 +252,6 @@ function Stars({ n }) {
 
 function DetailPanel({ id }) {
   const [d, setD] = useState(detailCache.get(id) || null);
-  const [allPhotos, setAllPhotos] = useState(false); // 写真は最初3枚だけ（1枚ごとに費用がかかるため）
   const [err, setErr] = useState('');
   useEffect(() => {
     if (detailCache.has(id)) return;
@@ -276,7 +275,7 @@ function DetailPanel({ id }) {
     <div className="detail">
       {d.photos.length > 0 && (
         <div className="photos">
-          {(allPhotos ? d.photos : d.photos.slice(0, 3)).map((ph) => (
+          {d.photos.slice(0, 3).map((ph) => (
             <figure key={ph.name}>
               <img src={photoSrc(ph.name)} alt="" loading="lazy" />
               {ph.by && <figcaption>写真: {ph.by}</figcaption>}
@@ -284,9 +283,8 @@ function DetailPanel({ id }) {
           ))}
         </div>
       )}
-      {!allPhotos && d.photos.length > 3 && (
-        <button type="button" className="btn ghost full" onClick={() => setAllPhotos(true)}>写真をもっと見る（残り{d.photos.length - 3}枚）</button>
-      )}
+      {/* 写真は3枚まで（1枚ごとに費用がかかるため）。続きはGoogleマップのお店情報で見る */}
+      {d.mapsUrl && <a className="btn ghost full" href={d.mapsUrl} target="_blank" rel="noopener">さらに詳しくみる</a>}
 
       {d.hours.length > 0 && (
         <section>
@@ -320,7 +318,6 @@ function DetailPanel({ id }) {
         </section>
       )}
 
-      {d.mapsUrl && <a className="btn ghost full" href={d.mapsUrl} target="_blank" rel="noopener">Googleマップで全部見る</a>}
     </div>
   );
 }
