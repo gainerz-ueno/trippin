@@ -874,11 +874,11 @@ export default function Home() {
     setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: '' } : i)));
     if (catFilter === name) setCatFilter('すべて');
   }
-  // 候補・行ったのお店の営業時間を取っておく（7日たったら取り直す）
+  // 候補に入れたお店の営業時間を、入れたときに1回だけ取っておく（取り直しはしない）
   const hoursBusy = useRef(false);
   useEffect(() => {
     if (!loaded || hoursBusy.current) return;
-    const need = items.filter((i) => i.placeId && (!i.hoursInfo || Date.now() - i.hoursInfo.at > 7 * 864e5));
+    const need = items.filter((i) => i.placeId && !i.hoursInfo);
     if (!need.length) return;
     hoursBusy.current = true;
     (async () => {
