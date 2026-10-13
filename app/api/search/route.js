@@ -56,42 +56,84 @@ async function searchOnce(textQuery, minRating, pageToken, languageCode, country
   return data;
 }
 
-// 日本語と中国語（台湾）で同じ検索をして、1ページ分を返す
+// 国ごとの現地の言語（Grab・Uber に貼る現地表記を取るため）
+const LANG = { TW: 'zh-TW', KR: 'ko', HK: 'zh-HK', CN: 'zh-CN', VN: 'vi', TH: 'th', SG: 'en', MY: 'en', PH: 'en', JP: 'ja' };
+
+const countryOf = (p) =>
+  (p.addressComponents || []).find((c) => c.types?.includes('country'))?.shortText || '';
+
+function mostCommonCountry(places) {
+  const n = {};
+  for (const p of places) { const c = countryOf(p); if (c) n[c] = (n[c] || 0) + 1; }
+  return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+
+// 1件ずつ現地の言語で名前・住所を取る（検索結果に出てこなかったお店用）
+async function detailsIn(id, lang) {
+  try {
+    const res = await fetch(`https://places.googleapis.com/v1/places/${id}?languageCode=${lang}`, {
+      headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': 'id,displayName,formattedAddress' },
+      cache: 'no-store',
+    });
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+// 日本語と現地の言語で同じ検索をして、1ページ分を返す
 async function searchPage(textQuery, minRating, tokens, country) {
-  const [ja, zh] = await Promise.all([
-    searchOnce(textQuery, minRating, tokens?.ja, 'ja', country),
-    searchOnce(textQuery, minRating, tokens?.zh, 'zh-TW', country).catch(() => ({ places: [] })),
-  ]);
-  const zhMap = new Map((zh.places || []).map((p) => [p.id, p]));
-  const inCountry = (p) =>
-    !COUNTRIES[country] ||
-    (p.addressComponents || []).some((c) => c.types?.includes('country') && c.shortText === country);
-  const places = (ja.places || []).filter(inCountry).map((p) => shape(p, zhMap.get(p.id)));
-  const next = ja.nextPageToken ? { ja: ja.nextPageToken, zh: zh.nextPageToken || null } : null;
+  const ja = await searchOnce(textQuery, minRating, tokens?.ja, 'ja', country);
+  const jaPlaces = (ja.places || []).filter((p) => !COUNTRIES[country] || countryOf(p) === country);
+  const lang = tokens?.lang || LANG[country] || LANG[mostCommonCountry(jaPlaces)] || 'en';
+
+  let localNext = null;
+  const localMap = new Map();
+  if (lang !== 'ja') {
+    const local = await searchOnce(textQuery, minRating, tokens?.local, lang, country).catch(() => ({ places: [] }));
+    localNext = local.nextPageToken || null;
+    for (const lp of local.places || []) localMap.set(lp.id, lp);
+    const missing = jaPlaces.filter((p) => !localMap.has(p.id));
+    const got = await Promise.all(missing.map((p) => detailsIn(p.id, lang)));
+    got.forEach((lp) => { if (lp?.id) localMap.set(lp.id, lp); });
+  }
+
+  const places = jaPlaces.map((p) => shape(p, localMap.get(p.id), lang));
+  const next = ja.nextPageToken ? { ja: ja.nextPageToken, local: localNext, lang } : null;
   return { places, next };
 }
 
 const count = (s, re) => (String(s).match(re) || []).length;
 const latin = (s) => count(s, /\p{Script=Latin}/gu);
-// かな・漢字が主体か（「…, ベトナム」のように国名だけ日本語の住所は対象外）
+// かなが入っていて、かな・漢字が主体か（「…, ベトナム」のように国名だけ日本語のものは対象外）
 const hasKana = (s) =>
   count(s, /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/gu) > latin(s) &&
   /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(s);
 // 漢字が主体の文字列か（ラテン文字より漢字が多い）
 const hanDominant = (s) => count(s, /\p{Script=Han}/gu) > latin(s);
 
-function shape(p, zhPlace) {
-  const name = p.displayName?.text || '';
-  const address = p.formattedAddress || '';
-  const zhName = zhPlace?.displayName?.text || '';
-  const zhAddress = zhPlace?.formattedAddress || '';
+// name・address = 現地の表記（Grab・Uber に貼る用）
+// altName・altAddress = 日本人が読める表記（文字列=表示 / 'translate'=Geminiで作る / ''=出さない）
+function shape(p, lp, lang) {
+  const jaName = p.displayName?.text || '';
+  const jaAddress = p.formattedAddress || '';
+  const name = (lang !== 'ja' && lp?.displayName?.text) || jaName;
+  const address = (lang !== 'ja' && lp?.formattedAddress) || jaAddress;
+
+  let altName = '';
+  if (lang !== 'ja' && !hasKana(name) && !hanDominant(name)) {
+    altName = hasKana(jaName) && jaName !== name ? jaName : 'translate';
+  } else if (lang !== 'ja' && hanDominant(name) && hasKana(jaName) && jaName !== name) {
+    altName = jaName;
+  }
+  const altAddress = lang !== 'ja' && !hasKana(address) && !hanDominant(address) ? 'translate' : '';
+
   return {
     placeId: p.id,
     name,
     address,
-    // 日本人が読めない表記のときに並べて出す名前・住所
-    altName: pickAlt(name, zhName),
-    altAddress: pickAlt(address, zhAddress),
+    altName,
+    altAddress,
     rating: p.rating ?? null,
     reviews: p.userRatingCount ?? 0,
     mapsUrl: p.googleMapsUri || '',
@@ -101,14 +143,6 @@ function shape(p, zhPlace) {
     openNow: p.currentOpeningHours?.openNow ?? null,
     type: p.primaryTypeDisplayName?.text || '',
   };
-}
-
-// 戻り値: 文字列=そのまま並べる / 'translate'=日本語に翻訳する / ''=並べない
-function pickAlt(text, zhText) {
-  if (!text) return '';
-  if (hasKana(text) || hanDominant(text)) return ''; // すでに日本語・漢字で読める
-  if (zhText && zhText !== text && hanDominant(zhText)) return zhText; // 漢字の国
-  return 'translate';
 }
 
 // Gemini で店名は読み方のカタカナ、住所は日本語表記に（使えないときは null）

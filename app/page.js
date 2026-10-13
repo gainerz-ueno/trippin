@@ -21,6 +21,48 @@ function photoSrc(name) {
   return name ? `/api/photo?name=${encodeURIComponent(name)}` : null;
 }
 
+// タップでコピー（Grab・Uber の行き先に貼る用）
+function CopyBtn({ text, label }) {
+  const [done, setDone] = useState(false);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const t = document.createElement('textarea');
+      t.value = text; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy'); } catch {}
+      t.remove();
+    }
+    setDone(true);
+    setTimeout(() => setDone(false), 1500);
+  }
+  return (
+    <button type="button" className={'copy' + (done ? ' ok' : '')} onClick={copy} aria-label={label + 'をコピー'}>
+      {done ? 'コピーしました' : 'コピー'}
+    </button>
+  );
+}
+
+// 現地の店名・住所（コピー付き）と、日本語の表記
+function NameBlock({ p, withAddress = true }) {
+  return (
+    <div className="nb">
+      <div className="line">
+        <p className="name">{p.name}</p>
+        <CopyBtn text={p.name} label="店名" />
+      </div>
+      {p.altName && <p className="alt">{p.altName}</p>}
+      {withAddress && p.address && (
+        <div className="line addr-line">
+          <p className="addr">{p.address}</p>
+          <CopyBtn text={p.address} label="住所" />
+        </div>
+      )}
+      {withAddress && p.altAddress && <p className="addr alt-addr">{p.altAddress}</p>}
+    </div>
+  );
+}
+
 function Rating({ p }) {
   return (
     <span className="meta">
@@ -124,10 +166,7 @@ export default function Home() {
         {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
         <div className="body">
           <div className="top">
-            <div>
-              <p className="name">{it.name}</p>
-              {it.altName && <p className="alt">{it.altName}</p>}
-            </div>
+            <NameBlock p={it} />
             {it.done && (
               <button className={'star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
             )}
@@ -228,15 +267,8 @@ export default function Home() {
               <article className="item" key={p.placeId}>
                 {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
                 <div className="body">
-                  <div>
-                    <p className="name">{p.name}</p>
-                    {p.altName && <p className="alt">{p.altName}</p>}
-                  </div>
+                  <NameBlock p={p} />
                   <Rating p={p} />
-                  <div>
-                    <p className="addr">{p.address}</p>
-                    {p.altAddress && <p className="addr alt-addr">{p.altAddress}</p>}
-                  </div>
                   <div className="acts">
                     {savedIds.has(p.placeId)
                       ? <button className="added" disabled>候補に追加済み</button>
