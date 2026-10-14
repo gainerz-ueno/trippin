@@ -305,3 +305,10 @@ header{align-items:center}
 .login-btn{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:4px 12px;border-radius:999px;cursor:pointer}
 .login-btn.on{background:var(--copybtn);border-color:var(--copybtn);color:var(--copybtn-ink)}
 .sync-msg{margin:-8px 0 0;text-align:center}
+
+.fb-links{display:flex;justify-content:flex-end;gap:14px;flex-wrap:wrap}
+.share-panel{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.share-line{align-items:center}
+.share-url{margin:0;flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--copybg);border:1px solid var(--copyline);border-radius:8px;padding:6px 8px}
+
+.share-title{margin:0;font-family:var(--display);font-size:22px;font-weight:900}

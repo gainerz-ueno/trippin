@@ -150,3 +150,36 @@ export function mergeItems(local, cloud, synced) {
   const merged = [...out.values()].sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0));
   return { merged, toUpload, removed };
 }
+
+// ---- フォルダの共有（リンクを知っている人だけ、読むだけ） ----
+const shareId = () => {
+  const c = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const a = new Uint32Array(10); crypto.getRandomValues(a);
+  return [...a].map((n) => c[n % c.length]).join('');
+};
+export async function getShare(folder) {
+  if (!uid) return null;
+  const { data, error } = await supa().from('shares').select('id').eq('folder', folder).maybeSingle();
+  if (error) throw error;
+  return data?.id || null;
+}
+export async function createShare(folder) {
+  if (!uid) throw new Error('ログインしてください');
+  const id = shareId();
+  const { error } = await supa().from('shares').insert({ id, user_id: uid, folder });
+  if (error) throw error;
+  return id;
+}
+export async function deleteShare(folder) {
+  if (!uid) return;
+  await supa().from('shares').delete().eq('folder', folder);
+}
+export async function renameShare(from, to) {
+  if (!uid) return;
+  await supa().from('shares').update({ folder: to }).eq('folder', from);
+}
+export async function fetchShared(id) {
+  const { data, error } = await supa().rpc('shared_folder', { share_id: id });
+  if (error) throw error;
+  return data; // { folder, items } または null
+}

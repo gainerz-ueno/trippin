@@ -13,19 +13,27 @@ async function tokenFor(pw) {
 
 // 同じ人が短時間に検索・AIを使いすぎないようにする（1分に30回まで）
 const hits = new Map();
-function tooMany(ip) {
+function tooMany(ip, max = 30, bucket = '') {
   const now = Date.now();
-  const list = (hits.get(ip) || []).filter((t) => now - t < 60000);
+  const k = bucket + ip;
+  const list = (hits.get(k) || []).filter((t) => now - t < 60000);
   list.push(now);
-  hits.set(ip, list);
+  hits.set(k, list);
   if (hits.size > 5000) hits.clear();
-  return list.length > 30;
+  return list.length > max;
 }
+const ipOf = (req) => req.ip || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 const LIMITED = ['/api/search', '/api/recommend', '/api/screenshot', '/api/details'];
 
 export async function middleware(req) {
   const { pathname } = req.nextUrl;
   if (pathname === '/login' || pathname === '/api/login') return NextResponse.next();
+  // 共有リンク（/s/...）は、パスワードなしで誰でも見られる。見るのに使う地図の鍵とお店の写真も同じ
+  if (pathname.startsWith('/s/') || pathname === '/api/mapkey') return NextResponse.next();
+  if (pathname === '/api/photo') {
+    if (tooMany(ipOf(req), 200, 'photo:')) return new NextResponse('too many', { status: 429 });
+    return NextResponse.next();
+  }
 
   const pw = process.env.SITE_PASSWORD;
   if (!pw) {
@@ -41,8 +49,7 @@ export async function middleware(req) {
   }
 
   if (LIMITED.some((p) => pathname.startsWith(p))) {
-    const ip = req.ip || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-    if (tooMany(ip)) return NextResponse.json({ error: '短い時間に使いすぎです。1分ほど待ってからもう一度試してください' }, { status: 429 });
+    if (tooMany(ipOf(req))) return NextResponse.json({ error: '短い時間に使いすぎです。1分ほど待ってからもう一度試してください' }, { status: 429 });
   }
   return NextResponse.next();
 }

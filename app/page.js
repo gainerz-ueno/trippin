@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapView from './MapView';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
-import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems } from './cloud';
+import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare } from './cloud';
 
 const KEY = 'trippin.v1';
 
@@ -94,8 +94,43 @@ function CategoryDropdown({ customCats, onPick, onAddCustom, onClose }) {
 // フォルダ（旅行ごとに自分で名前を付けて分ける）
 const UNSORTED = '未分類';
 
-function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, onRename, onDelete }) {
-  const [mode, setMode] = useState(null); // 'new' / 'edit'
+// フォルダの共有（リンクを作る・コピー・やめる）
+function SharePanel({ folder, user }) {
+  const [id, setId] = useState(undefined); // undefined=調べ中 / null=共有していない
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    setId(undefined);
+    getShare(folder).then((x) => alive && setId(x)).catch(() => alive && setId(null));
+    return () => { alive = false; };
+  }, [folder, user]);
+  if (!user) return <p className="hint">共有するには、右上の「Googleでログイン」からログインしてください。</p>;
+  if (id === undefined) return <p className="hint">読み込み中…</p>;
+  const url = id ? `${window.location.origin}/s/${id}` : '';
+  async function run(fn) { setBusy(true); setErr(''); try { await fn(); } catch (e) { setErr(e.message || 'うまくいきませんでした'); } setBusy(false); }
+  return (
+    <div className="share-panel">
+      {id ? (
+        <>
+          <p className="hint">このリンクを知っている人は、「{folder}」のお店を見られます（見るだけ。メモは見えません）。</p>
+          <div className="line share-line"><p className="share-url">{url}</p><CopyBtn text={url} label="共有リンク" /></div>
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => run(async () => { await deleteShare(folder); setId(null); })}>共有をやめる</button>
+        </>
+      ) : (
+        <>
+          <p className="hint">リンクを作ると、そのリンクを知っている人が「{folder}」のお店を見られます（見るだけ。メモは見えません）。</p>
+          <button type="button" className="btn" disabled={busy} onClick={() => run(async () => setId(await createShare(folder)))}>共有リンクを作る</button>
+        </>
+      )}
+      {err && <p className="err">{err}</p>}
+    </div>
+  );
+}
+
+function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, onRename, onDelete, user }) {
+  const [mode, setMode] = useState(null); // 'new' / 'edit' / 'share'
   const [name, setName] = useState('');
   const [confirm, setConfirm] = useState(false);
   function submitNew(e) {
@@ -124,8 +159,12 @@ function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, 
         </div>
       </div>
       {current && current !== UNSORTED && mode !== 'new' && (
-        <button type="button" className="fb-edit" onClick={() => { setMode(mode === 'edit' ? null : 'edit'); setName(current); setConfirm(false); }}>「{current}」の名前の変更・削除</button>
+        <div className="fb-links">
+          <button type="button" className="fb-edit" onClick={() => setMode(mode === 'share' ? null : 'share')}>「{current}」を共有</button>
+          <button type="button" className="fb-edit" onClick={() => { setMode(mode === 'edit' ? null : 'edit'); setName(current); setConfirm(false); }}>「{current}」の名前の変更・削除</button>
+        </div>
       )}
+      {mode === 'share' && current !== UNSORTED && <SharePanel folder={current} user={user} />}
       {mode === 'new' && (
         <form className="new-cat" onSubmit={submitNew}>
           <input id="newfolder" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例：台湾 2026年3月" maxLength={30} />
@@ -766,11 +805,13 @@ export default function Home() {
   }
   function renameFolder(from, to) {
     if (from === UNSORTED || to === UNSORTED) return;
+    renameShare(from, to).catch(() => {});
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
     setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to, updatedAt: Date.now() } : i)));
     setTrip(to);
   }
   function deleteFolder(name) {
+    deleteShare(name).catch(() => {});
     const gone = items.filter((i) => i.trip === name).map((i) => i.id);
     setItems((prev) => prev.filter((i) => i.trip !== name));
     gone.forEach((id) => deletePhotosOf(id).catch(() => {}));
@@ -1293,7 +1334,7 @@ export default function Home() {
       {tab !== 'search' && (
         <>
           <FolderBar folders={allFolders} current={trip} counts={folderCounts} totals={folderTotals} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
-            onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} />
+            onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} user={user} />
           {usedCats.length > 0 && (
             <div className="chips cat-filter">
               {['すべて', ...usedCats].map((c) => (
