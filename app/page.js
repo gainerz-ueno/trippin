@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapView from './MapView';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
+import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems } from './cloud';
 
 const KEY = 'trippin.v1';
 
@@ -431,6 +432,13 @@ function PhotoStrip({ itemId, ver, kind }) {
   const [big, setBig] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
   const urls = useRef([]);
+  // クラウドにだけある写真（別の端末で撮ったもの）は、見たときに取ってくる
+  const [cloudVer, setCloudVer] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    ensurePhotos(itemId).then((n) => { if (alive && n) setCloudVer((v) => v + 1); }).catch(() => {});
+    return () => { alive = false; };
+  }, [itemId, ver]);
   useEffect(() => {
     let alive = true;
     listPhotos(itemId)
@@ -443,7 +451,7 @@ function PhotoStrip({ itemId, ver, kind }) {
       })
       .catch(() => {});
     return () => { alive = false; };
-  }, [itemId, ver]);
+  }, [itemId, ver, cloudVer]);
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
   if (!photos.length) return null;
   const groups = [
@@ -759,7 +767,7 @@ export default function Home() {
   function renameFolder(from, to) {
     if (from === UNSORTED || to === UNSORTED) return;
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
-    setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to } : i)));
+    setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to, updatedAt: Date.now() } : i)));
     setTrip(to);
   }
   function deleteFolder(name) {
@@ -770,6 +778,77 @@ export default function Home() {
     setFolders(rest);
     setTrip(UNSORTED);
   }
+  // ---- ログインとクラウド保存 ----
+  const [user, setUser] = useState(null);
+  const [syncMsg, setSyncMsg] = useState('');
+  const synced = useRef(false);       // はじめのそろえが終わったか
+  const pushed = useRef(new Map());   // クラウドに送った内容（変わったものだけ送るため）
+  useEffect(() => {
+    const sb = supa();
+    sb.auth.getSession().then(({ data }) => setUser(data.session?.user || null));
+    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setUser(session?.user || null));
+    return () => sub.subscription.unsubscribe();
+  }, []);
+  const settingsData = () => ({ folders, hotel, customCats });
+  useEffect(() => {
+    if (!loaded || !user) { setCloudUser(null); synced.current = false; return; }
+    let alive = true;
+    setCloudUser(user.id);
+    (async () => {
+      setSyncMsg('クラウドとそろえています…');
+      try {
+        const key = 'trippin.synced.' + user.id;
+        let known = new Set();
+        try { known = new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch {}
+        const [cloudItems, cloudSettings] = await Promise.all([pullItems(), pullSettings(), pullPhotoRows()]);
+        if (!alive) return;
+        const localItems = JSON.parse(localStorage.getItem(KEY) || '[]');
+        const { merged, toUpload, removed } = mergeItems(localItems, cloudItems, known);
+        removed.forEach((id) => deletePhotosOf(id).catch(() => {}));
+        await upsertItems(toUpload);
+        if (cloudSettings) {
+          setFolders((prev) => [...new Set([...(cloudSettings.folders || []), ...prev])]);
+          setCustomCats((prev) => [...new Set([...(cloudSettings.customCats || []), ...prev])]);
+          if (cloudSettings.hotel !== undefined) setHotel(cloudSettings.hotel || null);
+        } else {
+          await pushSettings(settingsData());
+        }
+        pushed.current = new Map(merged.map((it) => [it.id, JSON.stringify(it)]));
+        setItems(merged);
+        try { localStorage.setItem(key, JSON.stringify(merged.map((it) => it.id))); } catch {}
+        synced.current = true;
+        setSyncMsg('');
+        uploadMissingPhotos(new Set(merged.map((it) => it.id))).then(() => setPhotoVer((v) => v + 1));
+      } catch (e) {
+        setSyncMsg('クラウドとそろえられませんでした。電波のよいところで開き直してください。');
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, user?.id]);
+  // お店が変わったら、変わったものだけクラウドへ送る（1秒まとめて）
+  useEffect(() => {
+    if (!user || !synced.current) return;
+    const t = setTimeout(async () => {
+      const cur = new Map(items.map((it) => [it.id, JSON.stringify(it)]));
+      const changed = items.filter((it) => pushed.current.get(it.id) !== cur.get(it.id));
+      const gone = [...pushed.current.keys()].filter((id) => !cur.has(id));
+      try {
+        await upsertItems(changed);
+        await deleteItems(gone);
+        pushed.current = cur;
+        try { localStorage.setItem('trippin.synced.' + user.id, JSON.stringify(items.map((it) => it.id))); } catch {}
+      } catch {}
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [items, user]);
+  useEffect(() => {
+    if (!user || !synced.current) return;
+    const t = setTimeout(() => { pushSettings(settingsData()).catch(() => {}); }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folders, hotel, customCats, user]);
+
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
@@ -883,12 +962,12 @@ export default function Home() {
   const addCustomCat = (n) => setCustomCats((prev) => (prev.includes(n) ? prev : [...prev, n]));
   function renameCat(from, to) {
     setCustomCats((prev) => prev.map((c) => (c === from ? to : c)).filter((c, i, a) => a.indexOf(c) === i));
-    setItems((prev) => prev.map((i) => (i.category === from ? { ...i, category: to } : i)));
+    setItems((prev) => prev.map((i) => (i.category === from ? { ...i, category: to, updatedAt: Date.now() } : i)));
     if (catFilter === from) setCatFilter(to);
   }
   function deleteCat(name) {
     setCustomCats((prev) => prev.filter((c) => c !== name));
-    setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: '' } : i)));
+    setItems((prev) => prev.map((i) => (i.category === name ? { ...i, category: '', updatedAt: Date.now() } : i)));
     if (catFilter === name) setCatFilter('すべて');
   }
   // 候補に入れたお店の営業時間を、入れたときに1回だけ取っておく（取り直しはしない）
@@ -912,7 +991,7 @@ export default function Home() {
     })();
   }, [items, loaded]);
 
-  function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch } : i))); }
+  function update(id, patch) { setItems((prev) => prev.map((i) => (i.id === id ? { ...i, ...patch, updatedAt: Date.now() } : i))); }
   // カードの写真が出なかったら（写真の名前の期限切れ）、そのお店の写真の名前を1回だけ取り直す（無料）
   const photoTried = useRef(new Set());
   async function refreshPhoto(it) {
@@ -1056,9 +1135,15 @@ export default function Home() {
     <main className="wrap">
       <header>
         <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
-        <div className="tag">行きたい場所リスト</div>
+        <div className="head-right">
+          <div className="tag">行きたい場所リスト</div>
+          {user
+            ? <button type="button" className="login-btn" onClick={() => signOut()}>ログアウト</button>
+            : <button type="button" className="login-btn on" onClick={() => signIn()}>Googleでログイン</button>}
+        </div>
       </header>
 
+      {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
       <div className="hotelbar top-hotel">
         {hotel ? (
           <>

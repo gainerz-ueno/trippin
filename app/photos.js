@@ -1,7 +1,13 @@
 'use client';
 // 自分で撮った写真を、このスマホの中（IndexedDB）に保存する
+// ログインしているときは、クラウド（Supabase）にも保存する（hooks 経由）
 const DB = 'trippin';
 const STORE = 'photos';
+
+// cloud.js が登録する：写真を足した・消したときにクラウドにも反映する
+export const photoHooks = { onAdd: null, onDelete: null };
+
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
 
 function open() {
   return new Promise((resolve, reject) => {
@@ -52,7 +58,9 @@ function shrink(file) {
 export async function addPhotos(itemId, files, kind = 'memo') {
   for (const f of files) {
     const blob = await shrink(f);
-    await tx('readwrite', (st) => st.add({ itemId, blob, kind, at: Date.now() }));
+    const rec = { itemId, blob, kind, at: Date.now(), cloudId: newId() };
+    rec.id = await tx('readwrite', (st) => st.add(rec));
+    photoHooks.onAdd?.(rec);
   }
 }
 
@@ -67,8 +75,35 @@ export function listPhotos(itemId) {
   );
 }
 
-export function deletePhoto(id) {
-  return tx('readwrite', (st) => st.delete(id));
+export function listAllPhotos() {
+  return open().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const req = db.transaction(STORE).objectStore(STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      })
+  );
+}
+
+// 前から入っていた写真に、クラウド用の番号を付ける
+export function setCloudId(rec) {
+  rec.cloudId = rec.cloudId || newId();
+  return tx('readwrite', (st) => st.put(rec)).then(() => rec);
+}
+
+// クラウドから取ってきた写真をスマホに入れる（もう入っていれば何もしない）
+export async function putFromCloud({ itemId, cloudId, kind, at, blob }) {
+  const have = await listPhotos(itemId);
+  if (have.some((p) => p.cloudId === cloudId)) return false;
+  await tx('readwrite', (st) => st.add({ itemId, blob, kind, at, cloudId }));
+  return true;
+}
+
+export async function deletePhoto(id) {
+  const rec = await tx('readonly', (st) => st.get(id));
+  await tx('readwrite', (st) => st.delete(id));
+  if (rec) photoHooks.onDelete?.(rec);
 }
 
 export async function deletePhotosOf(itemId) {
