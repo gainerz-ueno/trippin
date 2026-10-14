@@ -22,7 +22,7 @@ function tooMany(ip, max = 30, bucket = '') {
   if (hits.size > 5000) hits.clear();
   return list.length > max;
 }
-const ipOf = (req) => req.ip || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+const ipOf = (req) => req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 const LIMITED = ['/api/search', '/api/recommend', '/api/screenshot', '/api/details'];
 
 export async function middleware(req) {

@@ -1,16 +1,26 @@
 import { KEY, searchPage, fillTranslations, decodeToken, encodeToken } from '../../lib/places';
+import { str, num, latLng, country as countryOf, bad } from '../../lib/validate';
 
 export async function POST(req) {
   if (!KEY()) {
     return Response.json({ error: 'APIキーが設定されていません' }, { status: 500 });
   }
   try {
-    const { keyword = '', area = '', country = '', minRating = 0, minReviews = 0, pageToken = null, jaOnly = false, near = null } = await req.json();
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') return bad('入力が正しくありません');
+    const keyword = str(body.keyword, 100);
+    const area = str(body.area, 60);
+    const country = countryOf(body.country);
+    const minRating = num(body.minRating, 0, 5, 0);
+    const minReviews = Math.floor(num(body.minReviews, 0, 100000, 0));
+    const pageToken = typeof body.pageToken === 'string' && body.pageToken.length <= 4000 ? body.pageToken : null;
+    const jaOnly = body.jaOnly === true;
+    const near = latLng(body.near);
     // 国を決めずに探すとGoogleへの検索が2回になるので、国は必ず選んでもらう（ホテル探しは日本語1回だけ）
     if (!country && !jaOnly) return Response.json({ error: '国を選んでください' }, { status: 400 });
     const opts = { jaOnly: !!jaOnly };
     // 宿泊先の近くでさがす：宿泊先から3kmを中心に探す（範囲外のお店も少しは出る）
-    const extra = near && Number.isFinite(near.lat) && Number.isFinite(near.lng)
+    const extra = near
       ? { locationBias: { circle: { center: { latitude: near.lat, longitude: near.lng }, radius: 3000 } } }
       : {};
     const textQuery = [keyword, area].map((s) => String(s).trim()).filter(Boolean).join(' ');

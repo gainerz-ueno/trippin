@@ -1,4 +1,7 @@
 node_modules
 .next
-.env*.local
 .vercel
+# 秘密の値を入れたファイルは、リポジトリに入れない
+.env
+.env*
+*.pem

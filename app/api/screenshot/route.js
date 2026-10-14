@@ -5,8 +5,11 @@ export async function POST(req) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return Response.json({ error: '読み取りの設定がされていません' }, { status: 500 });
   try {
-    const { image, mimeType = 'image/jpeg' } = await req.json();
-    if (!image || image.length > 6_000_000) {
+    const body = await req.json().catch(() => null);
+    const image = typeof body?.image === 'string' ? body.image : '';
+    const mimeType = ['image/jpeg', 'image/png', 'image/webp'].includes(body?.mimeType) ? body.mimeType : 'image/jpeg';
+    // 画像は縮めて送っているので4MBまで。base64の文字だけ受け付ける
+    if (!image || image.length > 4_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image)) {
       return Response.json({ error: '画像が大きすぎるか、読み込めませんでした' }, { status: 400 });
     }
     const prompt = [

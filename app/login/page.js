@@ -1,7 +1,7 @@
 export const metadata = { title: 'Tabibi' };
 
-export default function Login({ searchParams }) {
-  const e = searchParams?.e;
+export default async function Login({ searchParams }) {
+  const e = (await searchParams)?.e;
   return (
     <main className="wrap">
       <header>

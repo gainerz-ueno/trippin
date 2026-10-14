@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MapView from './MapView';
+import { safeUrl } from './lib/safeurl';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare } from './cloud';
 
@@ -324,7 +325,7 @@ function DetailPanel({ id }) {
         </div>
       )}
       {/* 写真は3枚まで（1枚ごとに費用がかかるため）。続きはGoogleマップのお店情報で見る */}
-      {d.mapsUrl && <a className="btn ghost full" href={d.mapsUrl} target="_blank" rel="noopener">さらに詳しくみる</a>}
+      {safeUrl(d.mapsUrl) && <a className="btn ghost full" href={safeUrl(d.mapsUrl)} target="_blank" rel="noopener noreferrer">さらに詳しくみる</a>}
 
       {d.hours.length > 0 && (
         <section>
@@ -338,7 +339,7 @@ function DetailPanel({ id }) {
       {(d.phone || d.website || d.price || d.priceRange) && (
         <section className="facts">
           {d.phone && <p><b>電話</b><a href={`tel:${d.phone.replace(/\s/g, '')}`}>{d.phone}</a></p>}
-          {d.website && <p><b>ホームページ</b><a href={d.website} target="_blank" rel="noopener">{d.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a></p>}
+          {d.website && <p><b>ホームページ</b><a href={safeUrl(d.website)} target="_blank" rel="noopener noreferrer">{d.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a></p>}
           {(d.price || d.priceRange) && <p><b>価格帯</b><span>{[d.price, d.priceRange].filter(Boolean).join('　')}</span></p>}
         </section>
       )}
@@ -629,7 +630,7 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
                   <p className="ai-reason">{pk.reason}</p>
                   <div className="acts">
                     <button type="button" onClick={() => onShow(it.id)}>リストで見る</button>
-                    <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                    <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
                   </div>
                 </div>
               );
@@ -641,7 +642,7 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
                 <p className="ai-sub">{pl.name}{pl.rating != null ? `　★${pl.rating.toFixed(1)}（${pl.reviews.toLocaleString()}件）` : ''}</p>
                 <p className="ai-reason">{pk.reason}</p>
                 <div className="acts side-acts-inline">
-                  <a href={pl.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                  <a href={safeUrl(pl.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
                   {savedIds.has(pl.placeId)
                     ? <button type="button" disabled>追加済み</button>
                     : <button type="button" className="add" onClick={() => setPick(pick === pl.placeId ? null : pl.placeId)}>候補に追加 ▾</button>}
@@ -1088,7 +1089,7 @@ export default function Home() {
               <button className={'star photo-star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
             )}
             <div className="side-acts">
-              <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+              <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
               {it.done
                 ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
                 : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
@@ -1097,7 +1098,7 @@ export default function Home() {
                 {photoBusy === it.id ? '保存中…' : it.done ? '写真を追加' : 'メモ画像を追加'}
                 <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files, it.done ? 'visit' : 'memo'); e.target.value = ''; }} />
               </label>
-              {it.srcUrl && <a href={it.srcUrl} target="_blank" rel="noopener">元の投稿</a>}
+              {safeUrl(it.srcUrl) && <a href={safeUrl(it.srcUrl)} target="_blank" rel="noopener noreferrer">元の投稿</a>}
               {confirmId === it.id ? (
                 <div className="side-confirm">
                   <span>削除しますか？</span>
@@ -1299,7 +1300,7 @@ export default function Home() {
                       {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
                     </button>
                     <div className="side-acts">
-                      <a href={p.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>
+                      <a href={safeUrl(p.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
                       {savedIds.has(p.placeId)
                         ? <button className="added" disabled>追加済み（{items.find((i) => i.placeId === p.placeId)?.trip}）</button>
                         : <button className="add" aria-expanded={pickFor === 's:' + p.placeId} onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加 ▾</button>}

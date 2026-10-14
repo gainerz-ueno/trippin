@@ -35,7 +35,7 @@ export async function GET(req) {
   const u = new URL(req.url);
   const id = u.searchParams.get('id') || '';
   const lite = u.searchParams.get('lite') === '1';
-  if (!/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'bad request' }, { status: 400 });
+  if (id.length > 300 || !/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'bad request' }, { status: 400 });
   try {
     const res = await fetch(`https://places.googleapis.com/v1/places/${id}?languageCode=ja`, {
       headers: { 'X-Goog-Api-Key': process.env.GOOGLE_MAPS_API_KEY, 'X-Goog-FieldMask': lite ? LITE : FIELDS },

@@ -1,5 +1,6 @@
 // AIおすすめ：今いる場所・現地の時間・ホテル・候補のお店をふまえて提案する（Gemini）
 import { searchPage, fillTranslations, localize } from '../../lib/places';
+import { str, num, latLng, bad } from '../../lib/validate';
 
 const MODEL = 'gemini-3.8-flash';
 
@@ -22,7 +23,22 @@ async function gemini(prompt) {
 export async function POST(req) {
   if (!process.env.GEMINI_API_KEY) return Response.json({ error: 'AIの設定がされていません' }, { status: 500 });
   try {
-    const { question = '', here = null, hotel = null, items = [], localTime = '', trip = '', walk = true, car = false } = await req.json();
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object') return bad('入力が正しくありません');
+    const question = str(body.question, 200);
+    const here = latLng(body.here);
+    const hotelPos = latLng(body.hotel);
+    const hotel = hotelPos ? { ...hotelPos, name: str(body.hotel?.name, 100) } : null;
+    const localTime = str(body.localTime, 40);
+    const trip = str(body.trip, 100);
+    const walk = body.walk !== false;
+    const car = body.car === true;
+    // AIに渡すお店は最大60件・項目ごとに長さを制限
+    const items = (Array.isArray(body.items) ? body.items : []).slice(0, 60).map((it) => ({
+      id: str(it?.id, 200), name: str(it?.name, 100), altName: str(it?.altName, 100), category: str(it?.category, 20),
+      open: it?.open === true ? true : it?.open === false ? false : null, today: str(it?.today, 80),
+      fromHere: str(it?.fromHere, 20), fromHotel: str(it?.fromHotel, 60), rating: num(it?.rating, 0, 5, null), memo: str(it?.memo, 300),
+    })).filter((it) => it.id);
     // 徒歩圏内：約1km（徒歩15分）／車移動：約8km（Grab・Uber・タクシーで20分）／両方：どちらも
     const radius = car ? 8000 : walk ? 1200 : 3000;
     const moveText = walk && car ? '徒歩圏内（約1km）と車移動（約8km、Grab・Uber・タクシー）の両方。近い順に混ぜて提案し、どちらで行くかを理由に書く'

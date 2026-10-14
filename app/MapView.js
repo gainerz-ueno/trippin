@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { safeUrl } from './lib/safeurl';
 
 // Google マップの読み込み（1回だけ）
 let loader = null;
@@ -85,7 +86,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
         info.current.setContent(
           `<div style="max-width:220px;color:#1C2836"><div style="font-size:12px;color:#5E6E80">泊まるホテル</div>` +
             `<div style="font-weight:700;font-size:14px">${esc(h.name)}</div>` +
-            (h.mapsUrl ? `<a href="${esc(h.mapsUrl)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:12px;color:#2F5D7C">Googleマップで開く</a>` : '') +
+            (safeUrl(h.mapsUrl) ? `<a href="${esc(safeUrl(h.mapsUrl))}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;font-size:12px;color:#2F5D7C">Googleマップで開く</a>` : '') +
             `</div>`
         );
         info.current.open({ map: map.current, anchor: m });
@@ -112,13 +113,13 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
         zIndex: 1000 - no,
       });
       m.addListener('click', () => {
-        const img = it.photo ? `<img src="${photoSrc(it.photo)}" alt="" style="width:100%;height:96px;object-fit:cover;border-radius:8px;margin-bottom:6px">` : '';
+        const img = it.photo ? `<img src="${esc(photoSrc(it.photo))}" alt="" style="width:100%;height:96px;object-fit:cover;border-radius:8px;margin-bottom:6px">` : '';
         info.current.setContent(
           `<div style="max-width:220px;font-family:inherit;color:#1C2836">${img}` +
             `<div style="font-weight:700;font-size:14px">${no}. ${esc(it.name)}</div>` +
             (it.altName ? `<div style="font-size:12px;margin-top:2px">${esc(it.altName)}</div>` : '') +
             `<div style="font-size:12px;color:#5E6E80;margin-top:4px">${esc(it.category || 'カテゴリーなし')}${it.done ? '・行った' : '・候補'}</div>` +
-            (it.mapsUrl ? `<a href="${esc(it.mapsUrl)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-size:12px;color:#2F5D7C">Googleマップで開く</a>` : '') +
+            (safeUrl(it.mapsUrl) ? `<a href="${esc(safeUrl(it.mapsUrl))}" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin-top:6px;font-size:12px;color:#2F5D7C">Googleマップで開く</a>` : '') +
             `</div>`
         );
         info.current.open({ map: map.current, anchor: m });

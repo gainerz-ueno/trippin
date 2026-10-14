@@ -1,8 +1,10 @@
 'use client';
 // 共有リンクで見るページ（ログインもパスワードもいらない。見るだけ）
 import { useEffect, useMemo, useState } from 'react';
+import { useParams } from 'next/navigation';
 import MapView from '../../MapView';
 import { fetchShared } from '../../cloud';
+import { safeUrl } from '../../lib/safeurl';
 
 const BASE_CATS = {
   観光: '#2F7D6B', 朝市: '#C9822B', 夜市: '#5B4BA8', 朝食: '#E0A526', 昼食: '#D9692E', 夕食: '#B8432F', 夜食: '#3F4F86',
@@ -46,12 +48,13 @@ function CopyBtn({ text }) {
   return <button type="button" className={'copy' + (done ? ' ok' : '')} onClick={copy}>{done ? 'コピーしました' : 'コピー'}</button>;
 }
 
-export default function SharedFolder({ params }) {
+export default function SharedFolder() {
+  const params = useParams();
   const [data, setData] = useState(undefined);
   const [tab, setTab] = useState('cand');
   const [view, setView] = useState('list');
   useEffect(() => {
-    fetchShared(params.id).then((d) => setData(d || null)).catch(() => setData(null));
+    (/^[A-Za-z0-9]{10}$/.test(params.id || '') ? fetchShared(params.id) : Promise.resolve(null)).then((d) => setData(d || null)).catch(() => setData(null));
   }, [params.id]);
   const items = data?.items || [];
   const cand = items.filter((i) => !i.done);
@@ -88,7 +91,7 @@ export default function SharedFolder({ params }) {
                     {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
                     <span className="no" style={{ '--c': catColor(it.category) }}>{i + 1}</span>
                     <div className="side-acts">
-                      {it.mapsUrl && <a href={it.mapsUrl} target="_blank" rel="noopener">Googleマップ</a>}
+                      {safeUrl(it.mapsUrl) && <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>}
                     </div>
                   </div>
                   <div className="body">

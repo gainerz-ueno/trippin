@@ -2,7 +2,7 @@
 // 取るのは photos だけ（Google の料金表で無料の区分「Place Details Essentials (IDs Only)」）
 export async function GET(req) {
   const id = new URL(req.url).searchParams.get('id') || '';
-  if (!/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'bad request' }, { status: 400 });
+  if (id.length > 300 || !/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'bad request' }, { status: 400 });
   try {
     const res = await fetch(`https://places.googleapis.com/v1/places/${id}`, {
       headers: { 'X-Goog-Api-Key': process.env.GOOGLE_MAPS_API_KEY, 'X-Goog-FieldMask': 'photos' },
