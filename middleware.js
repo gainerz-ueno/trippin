@@ -48,5 +48,6 @@ export async function middleware(req) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // ロゴ・アイコン・シェア用画像はログインなしで見せる（LINEやSNSでリンクを送ったときに画像を出すため）
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|logo.png|logo-tagline.png|og.png|icon-512.png|apple-icon.png).*)'],
 };

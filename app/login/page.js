@@ -1,11 +1,11 @@
-export const metadata = { title: 'Trippin' };
+export const metadata = { title: 'Tabibi' };
 
 export default function Login({ searchParams }) {
   const e = searchParams?.e;
   return (
     <main className="wrap">
       <header>
-        <h1>Trip<span>pin</span></h1>
+        <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
       </header>
       <form className="panel" method="post" action="/api/login">
         <label htmlFor="pw">パスワード
