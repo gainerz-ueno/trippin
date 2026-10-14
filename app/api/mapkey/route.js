@@ -1,4 +1,4 @@
-// 地図表示用の鍵（Trippin のサイトと地図表示だけに制限した鍵）をブラウザに渡す
+// 地図表示用の鍵（Tabibi のサイトと地図表示だけに制限した鍵）をブラウザに渡す
 export const dynamic = 'force-dynamic';
 
 export async function GET() {

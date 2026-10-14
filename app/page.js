@@ -242,7 +242,7 @@ function NameBlock({ p, withAddress = true }) {
   );
 }
 
-// お店の詳細（Trippin の中で開く）
+// お店の詳細（Tabibi の中で開く）
 const detailCache = new Map();
 
 function Stars({ n }) {
@@ -1055,7 +1055,7 @@ export default function Home() {
   return (
     <main className="wrap">
       <header>
-        <h1>Trip<span>pin</span></h1>
+        <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
         <div className="tag">行きたい場所リスト</div>
       </header>
 

@@ -296,3 +296,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .near-hotel input{width:18px;height:18px;margin:0;flex:none}
 
 input:disabled,select:disabled{opacity:.45;cursor:not-allowed}
+
+h1.logo{margin:0;line-height:0}
+h1.logo img{display:block;height:34px;width:auto}
+header{align-items:center}
