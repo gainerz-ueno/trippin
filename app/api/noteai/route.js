@@ -243,7 +243,20 @@ async function editArea(base, mark, box, instruction) {
   if (!o.ok) return o;
   // 直した部分を元の絵に、ふちをなじませて貼りもどす
   const fixed = await sharp(o.raw).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+  const orig = await sharp(c1).removeAlpha().raw().toBuffer();
   const f = Math.max(6, Math.round(Math.min(w, h) * 0.06));
+  // AIが全体の色味を少し変えてしまうことがあるので、ふちの色に合わせて戻す
+  for (let ch = 0; ch < 3; ch++) {
+    let sa = 0, sb = 0, qa = 0, qb = 0, n = 0;
+    for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+      if (Math.min(x, y, w - 1 - x, h - 1 - y) > f * 2) continue;
+      const i = (y * w + x) * 3 + ch; const a = fixed[i], b = orig[i];
+      sa += a; sb += b; qa += a * a; qb += b * b; n++;
+    }
+    const ma = sa / n, mb = sb / n, da = Math.sqrt(Math.max(1, qa / n - ma * ma)), db = Math.sqrt(Math.max(1, qb / n - mb * mb));
+    const k = Math.max(0.7, Math.min(1.4, db / da));
+    for (let i = ch; i < fixed.length; i += 3) fixed[i] = Math.max(0, Math.min(255, Math.round((fixed[i] - ma) * k + mb)));
+  }
   const px = Buffer.alloc(w * h * 4);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -276,6 +289,10 @@ export async function POST(req) {
     const b = body.box && typeof body.box === 'object' ? body.box : null;
     const n = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
     const box = mark && b ? { x0: n(b.x0), y0: n(b.y0), x1: n(b.x1), y1: n(b.y1) } : null;
+    if (box && body.alg === 'whole1' && isTest(req.headers.get('x-art-token'))) {
+      const p1 = [{ text: editPrompt({ instruction }) + '\nThe user drew a RED outline on the image around the part to change. Apply the change to what is inside the red outline, and remove the red outline completely in the result.' }, { inlineData: { mimeType: 'image/jpeg', data: mark } }];
+      return run(req, () => gen(p1, size === 'story' ? '9:16' : '4:5'));
+    }
     if (box) return run(req, () => editArea(base, mark, box, instruction));
     const parts = [{ text: editPrompt({ instruction }) }, { inlineData: { mimeType: 'image/jpeg', data: base } }];
     return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
