@@ -30,8 +30,6 @@ export async function middleware(req) {
   if (pathname === '/login' || pathname === '/api/login') return NextResponse.next();
   // 共有リンク（/s/...）は、パスワードなしで誰でも見られる。見るのに使う地図の鍵とお店の写真も同じ
   if (pathname.startsWith('/s/') || pathname.startsWith('/g/') || pathname === '/api/mapkey') return NextResponse.next();
-  if (pathname === '/api/noteai' && req.headers.has('x-art-token')) return NextResponse.next(); // 【一時的】動作確認
-  if (pathname === '/api/noteai' && req.headers.has('x-art-token')) return NextResponse.next(); // 【一時的】動作確認
   if (pathname === '/api/photo') {
     if (tooMany(ipOf(req), 200, 'photo:')) return new NextResponse('too many', { status: 429 });
     return NextResponse.next();
