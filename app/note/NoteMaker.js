@@ -95,7 +95,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const coverKey = note.cover === null ? null : (note.cover && allPhotos.some((p) => p.key === note.cover) ? note.cover : allPhotos[0]?.key);
 
   const canvasSpots = spots.map(({ s, it }) => ({
-    it, text: (s.text ?? it.review ?? '').trim(), urls: photoKeys(s).map((k) => urlOf(it.id, k)).filter(Boolean),
+    it, text: (s.text ?? (it.review || it.memo || '')).trim(), urls: photoKeys(s).map((k) => urlOf(it.id, k)).filter(Boolean),
   }));
 
   function toggleSpot(id) {
@@ -209,7 +209,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
                 <label className={on ? 'on' : ''}>
                   <input type="checkbox" checked={on} disabled={!on && spots.length >= MAX} onChange={() => toggleSpot(it.id)} />
                   {first ? <img src={first.url} alt="" /> : <span className="ph0" />}
-                  <span className="nm-sn">{it.altName || it.name}<small>{[it.category, it.rec ? 'おすすめ' : '', it.review ? '感想あり' : ''].filter(Boolean).join('・')}</small></span>
+                  <span className="nm-sn">{it.altName || it.name}<small>{[it.category, it.rec ? 'おすすめ' : '', it.review ? '感想あり' : it.memo ? 'メモあり' : ''].filter(Boolean).join('・')}</small></span>
                 </label>
               </li>
             );
@@ -305,7 +305,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
               </label>
             </div>
             <label className="nm-field">コメント
-              <textarea value={s.text ?? it.review ?? ''} maxLength={200} placeholder="例：豆乳と焼餅を注文。甘い豆乳が絶品" onChange={(e) => patchSpot(it.id, { text: e.target.value })} />
+              <textarea value={s.text ?? (it.review || it.memo || '')} maxLength={200} placeholder="例：豆乳と焼餅を注文。甘い豆乳が絶品" onChange={(e) => patchSpot(it.id, { text: e.target.value })} />
             </label>
           </div>
         );

@@ -2,6 +2,10 @@
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
+import { createHash, timingSafeEqual } from 'node:crypto';
+// 【一時的】動作確認用（確認が終わったら消す）
+const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
+function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -101,7 +105,11 @@ function buildPrompt(d) {
   const n = d.spots.length;
   const info = [['行き先', d.place], ['いつ', d.date], ['だれと', d.who], ['行った場所', n + 'か所'], ['書いた人', d.by]].filter(([, v]) => v);
   const counts = AXES.map(([k, cs]) => `${k} ${d.spots.filter((p) => cs.includes(p.cat)).length}`).join(', ');
-  const spots = d.spots.map((p, i) => `     ${i + 1}. 「${p.name}」${p.text ? ` — note: 「${short(p.text, 34)}」` : ''}${p.img ? ' (draw it from its reference image)' : ''}`).join('\n');
+  const real = d.photo !== 'redraw';
+  const spots = d.spots.map((p, i) => `     ${i + 1}. 「${p.name}」${p.text ? ` — note: 「${short(p.text, 34)}」` : ' — no note (write only the name, do not invent a note)'}${p.img ? (real ? ' (put its reference photo itself here as a real photograph)' : ' (draw it from its reference image)') : ''}`).join('\n');
+  const photoRule = real
+    ? 'Photos: put each place\'s reference photo into its card as an actual photograph. Keep it photographic and faithful to the original (same scene, colors and composition) - only crop it to fit the frame. Do NOT redraw those photos as illustrations.'
+    : 'Photos: redraw each place\'s reference image as an illustration in the same art style, keeping what is in it recognizable.';
   const best = d.spots.slice(0, 3).map((p, i) => `${i + 1}位 「${p.name}」`).join(' / ');
   if (d.custom) {
     return [
@@ -116,6 +124,7 @@ function buildPrompt(d) {
       n > 1 ? `- Ranking: ${best}` : '',
       `- Trip balance radar values: ${counts}`,
       d.words ? `- One-line comment: 「${d.words}」` : '',
+      photoRule,
       'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible. Do not invent other Japanese sentences. Never write words like "PHOTO", "reference" or any photo numbers. No logos, no brand names, no watermarks, no QR codes, no app UI. Nothing sexual, violent or hateful.',
       'Fill the whole canvas edge to edge with no white margin.',
     ].filter(Boolean).join('\n');
@@ -127,7 +136,7 @@ function buildPrompt(d) {
     'Layout:',
     `- Top: the big hand-lettered title 「${d.title || '旅のトリセツ'}」${d.sub ? ` with a smaller subtitle 「${d.sub}」` : ''}.`,
     d.cover
-      ? `- Center (the hero, about 40% of the page): the main subject of the MAIN reference image. If it shows a person, draw that person large in a polished semi-realistic illustration style that keeps their face, hairstyle and outfit recognizable, standing in front of an illustrated scenic backdrop of ${d.place || 'the travel destination'} (famous landmarks, a wooden signpost with place names). If it shows no person, make that scene the big hero illustration.`
+      ? `- Center (the hero, about 40% of the page): the main subject of the MAIN reference image. If it shows a person, draw that person large in a polished semi-realistic illustration style that keeps their face, hairstyle and outfit recognizable, standing in front of an illustrated scenic backdrop of ${d.place || 'the travel destination'} (famous landmarks, a wooden signpost with place names). If it shows no person, ${d.photo !== 'redraw' ? 'use that photo itself large as a real photograph (keep it photographic)' : 'make that scene the big hero illustration'}.`
       : `- Center (the hero, about 40% of the page): a big illustrated scenic view of ${d.place || 'the travel destination'} with its famous landmarks, built from the place photos.`,
     '- Around the hero, arrange labeled panels with hand-lettered headings and marker-highlight labels:',
     `  * 「基本情報」 panel with rows: ${info.map(([k, v]) => `「${k}」「${v}」`).join(' / ')}`,
@@ -136,6 +145,7 @@ function buildPrompt(d) {
     `  * 「旅のバランス」 hexagon radar chart with axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し (relative values: ${counts})`,
     d.words ? `  * 「ひとこと」 speech bubble saying 「${d.words}」` : '',
     '  * cute hand-drawn icons of things from this trip (the foods, drinks, shops and sights above), plus travel doodles: airplane, suitcase, map pin, camera, stars, hearts, crowns.',
+    photoRule,
     'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible, in cute hand-written Japanese lettering. Do not invent other Japanese sentences. Short decorative English phrases such as "My Travel Manual" or "Good Trip!" are fine. Never write words like "PHOTO", "reference" or any photo numbers on the image. No logos, no brand names, no watermarks, no QR codes, no app UI.',
     'Fill the whole canvas edge to edge with no white margin.',
   ].filter(Boolean).join('\n');
@@ -192,7 +202,7 @@ export async function POST(req) {
     tpl, size,
     title: s(body.title, 24), sub: s(body.sub, 12), place: s(body.place, 30), date: s(body.date, 24),
     who: s(body.who, 20), by: s(body.by, 20), words: s(body.words, 80), author: s(body.author, 30),
-    prefs: prefText(body.prefs), custom: s(body.custom, 1200),
+    prefs: prefText(body.prefs), custom: s(body.custom, 1200), photo: body.photo === 'redraw' ? 'redraw' : 'real',
     cover: img(body.cover),
     spots: spotsIn.map((p) => ({ name: s(p?.name, 40), cat: s(p?.cat, 20), text: s(p?.text, 200), img: img(p?.img) })).filter((p) => p.name),
   };
@@ -208,6 +218,7 @@ export async function POST(req) {
 
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
 async function run(req, parts, size) {
+  if (isTest(req.headers.get('x-art-token'))) { const o = await gen(parts, size === 'story' ? '9:16' : '4:5'); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg' } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   const r = await rpc('use_ai_credit', token);

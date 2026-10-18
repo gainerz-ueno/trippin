@@ -7,6 +7,7 @@ import { toB64, callAi } from './util';
 export const PREF_GROUPS = [
   ['touch', '絵のタッチ', [['watercolor', '水彩'], ['pencil', '色えんぴつ'], ['marker', 'マーカー手描き'], ['anime', 'イラスト（アニメ風）'], ['collage', '雑誌の切り抜き風']]],
   ['hero', '主役の描き方', [['likeness', '本人に似せた似顔絵'], ['chibi', 'ゆるかわミニキャラ'], ['cutout', '写真を切り抜いて貼った風'], ['scenery', '人は描かず風景が主役']]],
+  ['photo', '行った場所の写真', [['real', '写真をそのまま使う'], ['redraw', 'イラストに描き直す']]],
   ['density', 'にぎやかさ', [['clean', 'すっきり'], ['normal', 'ふつう'], ['packed', 'ぎっしり']]],
   ['color', '色', [['pastel', 'パステル'], ['vivid', 'ビビッド'], ['muted', 'くすみカラー'], ['mono', '白黒＋差し色']]],
   ['font', '文字', [['round', '手書き丸文字'], ['brush', '筆文字'], ['pop', 'ポップ'], ['mincho', '上品な明朝']]],
@@ -19,7 +20,7 @@ const PREF_DEFAULT = {
   notebook: { touch: 'marker', hero: 'chibi', density: 'packed', color: 'vivid', font: 'round' },
   collage: { touch: 'collage', hero: 'likeness', density: 'packed', color: 'vivid', font: 'brush' },
 };
-export const prefDefault = (tpl) => ({ ...(PREF_DEFAULT[tpl] || PREF_DEFAULT.lovely), memo: '' });
+export const prefDefault = (tpl) => ({ photo: 'real', ...(PREF_DEFAULT[tpl] || PREF_DEFAULT.lovely), memo: '' });
 
 // ---- チャットで聞く質問（決まった質問をアプリの中で出すだけ。AIは使わない） ----
 const FREE = '自分で書く';
@@ -27,6 +28,7 @@ const QUESTIONS = [
   { id: 'type', q: 'どんな1枚にしたい？', opts: ['トリセツ風ポスター', '旅の雑誌の1ページ', '絵日記', '映画のポスター風'], free: true },
   { id: 'touch', q: 'いいね！絵のタッチは？', opts: ['水彩', '色えんぴつ', 'マーカー手描き', 'アニメ風イラスト', '雑誌の切り抜きコラージュ'], free: true },
   { id: 'hero', q: '真ん中の主役はどう描く？', opts: ['本人に似せた似顔絵', 'ゆるかわミニキャラ（2頭身）', '写真を切り抜いて貼った風', '人は描かず風景を主役に'], free: true },
+  { id: 'photo', q: '行った場所の写真はどうする？', opts: ['写真をそのまま使う', 'イラストに描き直す'] },
   { id: 'bg', q: '背景はどうする？', opts: ['行き先の名所', '街なみ', 'きらきらの夜景', '花畑や自然'], free: true },
   { id: 'color', q: '色の雰囲気は？', opts: ['パステル', 'ビビッド', 'くすみカラー', '白黒＋差し色'], free: true },
   { id: 'font', q: '文字の雰囲気は？', opts: ['手書き丸文字', '筆文字', 'ポップ', '上品な明朝'], free: true },
@@ -42,6 +44,7 @@ function composePrompt(a) {
   const look = [v('touch') && `絵のタッチは${v('touch')}`, v('color') && `色は${v('color')}`, v('font') && `文字は${v('font')}`].filter(Boolean);
   if (look.length) lines.push(look.join('、') + 'の雰囲気で。');
   if (v('hero')) lines.push(`真ん中の主役は「${v('hero')}」で描く。`);
+  if (v('photo')) lines.push(`行った場所の写真は「${v('photo')}」。`);
   if (v('bg')) lines.push(`背景は${v('bg')}。`);
   if (Array.isArray(a.items) && a.items.length) lines.push(`入れる項目：${a.items.join('、')}。`);
   if (v('eng') && v('eng') !== '入れない') lines.push(`飾りの英語として「${v('eng')}」を入れる。`);
@@ -115,8 +118,9 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
     setBusy(true); setErr('');
     try {
       const body = await buildBody();
-      if (sub === 'pick') body.prefs = prefs;
-      if (sub === 'chat') body.custom = prompt.slice(0, 1200);
+      body.photo = 'real';
+      if (sub === 'pick') { body.prefs = prefs; body.photo = prefs.photo === 'redraw' ? 'redraw' : 'real'; }
+      if (sub === 'chat') { body.custom = prompt.slice(0, 1200); body.photo = /イラストに描き直す/.test(prompt) ? 'redraw' : 'real'; }
       const blob = await callAi(body);
       const v = { url: URL.createObjectURL(blob), blob };
       setVersions((a) => [...a, v]);
