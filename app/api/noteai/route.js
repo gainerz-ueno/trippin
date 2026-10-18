@@ -192,21 +192,70 @@ function coverPrompt(d) {
 }
 
 function editPrompt(d) {
-  const area = d.box
-    ? [
-      'The user marked the part to change with a RED outline on the SECOND image (a marked copy of the same poster). '
-      + `It is roughly the area from ${d.box.x0}% to ${d.box.x1}% of the width (from the left) and from ${d.box.y0}% to ${d.box.y1}% of the height (from the top).`,
-      'Apply the change ONLY to that marked part. Edit the FIRST image (the clean one). The result must NOT contain any red outline or marking.',
-    ]
-    : [];
   return [
     'Edit the attached image (a finished Japanese travel poster).',
-    `Apply ONLY this change requested by the user (written in Japanese): 「${d.instruction}」`,
-    ...area,
-    'Keep everything else the same: the layout, the illustrations, the people and every Japanese text exactly as it is, unless the requested change is about that part.',
+    `The user wants this change (written in Japanese): 「${d.instruction}」`,
+    'Make the change clearly and visibly - the user must be able to see the difference at a glance. Returning the image unchanged is a failure.',
+    'Keep everything that is not part of the requested change the same: the layout, the illustrations, the people and every Japanese text exactly as it is.',
     'All Japanese text must stay correct and clearly legible. Never add logos, brand names, watermarks, or words like "PHOTO". Nothing sexual, violent or hateful.',
     'Keep the same aspect ratio and fill the whole canvas edge to edge.',
   ].join('\n');
+}
+
+// 囲んだ場所だけを切り出して、そこだけAIに直してもらう
+function areaPrompt(d) {
+  return [
+    'The FIRST image is a cut-out part of a finished Japanese travel poster. Edit this part.',
+    `The user wants this change (written in Japanese): 「${d.instruction}」`,
+    'The SECOND image is the same part with a RED outline drawn by the user around the thing to change. The change is about what is inside the red outline.',
+    'Make the change clearly and visibly - the user must be able to see the difference at a glance. Returning the image unchanged is a failure.',
+    'If the user asks to make something bigger, enlarge it a lot (about 1.5 times) and move or shrink the things next to it to make room. If they ask to remove something, fill the space naturally with the background.',
+    'Near the edges of the image keep everything exactly as it is (same position, colors and background), because this part will be pasted back into the poster.',
+    'The result must NOT contain any red outline or marking. All Japanese text must stay correct and clearly legible. No logos, watermarks or words like "PHOTO".',
+    'Keep the same aspect ratio and fill the whole canvas edge to edge.',
+  ].join('\n');
+}
+
+const RATIOS = [['1:1', 1], ['4:5', 0.8], ['3:4', 0.75], ['2:3', 2 / 3], ['9:16', 0.5625], ['5:4', 1.25], ['4:3', 4 / 3], ['3:2', 1.5], ['16:9', 16 / 9]];
+async function editArea(base, mark, box, instruction) {
+  const bb = Buffer.from(base, 'base64');
+  const { width: W, height: H } = await sharp(bb).metadata();
+  // 囲んだ範囲のまわりに少し余白をとり、AIが描ける縦横比に合わせる
+  let x0 = (box.x0 / 100) * W, x1 = (box.x1 / 100) * W, y0 = (box.y0 / 100) * H, y1 = (box.y1 / 100) * H;
+  const m = 0.08 * Math.min(W, H);
+  x0 -= m; x1 += m; y0 -= m; y1 += m;
+  let w = Math.max(x1 - x0, W * 0.4), h = Math.max(y1 - y0, W * 0.4);
+  const r = w / h;
+  const [ar, rv] = RATIOS.reduce((a, b) => (Math.abs(Math.log(b[1] / r)) < Math.abs(Math.log(a[1] / r)) ? b : a));
+  if (w / h < rv) w = h * rv; else h = w / rv;
+  if (w > W) { w = W; h = Math.min(H, w / rv); }
+  if (h > H) { h = H; w = Math.min(W, h * rv); }
+  w = Math.round(w); h = Math.round(h);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const left = Math.round(Math.max(0, Math.min(W - w, cx - w / 2)));
+  const top = Math.round(Math.max(0, Math.min(H - h, cy - h / 2)));
+  const cut = (buf) => sharp(buf).resize(W, H, { fit: 'fill' }).extract({ left, top, width: w, height: h }).jpeg({ quality: 92 }).toBuffer();
+  const [c1, c2] = await Promise.all([cut(bb), cut(Buffer.from(mark, 'base64'))]);
+  const parts = [{ text: areaPrompt({ instruction }) },
+    { text: 'FIRST image (the part to edit):' }, { inlineData: { mimeType: 'image/jpeg', data: c1.toString('base64') } },
+    { text: 'SECOND image (same part, red outline shows what to change):' }, { inlineData: { mimeType: 'image/jpeg', data: c2.toString('base64') } }];
+  const o = await gen(parts, ar, true);
+  if (!o.ok) return o;
+  // 直した部分を元の絵に、ふちをなじませて貼りもどす
+  const fixed = await sharp(o.raw).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+  const f = Math.max(6, Math.round(Math.min(w, h) * 0.06));
+  const px = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const e = Math.min(left > 0 ? x : f, top > 0 ? y : f, left + w < W ? w - 1 - x : f, top + h < H ? h - 1 - y : f);
+      const a = Math.max(0, Math.min(1, e / f));
+      const i = (y * w + x), j = i * 3, k = i * 4;
+      px[k] = fixed[j]; px[k + 1] = fixed[j + 1]; px[k + 2] = fixed[j + 2]; px[k + 3] = Math.round(a * 255);
+    }
+  }
+  const patch = await sharp(px, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
+  const jpg = await sharp(bb).composite([{ input: patch, left, top }]).resize({ width: 1440, withoutEnlargement: true }).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
+  return { ok: true, jpg };
 }
 
 export async function POST(req) {
@@ -227,9 +276,9 @@ export async function POST(req) {
     const b = body.box && typeof body.box === 'object' ? body.box : null;
     const n = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
     const box = mark && b ? { x0: n(b.x0), y0: n(b.y0), x1: n(b.x1), y1: n(b.y1) } : null;
-    const parts = [{ text: editPrompt({ instruction, box }) }, { text: 'FIRST image (clean, edit this one):' }, { inlineData: { mimeType: 'image/jpeg', data: base } }];
-    if (box) parts.push({ text: 'SECOND image (marked copy - only shows where to edit):' }, { inlineData: { mimeType: 'image/jpeg', data: mark } });
-    return run(req, parts, size);
+    if (box) return run(req, () => editArea(base, mark, box, instruction));
+    const parts = [{ text: editPrompt({ instruction }) }, { inlineData: { mimeType: 'image/jpeg', data: base } }];
+    return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
   }
   const spotsIn = Array.isArray(body.spots) ? body.spots.slice(0, 6) : [];
   if (!isCover && (!tpl || !spotsIn.length)) return json({ error: 'お店とデザインをえらんでください' }, 400);
@@ -259,16 +308,17 @@ export async function POST(req) {
   if (d.cover) parts.push({ text: 'MAIN photo of the trip (do not label it):' }, { inlineData: { mimeType: 'image/jpeg', data: d.cover } });
   d.people.forEach((x, i) => parts.push({ text: `"us" reference photo ${i + 1} - the travelers (do not label it):` }, { inlineData: { mimeType: 'image/jpeg', data: x } }));
   if (!isCover) d.spots.forEach((p) => p.imgs.forEach((x) => parts.push({ text: `Reference photo for the place 「${p.name}」 (do not label it):` }, { inlineData: { mimeType: 'image/jpeg', data: x } })));
-  return run(req, parts, size);
+  return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
 }
 
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
-async function run(req, parts, size) {
-  if (isTest(req.headers.get('x-art-token'))) { const o = await gen(parts, size === 'story' ? '9:16' : '4:5'); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg' } }) : json({ error: o.error }, 502); }
+async function run(req, job) {
+  const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
+  if (isTest(req.headers.get('x-art-token'))) { const o = await make(); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg' } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) {
-    const o = await gen(parts, size === 'story' ? '9:16' : '4:5');
+    const o = await make();
     if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
     return new Response(o.jpg, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' } });
   }
@@ -278,7 +328,7 @@ async function run(req, parts, size) {
   const ticket = await r.json();
   if (!ticket) return json({ error: '「AIで作る」は1日3回までです（直すときも1回に数えます）。また明日使ってください' }, 429);
 
-  const out = await gen(parts, size === 'story' ? '9:16' : '4:5');
+  const out = await make();
   if (!out.ok) {
     await rpc('refund_ai_credit', token, { ticket }).catch(() => {});
     return json({ error: 'AIがうまく描けませんでした。もう一度試してください（回数は減っていません）' }, 502);
@@ -286,7 +336,7 @@ async function run(req, parts, size) {
   return new Response(out.jpg, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' } });
 }
 
-async function gen(parts, aspect) {
+async function gen(parts, aspect, rawOut) {
   try {
     const r = await fetch(`${GEMINI}/${MODEL}:generateContent`, {
       method: 'POST',
@@ -296,6 +346,7 @@ async function gen(parts, aspect) {
     const d = await r.json();
     const part = d.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
     if (!part) return { ok: false, error: d.error?.message || d.candidates?.[0]?.finishReason || 'no image' };
+    if (rawOut) return { ok: true, raw: Buffer.from(part.inlineData.data, 'base64') };
     // 画面で扱いやすい大きさ（幅1440px）のJPEGにする
     const jpg = await sharp(Buffer.from(part.inlineData.data, 'base64')).resize({ width: 1440, withoutEnlargement: true }).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
     return { ok: true, jpg };

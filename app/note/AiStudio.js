@@ -208,6 +208,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
       setVersions((a) => [...a, v]);
       setCur(versions.length);
       setFixLog((l) => [...l, { who: 'bot', text: `直したよ！（${versions.length + 1}枚目）ほかに直したいところはある？` }]);
+      setTimeout(() => document.getElementById('as-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
     } catch (e) {
       setFixLog((l) => [...l, { who: 'bot', text: e.message || 'うまく直せなかった…もう一度ためしてね' }]);
     }
