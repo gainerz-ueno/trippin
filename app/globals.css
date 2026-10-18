@@ -315,3 +315,18 @@ header{align-items:center}
 .nm-open{font:inherit;font-weight:700;font-size:15px;border:0;border-radius:12px;padding:12px;cursor:pointer;background:var(--go);color:#fff}
 .nm-opens{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .nm-open.guide{background:#8A5CF6}
+
+.shelf{display:flex;flex-direction:column;gap:10px}
+.shelf .nm-open small,.shelf-guide small{display:block;font-weight:500;font-size:12px;opacity:.85;margin-top:2px}
+.shelf-make{padding:14px 12px}
+.shelf-box{border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px;background:var(--card)}
+.shelf-head{display:flex;justify-content:space-between;align-items:baseline}
+.shelf-head b{font-size:14px}.shelf-head span{font-size:12px;opacity:.7}
+.shelf-hint{margin:0;font-size:12.5px;line-height:1.6;opacity:.8}
+.shelf-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.shelf-pg{flex:0 0 72px;aspect-ratio:4/5;border-radius:8px;overflow:hidden;background:rgba(127,127,127,.15)}
+.shelf-pg img{width:100%;height:100%;object-fit:cover;display:block}
+.shelf-progress p{margin:6px 0 0;font-size:12.5px;font-weight:700}
+.shelf-bar{height:8px;border-radius:99px;background:rgba(127,127,127,.2);overflow:hidden}
+.shelf-bar i{display:block;height:100%;background:#8A5CF6;border-radius:99px}
+.shelf-sub{font:inherit;font-size:13px;border:1px solid var(--line);background:transparent;color:inherit;border-radius:10px;padding:9px;cursor:pointer}

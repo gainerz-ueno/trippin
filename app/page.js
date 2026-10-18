@@ -5,6 +5,7 @@ import MapView from './MapView';
 // 1枚ノート（開いたときだけ読み込む）
 const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
 const GuideMaker = dynamic(() => import('./note/GuideMaker'), { ssr: false });
+const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare } from './cloud';
@@ -754,6 +755,7 @@ export default function Home() {
   const [photoVer, setPhotoVer] = useState(0);
   const [notes, setNotes] = useState({}); // フォルダごとの1枚ノート
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
+  const [shelfKey, setShelfKey] = useState(0); // わたしのノートを読み直す合図
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
   const [photoBusy, setPhotoBusy] = useState(null);
@@ -1374,17 +1376,15 @@ export default function Home() {
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
           )}
           {tab === 'done' && !noteOpen && doneTotal > 0 && (
-            <div className="nm-opens">
-              <button type="button" className="nm-open" onClick={() => setNoteOpen('note')}>1枚ノートを作る</button>
-              <button type="button" className="nm-open guide" onClick={() => setNoteOpen('guide')}>ガイドブックを作る</button>
-            </div>
+            <NoteShelf user={user} onSignIn={() => signIn()} refreshKey={shelfKey}
+              onMakeNote={() => setNoteOpen('note')} onMakeGuide={() => setNoteOpen('guide')} />
           )}
           {tab === 'done' && noteOpen === 'guide' && (
-            <GuideMaker items={items} folders={allFolders} trip={trip} user={user} onSignIn={() => signIn()} onClose={() => setNoteOpen(false)} unsorted={UNSORTED} />
+            <GuideMaker items={items} folders={allFolders} trip={trip} user={user} onSignIn={() => signIn()} onClose={() => { setNoteOpen(false); setShelfKey((k) => k + 1); }} unsorted={UNSORTED} />
           )}
           {tab === 'done' && noteOpen === 'note' && (
             <NoteMaker items={items} folders={allFolders} trip={trip} notes={notes} onSave={saveNote} unsorted={UNSORTED}
-              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => setNoteOpen(false)} user={user} onSignIn={() => signIn()} prompts={prompts} onPrompts={setPrompts} />
+              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => { setNoteOpen(false); setShelfKey((k) => k + 1); }} user={user} onSignIn={() => signIn()} prompts={prompts} onPrompts={setPrompts} />
           )}
           <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>

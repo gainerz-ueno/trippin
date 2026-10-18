@@ -258,10 +258,10 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
             <button type="button" className={canShare ? 'sub' : ''} onClick={download} style={canShare ? undefined : { gridColumn: '1 / -1' }}>画像を保存</button>
             {user ? (
               <button type="button" className="sub nm-guide-add" onClick={addToGuide} disabled={saved !== ''} style={{ gridColumn: '1 / -1' }}>
-                {saved === 'done' ? 'ガイドブック用に保存しました' : saved === 'saving' ? '保存しています…' : 'ガイドブックに入れる'}
+                {saved === 'done' ? 'わたしのノートに保存しました' : saved === 'saving' ? '保存しています…' : 'わたしのノートに保存'}
               </button>
             ) : (
-              <p className="nm-hint" style={{ gridColumn: '1 / -1' }}>Googleでログインすると、このノートを「自分のガイドブック」に入れられます。</p>
+              <p className="nm-hint" style={{ gridColumn: '1 / -1' }}>Googleでログインすると、このノートを「わたしのノート」に保存できます。2枚たまるとガイドブックにまとめられます。</p>
             )}
           </div>
         </div>

@@ -76,7 +76,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
   if (!user) {
     return (
       <div className="nm panel">
-        <div className="nm-head"><h2>ガイドブックを作る</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
+        <div className="nm-head"><h2>ガイドブックにまとめる</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
         <p className="nm-hint">ガイドブックはクラウドに保存して、リンクで見てもらう仕組みです。Googleでログインすると作れます。</p>
         <div className="nm-acts"><button type="button" onClick={onSignIn} style={{ gridColumn: '1 / -1' }}>Googleでログイン</button></div>
       </div>
@@ -162,7 +162,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
 
   return (
     <div className="nm panel gm">
-      <div className="nm-head"><h2>ガイドブックを作る</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
+      <div className="nm-head"><h2>ガイドブックにまとめる</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
       {pages === null && <p className="nm-hint">読み込んでいます…</p>}
 
       {guides.length > 0 && (
@@ -205,7 +205,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
 
       <p className="nm-step">② ページをえらぶ<small>えらんだ順に並びます（{sel.length}ページ）</small></p>
       {notes.length === 0 ? (
-        <p className="nm-hint">まだ保存したノートがありません。「1枚ノートを作る」で画像にしたあと「ガイドブックに入れる」を押すと、ここに並びます。</p>
+        <p className="nm-hint">まだ保存したノートがありません。「1枚ノートを作る」で画像にしたあと「わたしのノートに保存」を押すと、ここに並びます。</p>
       ) : (
         <div className="gm-grid">
           {notes.map((p) => {
