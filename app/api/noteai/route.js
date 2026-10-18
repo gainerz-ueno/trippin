@@ -1,7 +1,6 @@
 // 「AIで作る」1枚ノート：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
-import { createHash, timingSafeEqual } from 'node:crypto';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
 
 export const runtime = 'nodejs';
@@ -9,15 +8,6 @@ export const maxDuration = 120;
 
 const MODEL = 'gemini-3-pro-image';
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
-
-// 【一時的】動作確認用の合言葉（ハッシュだけを置く）。確認が終わったら消す
-const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
-function isTest(t) {
-  if (!t) return false;
-  const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex'));
-  const b = Buffer.from(TEST_HASH);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 const STYLES = {
   lovely: 'cute kawaii pastel pink theme: pink polka-dot paper, hearts, ribbons, bows, sparkles, soft colored-pencil and pastel watercolor illustrations, rounded pink label tags',
@@ -110,16 +100,8 @@ function coverPrompt(d) {
 }
 
 export async function POST(req) {
-  const test = isTest(req.headers.get('x-art-token'));
   let body;
   try { body = await req.json(); } catch { return json({ error: 'データが読めませんでした' }, 400); }
-
-  // 動作確認用：見本の写真を作る（一時的）
-  if (test && typeof body.raw === 'string') {
-    const out = await gen([{ text: body.raw.slice(0, 3000) }], body.aspect === '9:16' ? '9:16' : body.aspect === '1:1' ? '1:1' : '4:5');
-    if (!out.ok) return json({ error: out.error }, 502);
-    return new Response(out.jpg, { headers: { 'content-type': 'image/jpeg' } });
-  }
 
   // 入力チェック
   const tpl = STYLES[body.tpl] ? body.tpl : null;
@@ -141,7 +123,7 @@ export async function POST(req) {
 
   // 回数（1人1日3回まで）
   let token = null, ticket = null;
-  if (!test) {
+  {
     token = bearer(req);
     if (!token) return json({ error: 'Googleでログインしてください' }, 401);
     const r = await rpc('use_ai_credit', token);
