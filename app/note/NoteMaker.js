@@ -6,7 +6,7 @@ import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
 import { FONTS, loadFont } from './fonts';
 import { Scaled, toB64, renderNode, aiLeft, downloadBlob, shareBlob } from './util';
 import AiStudio from './AiStudio';
-import AiChat, { aiOptions } from './AiChat';
+import ChatFlow, { aiOptions } from './AiChat';
 import { addPhotos, listPhotos } from '../photos';
 import { ensurePhotos, savePage } from '../cloud';
 
@@ -59,9 +59,9 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => setBoxW(el.clientWidth));
+    const ro = new ResizeObserver(() => setBoxW(el.clientWidth - 32));
     ro.observe(el);
-    setBoxW(el.clientWidth);
+    setBoxW(el.clientWidth - 32);
     return () => ro.disconnect();
   }, []);
 
@@ -200,174 +200,55 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   useEffect(() => { setSaved(''); }, [out]);
   useEffect(() => () => { if (out) URL.revokeObjectURL(out.url); }, [out]);
 
-  const ai = mode === 'ai';
-  const show = () => !ai;
-
   const size = sizeOf(note.size);
-  const thumbW = Math.max(60, Math.floor((boxW - 20 - 48) / 3)); // すき間10px×2、枠と余白16px×3
+  const thumbW = Math.max(60, Math.floor((boxW - 16) / 3));
   const canShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   return (
-    <div className="nm panel">
+    <div className="nm panel" ref={boxRef}>
       <div className="nm-head">
         <h2>1枚ノートを作る</h2>
         <button type="button" className="nm-close" onClick={onClose}>閉じる</button>
       </div>
-      <div className="nm-mode" role="tablist" aria-label="作り方">
-        <button type="button" role="tab" aria-selected={mode === 'tpl'} onClick={() => save({ mode: 'tpl' })}>テンプレートで作る<small>すぐできる・何枚でも</small></button>
-        <button type="button" role="tab" aria-selected={mode === 'ai'} onClick={() => save({ mode: 'ai' })}>AIで作る<small>イラストに仕上げる</small></button>
-      </div>
-      {show(2) && tripsWithDone.length > 1 && (
-        <label className="nm-field">フォルダ
-          <select value={trip} onChange={(e) => { setTrip(e.target.value); setOut(null); }} style={{ font: 'inherit', fontSize: 16, padding: '8px 10px', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)' }}>
-            {tripsWithDone.map((f) => <option key={f} value={f}>{f}</option>)}
-          </select>
-        </label>
-      )}
-
-      {show(2) && <p className="nm-step">{ai ? '2 / 5　' : '① '}お店・スポットをえらぶ<small>{MAX}つまで（{spots.length}/{MAX}）。上から3つが「BEST 3」になります</small></p>}
-      {!show(2) ? null : doneHere.length === 0 ? (
-        <p className="nm-hint">このフォルダにはまだ「行った」お店がありません。</p>
-      ) : (
-        <ul className="nm-spots">
-          {doneHere.map((it) => {
-            const on = spots.some((x) => x.it.id === it.id);
-            const first = (photoMap[it.id] || [])[0];
-            return (
-              <li key={it.id}>
-                <label className={on ? 'on' : ''}>
-                  <input type="checkbox" checked={on} disabled={!on && spots.length >= MAX} onChange={() => toggleSpot(it.id)} />
-                  {first ? <img src={first.url} alt="" /> : <span className="ph0" />}
-                  <span className="nm-sn">{it.altName || it.name}<small>{[it.category, it.rec ? 'おすすめ' : '', it.review ? '感想あり' : it.memo ? 'メモあり' : ''].filter(Boolean).join('・')}</small></span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {show(1) && <p className="nm-step">{ai ? '雰囲気をえらぶ' : '② デザインをえらぶ'}</p>}
-      {show(1) && (<>
-      <div className="nm-tpls" ref={boxRef}>
-        {mode === 'ai' && TEMPLATES.map((t) => (
-          <button key={t.id} type="button" className="nm-tpl" aria-pressed={note.tpl === t.id} onClick={() => save({ tpl: t.id, font: t.font })}>
-            <div className="nm-mini nm-ai-mini" style={{ backgroundImage: `url(/note/${t.id}-post.jpg)`, height: Math.round(thumbW * 1.25) }}>
-              <img src={`/note/${t.id}-camera.png`} alt="" />
-            </div>
-            <span>{t.label}</span>
-          </button>
-        ))}
-        {mode === 'tpl' && TEMPLATES.map((t) => (
-          <button key={t.id} type="button" className="nm-tpl" aria-pressed={note.tpl === t.id} onClick={() => save({ tpl: t.id, font: t.font })}>
-            <div className="nm-mini">
-              <Scaled width={thumbW} size={size}>
-                <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} />
-              </Scaled>
-            </div>
-            <span>{t.label}</span>
-          </button>
-        ))}
-      </div>
-      <div className="nm-row">
-        {SIZES.map((s) => <button key={s.id} type="button" className="nm-seg" aria-pressed={note.size === s.id} onClick={() => save({ size: s.id })}>{s.label}</button>)}
-      </div>
-      </>)}
-
-      {mode === 'tpl' && (
-        <>
-          <p className="nm-step">③ 文字（フォント）をえらぶ</p>
-          <div className="nm-fonts">
-            {FONTS.map((f) => (
-              <button key={f.id} type="button" className="nm-font" aria-pressed={note.font === f.id} onClick={() => save({ font: f.id })}>
-                <b style={{ fontFamily: `"${f.family}"` }}>旅ノート</b>
-                <small>{f.label}</small>
+      <ChatFlow note={note} save={saveKeep} user={user} onSignIn={onSignIn}
+        trips={tripsWithDone} trip={trip} setTrip={(t) => { setTrip(t); setOut(null); }}
+        doneHere={doneHere} spots={spots} photoMap={photoMap}
+        toggleSpot={toggleSpot} togglePhoto={togglePhoto} photoKeys={photoKeys} addMore={addMore} addBusy={addBusy}
+        allPhotos={allPhotos} coverKey={coverKey} peoplePool={peoplePool} peopleKeys={peopleKeys} togglePeople={togglePeople}
+        addPeople={addPeople} peopleBusy={peopleBusy} prompts={prompts} onPrompts={onPrompts} max={MAX}
+        renderTplThumbs={(onPick) => (
+          <div className="nm-tpls">
+            {TEMPLATES.map((t) => (
+              <button key={t.id} type="button" className="nm-tpl" onClick={() => onPick(t)}>
+                <div className="nm-mini">
+                  <Scaled width={thumbW} size={size}>
+                    <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} />
+                  </Scaled>
+                </div>
+                <span>{t.label}</span>
               </button>
             ))}
           </div>
-        </>
-      )}
-
-      {show(4) && (<>
-      <p className="nm-step">{ai ? '4 / 5　文字を入れる' : '④ タイトル・名前'}</p>
-      <label className="nm-field">タイトル<input value={note.title} maxLength={24} onChange={(e) => save({ title: e.target.value })} /></label>
-      <div className="nm-2">
-        <label className="nm-field">小見出し<input value={note.sub} maxLength={12} onChange={(e) => save({ sub: e.target.value })} /></label>
-        <label className="nm-field">日付<input value={note.date} maxLength={24} placeholder="例：2026.10" onChange={(e) => save({ date: e.target.value })} /></label>
-      </div>
-      <div className="nm-2">
-        <label className="nm-field">だれと<input value={note.who || ''} maxLength={20} placeholder="例：友だち3人" onChange={(e) => save({ who: e.target.value })} /></label>
-        <label className="nm-field">書いた人<input value={note.by} maxLength={20} placeholder="例：のり" onChange={(e) => save({ by: e.target.value })} /></label>
-      </div>
-      <label className="nm-field">ひとこと<textarea value={note.words} maxLength={120} placeholder="例：また行きたい！次は夜市をもっと回りたい" onChange={(e) => save({ words: e.target.value })} /></label>
-      </>)}
-      {show(3) && allPhotos.length > 0 && (
-        <>
-          <p className="nm-hint">メインの写真（真ん中に大きく入れる、景色や料理の写真）</p>
-          <div className="nm-phs">
-            <button type="button" className="nm-ph" aria-pressed={coverKey == null} onClick={() => save({ cover: null })} style={{ fontSize: 12, color: 'var(--sub)' }}>なし</button>
-            {allPhotos.map((p) => (
-              <button key={p.key} type="button" className="nm-ph" aria-pressed={coverKey === p.key} onClick={() => save({ cover: p.key })}><img src={p.url} alt="" /></button>
-            ))}
-          </div>
-        </>
-      )}
-      {mode === 'tpl' && <label className="nm-check"><input type="checkbox" checked={!!note.logo} onChange={(e) => save({ logo: e.target.checked })} />Tabibiのロゴを入れる</label>}
-
-      {!ai && spots.length > 0 && <p className="nm-step">⑤ 写真とコメント<small>写真は2枚まで。上から3つが「BEST 3」になります</small></p>}
-      {(show(3) || show(4)) && spots.map(({ s, it }, i) => {
-        const keys = photoKeys(s);
-        return (
-          <div key={it.id} className="nm-spot">
-            <div className="nm-spot-h">
-              <b>{i + 1}. {it.altName || it.name}</b>
-              {!ai && <button type="button" onClick={() => move(it.id, -1)} disabled={i === 0} aria-label="上へ">↑</button>}
-              {!ai && <button type="button" onClick={() => move(it.id, 1)} disabled={i === spots.length - 1} aria-label="下へ">↓</button>}
+        )}
+        tplFinal={(
+          <>
+            <div className="nm-preview" style={{ width: boxW - 8 }}>
+              <Scaled width={boxW - 8} size={size}>
+                <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} />
+              </Scaled>
             </div>
-            {show(3) && <div className="nm-phs">
-              {(photoMap[it.id] || []).map((p) => {
-                const n = keys.indexOf(p.key);
-                return (
-                  <button key={p.key} type="button" className="nm-ph" aria-pressed={n >= 0} onClick={() => togglePhoto(s, p.key)}>
-                    <img src={p.url} alt="" />{n >= 0 && <i>{n + 1}</i>}
-                  </button>
-                );
-              })}
-              <label className="nm-add">
-                {addBusy === it.id ? '保存中…' : <>＋<br />写真を追加</>}
-                <input type="file" accept="image/*" multiple hidden onChange={(e) => { addMore(s, e.target.files); e.target.value = ''; }} />
-              </label>
-            </div>}
-            {show(4) && <label className="nm-field">コメント
-              <textarea value={s.text ?? (it.review || it.memo || '')} maxLength={200} placeholder="例：豆乳と焼餅を注文。甘い豆乳が絶品" onChange={(e) => patchSpot(it.id, { text: e.target.value })} />
-            </label>}
-          </div>
-        );
-      })}
-
-      {mode === 'tpl' ? (
-        <>
-          <p className="nm-step">⑥ できあがり</p>
-          <div className="nm-preview" style={{ width: boxW }}>
-            <Scaled width={boxW} size={size}>
-              <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} />
-            </Scaled>
-          </div>
-          {err && <p className="nm-err">{err}</p>}
-          <div className="nm-acts">
-            <button type="button" onClick={makeImage} disabled={busy || spots.length === 0} style={{ gridColumn: '1 / -1' }}>{busy ? '画像を作っています…' : '画像にする'}</button>
-          </div>
-        </>
-      ) : (
-        <AiChat note={note} save={saveKeep} user={user} onSignIn={onSignIn} doneHere={doneHere} spots={spots} photoMap={photoMap}
-          toggleSpot={toggleSpot} togglePhoto={togglePhoto} photoKeys={photoKeys} addMore={addMore} addBusy={addBusy}
-          allPhotos={allPhotos} coverKey={coverKey} peoplePool={peoplePool} peopleKeys={peopleKeys} togglePeople={togglePeople}
-          addPeople={addPeople} peopleBusy={peopleBusy} prompts={prompts} onPrompts={onPrompts} max={MAX}>
+            {err && <p className="nm-err">{err}</p>}
+            <div className="nm-acts">
+              <button type="button" onClick={makeImage} disabled={busy || spots.length === 0} style={{ gridColumn: '1 / -1' }}>{busy ? '画像を作っています…' : '画像にする'}</button>
+            </div>
+          </>
+        )}
+        aiFinal={(
           <AiStudio note={note} save={saveKeep} buildBody={buildBody} user={user} onSignIn={onSignIn}
             left={left} refreshLeft={loadLeft} busy={busy} setBusy={setBusy}
             onImage={(blob) => setOut((o) => { if (o) URL.revokeObjectURL(o.url); return { url: URL.createObjectURL(blob), blob, ext: 'jpg' }; })}
             hasOut={!!out} prompts={prompts} onPrompts={onPrompts} hideSub bare />
-        </AiChat>
-      )}
+        )} />
       {out && (
         <div id="nm-out" className="nm-out nm">
           {mode !== 'ai' && <img src={out.url} alt="できあがったノート" />}
