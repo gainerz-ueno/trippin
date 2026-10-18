@@ -312,3 +312,4 @@ header{align-items:center}
 .share-url{margin:0;flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--copybg);border:1px solid var(--copyline);border-radius:8px;padding:6px 8px}
 
 .share-title{margin:0;font-family:var(--display);font-size:22px;font-weight:900}
+.nm-open{font:inherit;font-weight:700;font-size:15px;border:0;border-radius:12px;padding:12px;cursor:pointer;background:var(--go);color:#fff}

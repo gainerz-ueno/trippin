@@ -1,6 +1,9 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import MapView from './MapView';
+// 1枚ノート（開いたときだけ読み込む）
+const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare } from './cloud';
@@ -748,6 +751,9 @@ export default function Home() {
   const useNear = !!(hotel && nearHotel && hotel.lat != null);
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
+  const [notes, setNotes] = useState({}); // フォルダごとの1枚ノート
+  const [noteOpen, setNoteOpen] = useState(false);
+  const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [photoBusy, setPhotoBusy] = useState(null);
   async function onPhotos(itemId, files, kind) {
     if (!files?.length) return;
@@ -776,6 +782,7 @@ export default function Home() {
         if (pick) setHotel(pick);
       }
     } catch {}
+    try { const n = localStorage.getItem('trippin.notes'); if (n) setNotes(JSON.parse(n) || {}); } catch {}
     try { const c = localStorage.getItem('trippin.country'); if (c && COUNTRY_LIST.some(([k]) => k === c)) setCountry(c); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
@@ -797,6 +804,10 @@ export default function Home() {
   }, [hotel, loaded]);
   useEffect(() => {
     if (!loaded) return;
+    try { localStorage.setItem('trippin.notes', JSON.stringify(notes)); } catch {}
+  }, [notes, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
     try { localStorage.setItem('trippin.folders', JSON.stringify(folders)); localStorage.setItem('trippin.folder', trip); } catch {}
   }, [folders, trip, loaded]);
   function createFolder(n) {
@@ -809,6 +820,7 @@ export default function Home() {
     renameShare(from, to).catch(() => {});
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
     setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to, updatedAt: Date.now() } : i)));
+    setNotes((prev) => { if (!prev[from]) return prev; const { [from]: n, ...rest } = prev; return { ...rest, [to]: n }; });
     setTrip(to);
   }
   function deleteFolder(name) {
@@ -818,6 +830,7 @@ export default function Home() {
     gone.forEach((id) => deletePhotosOf(id).catch(() => {}));
     const rest = allFolders.filter((f) => f !== name);
     setFolders(rest);
+    setNotes((prev) => { const { [name]: _, ...rest2 } = prev; return rest2; });
     setTrip(UNSORTED);
   }
   // ---- ログインとクラウド保存 ----
@@ -831,7 +844,7 @@ export default function Home() {
     const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setUser(session?.user || null));
     return () => sub.subscription.unsubscribe();
   }, []);
-  const settingsData = () => ({ folders, hotel, customCats });
+  const settingsData = () => ({ folders, hotel, customCats, notes });
   useEffect(() => {
     if (!loaded || !user) { setCloudUser(null); synced.current = false; return; }
     let alive = true;
@@ -852,6 +865,12 @@ export default function Home() {
           setFolders((prev) => [...new Set([...(cloudSettings.folders || []), ...prev])]);
           setCustomCats((prev) => [...new Set([...(cloudSettings.customCats || []), ...prev])]);
           if (cloudSettings.hotel !== undefined) setHotel(cloudSettings.hotel || null);
+          // ノートはフォルダごとに新しいほうを使う
+          if (cloudSettings.notes) setNotes((prev) => {
+            const out = { ...prev };
+            for (const [k, v] of Object.entries(cloudSettings.notes)) if (!out[k] || (v?.updatedAt || 0) > (out[k].updatedAt || 0)) out[k] = v;
+            return out;
+          });
         } else {
           await pushSettings(settingsData());
         }
@@ -889,7 +908,7 @@ export default function Home() {
     const t = setTimeout(() => { pushSettings(settingsData()).catch(() => {}); }, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folders, hotel, customCats, user]);
+  }, [folders, hotel, customCats, notes, user]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1349,6 +1368,13 @@ export default function Home() {
             <AiPanel items={inFolder} hotel={hotel} trip={trip === UNSORTED ? '' : trip} customCats={customCats} onAddCustom={addCustomCat}
               savedIds={savedIds} onAdd={(pl, c) => addCandidate(pl, c, trip || null)}
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
+          )}
+          {tab === 'done' && !noteOpen && doneTotal > 0 && (
+            <button type="button" className="nm-open" onClick={() => setNoteOpen(true)}>1枚ノートを作る</button>
+          )}
+          {tab === 'done' && noteOpen && (
+            <NoteMaker items={items} folders={allFolders} trip={trip} notes={notes} onSave={saveNote} unsorted={UNSORTED}
+              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => setNoteOpen(false)} />
           )}
           <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
