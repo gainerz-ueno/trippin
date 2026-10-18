@@ -2,10 +2,6 @@
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
-import { createHash, timingSafeEqual } from 'node:crypto';
-// 【一時的】動作確認用（確認が終わったら消す）
-const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
-function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
 // 【一時的】動作確認用（確認が終わったら消す）
 
 export const runtime = 'nodejs';
@@ -65,7 +61,7 @@ function prefText(p) {
 }
 
 const AXES = [
-  ['グルメ', ['朝食', '昼食', '夕食', '夜食', '朝市']],
+  ['グルメ', ['朝食', '昼食', '夕食', '夜食', '朝市', '夜市', '屋台']],
   ['カフェ', ['カフェ', 'おやつ']],
   ['観光', ['観光']],
   ['買物', ['買物']],
@@ -105,7 +101,6 @@ async function isUnlimited(token) {
 }
 
 export async function GET(req) {
-  if (isTest(req.headers.get('x-art-token'))) { const o = await make(); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg', 'x-fix-en': encodeURIComponent(o.en || ''), 'x-fix-ja': encodeURIComponent(o.ja || ''), 'x-diff': String(o.diff ?? '') } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) return json({ left: 999 });
@@ -378,7 +373,6 @@ export async function POST(req) {
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
 async function run(req, job) {
   const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
-  if (isTest(req.headers.get('x-art-token'))) { const o = await make(); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg', 'x-fix-en': encodeURIComponent(o.en || ''), 'x-fix-ja': encodeURIComponent(o.ja || ''), 'x-diff': String(o.diff ?? '') } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) {
