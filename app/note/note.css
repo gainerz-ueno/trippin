@@ -386,3 +386,21 @@
 .as-vers img{width:100%;display:block}
 .as-vers i{position:absolute;top:2px;left:2px;background:var(--ink);color:var(--card);font-style:normal;font-size:11px;font-weight:700;border-radius:999px;min-width:18px;height:18px;display:grid;place-items:center}
 .as-fix{border-top:1px dashed var(--line);padding-top:10px}
+
+/* ===== AIで作る：1画面ずつ ===== */
+.wz-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;position:relative}
+.wz-dot{font:inherit;border:0;background:none;color:var(--sub);display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:2px 0}
+.wz-dot b{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--chip);font-size:14px}
+.wz-dot span{font-size:11px;font-weight:700}
+.wz-dot.done b{background:var(--go);color:#fff}
+.wz-dot.on b{background:var(--accent);color:var(--accent-ink);box-shadow:0 0 0 3px rgba(226,87,76,.25)}
+.wz-dot.on span{color:var(--ink)}
+.wz-subs{display:flex;flex-direction:column;gap:8px}
+.wz-subs button{font:inherit;text-align:left;border:2px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--card);color:var(--ink);cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.wz-subs button b{font-size:16px}
+.wz-subs button small{font-size:12px;color:var(--sub)}
+.wz-subs button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.wz-nav{display:grid;grid-template-columns:1fr 2fr;gap:8px;position:sticky;bottom:8px;z-index:4}
+.wz-nav button{font:inherit;font-weight:700;font-size:16px;border:0;border-radius:12px;padding:14px 10px;cursor:pointer;background:var(--accent);color:var(--accent-ink);box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.wz-nav button.sub{background:var(--chip);color:var(--ink)}
+.wz-nav button:disabled{opacity:.4;cursor:default}

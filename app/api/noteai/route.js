@@ -6,6 +6,10 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 // 【一時的】動作確認用（確認が終わったら消す）
 const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
 function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
+import { createHash, timingSafeEqual } from 'node:crypto';
+// 【一時的】動作確認用（確認が終わったら消す）
+const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
+function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;

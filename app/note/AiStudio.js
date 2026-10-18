@@ -81,7 +81,7 @@ function FreeInput({ ph, onSend, max = 120 }) {
   );
 }
 
-export default function AiStudio({ note, save, buildBody, user, onSignIn, left, refreshLeft, onImage, hasOut, prompts, onPrompts, busy, setBusy }) {
+export default function AiStudio({ note, save, buildBody, user, onSignIn, left, refreshLeft, onImage, hasOut, prompts, onPrompts, busy, setBusy, hideSub }) {
   const sub = note.aiSub || 'auto';
   const prefs = note.aiPrefs || prefDefault(note.tpl);
   const chat = note.aiChat || { answers: {}, prompt: '', edited: false, done: false };
@@ -173,11 +173,11 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
 
   return (
     <div className="as">
-      <div className="as-sub" role="tablist" aria-label="AIへの伝え方">
+      {!hideSub && <div className="as-sub" role="tablist" aria-label="AIへの伝え方">
         {[['auto', 'おまかせ'], ['pick', '好みを選ぶ'], ['chat', 'チャットで作る']].map(([k, l]) => (
           <button key={k} type="button" role="tab" aria-selected={sub === k} onClick={() => save({ aiSub: k })}>{l}</button>
         ))}
-      </div>
+      </div>}
 
       {sub === 'auto' && <p className="nm-hint">えらんだ雰囲気で、AIがおまかせで仕上げます。</p>}
 

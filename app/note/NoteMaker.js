@@ -198,12 +198,24 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   useEffect(() => { setSaved(''); }, [out]);
   useEffect(() => () => { if (out) URL.revokeObjectURL(out.url); }, [out]);
 
+  // AIで作る：1画面ずつ進む
+  const AI_STEPS = ['作り方', 'お店', '写真', '文字', '作る'];
+  const [aiStep, setAiStep] = useState(1);
+  const panelRef = useRef(null);
+  function goStep(n) {
+    setAiStep(Math.max(1, Math.min(5, n)));
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
+  }
+  const ai = mode === 'ai';
+  const show = (n) => !ai || aiStep === n;
+  const aiSub = note.aiSub || 'auto';
+
   const size = sizeOf(note.size);
   const thumbW = Math.max(60, Math.floor((boxW - 20 - 48) / 3)); // すき間10px×2、枠と余白16px×3
   const canShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   return (
-    <div className="nm panel">
+    <div className="nm panel" ref={panelRef}>
       <div className="nm-head">
         <h2>1枚ノートを作る</h2>
         <button type="button" className="nm-close" onClick={onClose}>閉じる</button>
@@ -212,9 +224,29 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         <button type="button" role="tab" aria-selected={mode === 'tpl'} onClick={() => save({ mode: 'tpl' })}>テンプレートで作る<small>すぐできる・何枚でも</small></button>
         <button type="button" role="tab" aria-selected={mode === 'ai'} onClick={() => save({ mode: 'ai' })}>AIで作る<small>イラストに仕上げる</small></button>
       </div>
-      {mode === 'ai' && <p className="nm-hint">{AI_NOTE}</p>}
+      {ai && (
+        <div className="wz-bar">
+          {AI_STEPS.map((l, i) => (
+            <button key={l} type="button" className={'wz-dot' + (aiStep === i + 1 ? ' on' : aiStep > i + 1 ? ' done' : '')} onClick={() => goStep(i + 1)}>
+              <b>{i + 1}</b><span>{l}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
-      {tripsWithDone.length > 1 && (
+      {ai && aiStep === 1 && (
+        <>
+          <p className="nm-step">1 / 5　作り方をえらぶ</p>
+          <p className="nm-hint">{AI_NOTE}</p>
+          <div className="wz-subs">
+            {[['auto', 'おまかせ', '雰囲気をえらぶだけ。いちばんかんたん'], ['pick', '好みを選ぶ', '絵のタッチ・色・文字などをボタンでえらぶ'], ['chat', 'チャットで作る', 'ボットの質問に答えて、自分だけのプロンプトを作る']].map(([k, l, d]) => (
+              <button key={k} type="button" aria-pressed={aiSub === k} onClick={() => saveKeep({ aiSub: k })}><b>{l}</b><small>{d}</small></button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {show(2) && tripsWithDone.length > 1 && (
         <label className="nm-field">フォルダ
           <select value={trip} onChange={(e) => { setTrip(e.target.value); setOut(null); }} style={{ font: 'inherit', fontSize: 16, padding: '8px 10px', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)' }}>
             {tripsWithDone.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -222,8 +254,8 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         </label>
       )}
 
-      <p className="nm-step">① お店・スポットをえらぶ<small>{MAX}つまで（{spots.length}/{MAX}）</small></p>
-      {doneHere.length === 0 ? (
+      {show(2) && <p className="nm-step">{ai ? '2 / 5　' : '① '}お店・スポットをえらぶ<small>{MAX}つまで（{spots.length}/{MAX}）。上から3つが「BEST 3」になります</small></p>}
+      {!show(2) ? null : doneHere.length === 0 ? (
         <p className="nm-hint">このフォルダにはまだ「行った」お店がありません。</p>
       ) : (
         <ul className="nm-spots">
@@ -243,7 +275,8 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         </ul>
       )}
 
-      <p className="nm-step">② {mode === 'ai' ? '雰囲気をえらぶ' : 'デザインをえらぶ'}</p>
+      {show(1) && <p className="nm-step">{ai ? '雰囲気をえらぶ' : '② デザインをえらぶ'}</p>}
+      {show(1) && (<>
       <div className="nm-tpls" ref={boxRef}>
         {mode === 'ai' && TEMPLATES.map((t) => (
           <button key={t.id} type="button" className="nm-tpl" aria-pressed={note.tpl === t.id} onClick={() => save({ tpl: t.id, font: t.font })}>
@@ -267,6 +300,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       <div className="nm-row">
         {SIZES.map((s) => <button key={s.id} type="button" className="nm-seg" aria-pressed={note.size === s.id} onClick={() => save({ size: s.id })}>{s.label}</button>)}
       </div>
+      </>)}
 
       {mode === 'tpl' && (
         <>
@@ -282,7 +316,8 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         </>
       )}
 
-      <p className="nm-step">{mode === 'ai' ? '③' : '④'} タイトル・名前</p>
+      {show(4) && (<>
+      <p className="nm-step">{ai ? '4 / 5　文字を入れる' : '④ タイトル・名前'}</p>
       <label className="nm-field">タイトル<input value={note.title} maxLength={24} onChange={(e) => save({ title: e.target.value })} /></label>
       <div className="nm-2">
         <label className="nm-field">小見出し<input value={note.sub} maxLength={12} onChange={(e) => save({ sub: e.target.value })} /></label>
@@ -293,7 +328,9 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         <label className="nm-field">書いた人<input value={note.by} maxLength={20} placeholder="例：のり" onChange={(e) => save({ by: e.target.value })} /></label>
       </div>
       <label className="nm-field">ひとこと<textarea value={note.words} maxLength={120} placeholder="例：また行きたい！次は夜市をもっと回りたい" onChange={(e) => save({ words: e.target.value })} /></label>
-      {allPhotos.length > 0 && (
+      </>)}
+      {ai && aiStep === 3 && <p className="nm-step">3 / 5　写真をえらぶ</p>}
+      {show(3) && allPhotos.length > 0 && (
         <>
           <p className="nm-hint">メインの写真（真ん中に大きく入れる、景色や料理の写真）</p>
           <div className="nm-phs">
@@ -304,7 +341,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           </div>
         </>
       )}
-      {mode === 'ai' && (
+      {ai && aiStep === 3 && (
         <>
           <p className="nm-hint">わたしたちの写真（3枚まで。すみに小さめに入ります）</p>
           <div className="nm-phs">
@@ -325,17 +362,19 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       )}
       {mode === 'tpl' && <label className="nm-check"><input type="checkbox" checked={!!note.logo} onChange={(e) => save({ logo: e.target.checked })} />Tabibiのロゴを入れる</label>}
 
-      {spots.length > 0 && <p className="nm-step">{mode === 'ai' ? '④' : '⑤'} 写真とコメント<small>{'写真は2枚まで'}。上から3つが「BEST 3」になります</small></p>}
-      {spots.map(({ s, it }, i) => {
+      {!ai && spots.length > 0 && <p className="nm-step">⑤ 写真とコメント<small>写真は2枚まで。上から3つが「BEST 3」になります</small></p>}
+      {ai && aiStep === 3 && spots.length > 0 && <p className="nm-hint">お店ごとの写真（2枚まで）</p>}
+      {ai && aiStep === 4 && spots.length > 0 && <p className="nm-hint">お店ごとのコメント（「行った」の感想・メモが入っています）</p>}
+      {(show(3) || show(4)) && spots.map(({ s, it }, i) => {
         const keys = photoKeys(s);
         return (
           <div key={it.id} className="nm-spot">
             <div className="nm-spot-h">
               <b>{i + 1}. {it.altName || it.name}</b>
-              <button type="button" onClick={() => move(it.id, -1)} disabled={i === 0} aria-label="上へ">↑</button>
-              <button type="button" onClick={() => move(it.id, 1)} disabled={i === spots.length - 1} aria-label="下へ">↓</button>
+              {!ai && <button type="button" onClick={() => move(it.id, -1)} disabled={i === 0} aria-label="上へ">↑</button>}
+              {!ai && <button type="button" onClick={() => move(it.id, 1)} disabled={i === spots.length - 1} aria-label="下へ">↓</button>}
             </div>
-            <div className="nm-phs">
+            {show(3) && <div className="nm-phs">
               {(photoMap[it.id] || []).map((p) => {
                 const n = keys.indexOf(p.key);
                 return (
@@ -348,10 +387,10 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
                 {addBusy === it.id ? '保存中…' : <>＋<br />写真を追加</>}
                 <input type="file" accept="image/*" multiple hidden onChange={(e) => { addMore(s, e.target.files); e.target.value = ''; }} />
               </label>
-            </div>
-            <label className="nm-field">コメント
+            </div>}
+            {show(4) && <label className="nm-field">コメント
               <textarea value={s.text ?? (it.review || it.memo || '')} maxLength={200} placeholder="例：豆乳と焼餅を注文。甘い豆乳が絶品" onChange={(e) => patchSpot(it.id, { text: e.target.value })} />
-            </label>
+            </label>}
           </div>
         );
       })}
@@ -369,16 +408,22 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
             <button type="button" onClick={makeImage} disabled={busy || spots.length === 0} style={{ gridColumn: '1 / -1' }}>{busy ? '画像を作っています…' : '画像にする'}</button>
           </div>
         </>
+      ) : aiStep !== 5 ? (
+        <div className="wz-nav">
+          {aiStep > 1 ? <button type="button" className="sub" onClick={() => goStep(aiStep - 1)}>戻る</button> : <span />}
+          <button type="button" onClick={() => goStep(aiStep + 1)} disabled={aiStep === 2 && spots.length === 0}>次へ</button>
+        </div>
       ) : (
         <>
-          <p className="nm-step">⑤ AIで作る</p>
+          <p className="nm-step">5 / 5　{aiSub === 'pick' ? '好みを選んで作る' : aiSub === 'chat' ? 'チャットで作る' : 'AIで作る'}</p>
           <AiStudio note={note} save={saveKeep} buildBody={buildBody} user={user} onSignIn={onSignIn}
             left={left} refreshLeft={loadLeft} busy={busy} setBusy={setBusy}
             onImage={(blob) => setOut((o) => { if (o) URL.revokeObjectURL(o.url); return { url: URL.createObjectURL(blob), blob, ext: 'jpg' }; })}
-            hasOut={!!out} prompts={prompts} onPrompts={onPrompts} />
+            hasOut={!!out} prompts={prompts} onPrompts={onPrompts} hideSub />
+          <div className="wz-nav"><button type="button" className="sub" onClick={() => goStep(4)}>戻る</button></div>
         </>
       )}
-      {out && (
+      {out && (!ai || aiStep === 5) && (
         <div id="nm-out" className="nm-out nm">
           {mode !== 'ai' && <img src={out.url} alt="できあがったノート" />}
           <p className="nm-hint">{mode === 'ai' ? 'いまえらんでいる絵を保存・シェアします。' : '画像を長押しして保存することもできます。'}</p>
