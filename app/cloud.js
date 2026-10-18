@@ -3,9 +3,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { photoHooks, listPhotos, listAllPhotos, setCloudId, putFromCloud } from './photos';
 
-// 公開用の鍵（ブラウザで使ってよい鍵。読み書きは「本人のデータだけ」にデータベース側で制限している）
-const SUPABASE_URL = 'https://yowxqlziedlhsjynspkv.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_JawUo2zewG8oKmpmd-Et6w_SvNt6p38';
+import { SUPABASE_URL, SUPABASE_KEY } from './lib/supabase-public';
 const BUCKET = 'photos';
 
 let client = null;
