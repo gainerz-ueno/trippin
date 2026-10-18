@@ -6,7 +6,7 @@ import { toB64, callAi } from './util';
 // ---- 好みを選ぶ ----
 export const PREF_GROUPS = [
   ['touch', '絵のタッチ', [['watercolor', '水彩'], ['pencil', '色えんぴつ'], ['marker', 'マーカー手描き'], ['anime', 'イラスト（アニメ風）'], ['collage', '雑誌の切り抜き風']]],
-  ['hero', '主役の描き方', [['likeness', '本人に似せた似顔絵'], ['chibi', 'ゆるかわミニキャラ'], ['cutout', '写真を切り抜いて貼った風'], ['scenery', '人は描かず風景が主役']]],
+  ['hero', 'わたしたちの入れ方', [['cutout', '写真を切り抜いて貼る'], ['likeness', '似顔絵イラスト'], ['chibi', 'ゆるかわミニキャラ'], ['none', '入れない']]],
   ['photo', '行った場所の写真', [['real', '写真をそのまま使う'], ['redraw', 'イラストに描き直す']]],
   ['density', 'にぎやかさ', [['clean', 'すっきり'], ['normal', 'ふつう'], ['packed', 'ぎっしり']]],
   ['color', '色', [['pastel', 'パステル'], ['vivid', 'ビビッド'], ['muted', 'くすみカラー'], ['mono', '白黒＋差し色']]],
@@ -14,11 +14,11 @@ export const PREF_GROUPS = [
 ];
 const PREF_DEFAULT = {
   lovely: { touch: 'pencil', hero: 'chibi', density: 'packed', color: 'pastel', font: 'round' },
-  water: { touch: 'watercolor', hero: 'likeness', density: 'normal', color: 'pastel', font: 'mincho' },
-  sky: { touch: 'watercolor', hero: 'likeness', density: 'normal', color: 'vivid', font: 'round' },
+  water: { touch: 'watercolor', hero: 'cutout', density: 'normal', color: 'pastel', font: 'mincho' },
+  sky: { touch: 'watercolor', hero: 'cutout', density: 'normal', color: 'vivid', font: 'round' },
   vintage: { touch: 'watercolor', hero: 'likeness', density: 'clean', color: 'muted', font: 'mincho' },
   notebook: { touch: 'marker', hero: 'chibi', density: 'packed', color: 'vivid', font: 'round' },
-  collage: { touch: 'collage', hero: 'likeness', density: 'packed', color: 'vivid', font: 'brush' },
+  collage: { touch: 'collage', hero: 'cutout', density: 'packed', color: 'vivid', font: 'brush' },
 };
 export const prefDefault = (tpl) => ({ photo: 'real', ...(PREF_DEFAULT[tpl] || PREF_DEFAULT.lovely), memo: '' });
 
@@ -27,7 +27,7 @@ const FREE = '自分で書く';
 const QUESTIONS = [
   { id: 'type', q: 'どんな1枚にしたい？', opts: ['トリセツ風ポスター', '旅の雑誌の1ページ', '絵日記', '映画のポスター風'], free: true },
   { id: 'touch', q: 'いいね！絵のタッチは？', opts: ['水彩', '色えんぴつ', 'マーカー手描き', 'アニメ風イラスト', '雑誌の切り抜きコラージュ'], free: true },
-  { id: 'hero', q: '真ん中の主役はどう描く？', opts: ['本人に似せた似顔絵', 'ゆるかわミニキャラ（2頭身）', '写真を切り抜いて貼った風', '人は描かず風景を主役に'], free: true },
+  { id: 'hero', q: 'わたしたちの写真はどう入れる？', opts: ['写真を切り抜いて貼る', '似顔絵イラスト', 'ゆるかわミニキャラ', '入れない'] },
   { id: 'photo', q: '行った場所の写真はどうする？', opts: ['写真をそのまま使う', 'イラストに描き直す'] },
   { id: 'bg', q: '背景はどうする？', opts: ['行き先の名所', '街なみ', 'きらきらの夜景', '花畑や自然'], free: true },
   { id: 'color', q: '色の雰囲気は？', opts: ['パステル', 'ビビッド', 'くすみカラー', '白黒＋差し色'], free: true },
@@ -43,7 +43,7 @@ function composePrompt(a) {
   lines.push(`${v('type') || 'トリセツ風ポスター'}を作ってください。`);
   const look = [v('touch') && `絵のタッチは${v('touch')}`, v('color') && `色は${v('color')}`, v('font') && `文字は${v('font')}`].filter(Boolean);
   if (look.length) lines.push(look.join('、') + 'の雰囲気で。');
-  if (v('hero')) lines.push(`真ん中の主役は「${v('hero')}」で描く。`);
+  if (v('hero')) lines.push(v('hero') === '入れない' ? 'わたしたちの写真は入れない。' : `わたしたちの写真は「${v('hero')}」で、すみに小さめに入れる。`);
   if (v('photo')) lines.push(`行った場所の写真は「${v('photo')}」。`);
   if (v('bg')) lines.push(`背景は${v('bg')}。`);
   if (Array.isArray(a.items) && a.items.length) lines.push(`入れる項目：${a.items.join('、')}。`);
@@ -119,8 +119,10 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
     try {
       const body = await buildBody();
       body.photo = 'real';
-      if (sub === 'pick') { body.prefs = prefs; body.photo = prefs.photo === 'redraw' ? 'redraw' : 'real'; }
-      if (sub === 'chat') { body.custom = prompt.slice(0, 1200); body.photo = /イラストに描き直す/.test(prompt) ? 'redraw' : 'real'; }
+      body.peopleStyle = 'cutout';
+      if (sub === 'pick') { body.prefs = prefs; body.photo = prefs.photo === 'redraw' ? 'redraw' : 'real'; body.peopleStyle = ['cutout', 'likeness', 'chibi', 'none'].includes(prefs.hero) ? prefs.hero : 'cutout'; }
+      if (sub === 'chat') { body.custom = prompt.slice(0, 1200); body.photo = /イラストに描き直す/.test(prompt) ? 'redraw' : 'real';
+        body.peopleStyle = /写真は入れない/.test(prompt) ? 'none' : /ミニキャラ/.test(prompt) ? 'chibi' : /似顔絵/.test(prompt) ? 'likeness' : 'cutout'; }
       const blob = await callAi(body);
       const v = { url: URL.createObjectURL(blob), blob };
       setVersions((a) => [...a, v]);

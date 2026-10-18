@@ -19,7 +19,8 @@ export function supa() {
 let uid = null;
 export function setUser(id) {
   uid = id || null;
-  photoHooks.onAdd = uid ? (rec) => uploadPhoto(rec).catch(() => {}) : null;
+  // 「わたしたちの写真」（people:）は、いまはこのスマホの中だけに置く
+  photoHooks.onAdd = uid ? (rec) => (rec.kind === 'people' ? null : uploadPhoto(rec).catch(() => {})) : null;
   photoHooks.onDelete = uid ? (rec) => deleteCloudPhoto(rec).catch(() => {}) : null;
 }
 

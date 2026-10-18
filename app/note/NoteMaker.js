@@ -74,12 +74,15 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       const list = (await listPhotos(id)).filter((p) => p.kind === 'visit');
       next[id] = list.map((p) => { const url = URL.createObjectURL(p.blob); made.push(url); return { key: keyOf(p), url }; });
     }
+    // わたしたちの写真（この旅のフォルダごと。お店とは別に置く）
+    const pid = 'people:' + trip;
+    next[pid] = (await listPhotos(pid)).map((p) => { const url = URL.createObjectURL(p.blob); made.push(url); return { key: keyOf(p), url }; });
     urls.current.forEach((u) => URL.revokeObjectURL(u));
     urls.current = made;
     setPhotoMap(next);
     return next;
   }
-  useEffect(() => { loadPhotos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [spotIds, photoVer]);
+  useEffect(() => { loadPhotos(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [spotIds, photoVer, trip]);
   useEffect(() => () => urls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
   const photoKeys = (s) => {
@@ -90,7 +93,28 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const place = trip === unsorted ? '' : trip;
   const urlOf = (id, k) => (photoMap[id] || []).find((p) => p.key === k)?.url;
   const allPhotos = spots.flatMap(({ it }) => (photoMap[it.id] || []).map((p) => ({ ...p, id: it.id })));
-  // 主役の写真：えらんでいなければ1枚目の写真（「なし」をえらんだら null）
+  // わたしたちの写真：お店の写真からえらぶか、ここで足す（3枚まで）
+  const peoplePool = [...(photoMap['people:' + trip] || []), ...allPhotos];
+  const peopleKeys = (note.people || []).filter((k) => peoplePool.some((p) => p.key === k));
+  const peopleUrls = peopleKeys.map((k) => peoplePool.find((p) => p.key === k)?.url).filter(Boolean);
+  function togglePeople(k) {
+    save({ people: peopleKeys.includes(k) ? peopleKeys.filter((x) => x !== k) : [...peopleKeys, k].slice(-3) });
+  }
+  const [peopleBusy, setPeopleBusy] = useState(false);
+  async function addPeople(files) {
+    if (!files?.length) return;
+    setPeopleBusy(true);
+    try {
+      const pid = 'people:' + trip;
+      const before = new Set((photoMap[pid] || []).map((p) => p.key));
+      await addPhotos(pid, [...files], 'people');
+      const added = (await listPhotos(pid)).map(keyOf).filter((k) => !before.has(k));
+      save({ people: [...peopleKeys, ...added].slice(-3) });
+      onPhotosAdded?.();
+    } catch (e) { setErr(e.message || '写真を追加できませんでした'); }
+    setPeopleBusy(false);
+  }
+  // メインの写真：えらんでいなければ1枚目の写真（「なし」をえらんだら null）
   const coverUrl = note.cover === null ? null : (note.cover ? allPhotos.find((p) => p.key === note.cover)?.url : null) || allPhotos[0]?.url || null;
   const coverKey = note.cover === null ? null : (note.cover && allPhotos.some((p) => p.key === note.cover) ? note.cover : allPhotos[0]?.key);
 
@@ -141,8 +165,10 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     return {
       tpl: note.tpl, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
       cover: await toB64(coverUrl),
+      people: await Promise.all(peopleUrls.map((u) => toB64(u, 768))),
       spots: await Promise.all(canvasSpots.map(async (sp) => ({
-        name: sp.it.altName || sp.it.name, cat: sp.it.category || '', text: sp.text, img: await toB64(sp.urls[0]),
+        name: sp.it.altName || sp.it.name, cat: sp.it.category || '', text: sp.text,
+        imgs: await Promise.all(sp.urls.slice(0, 2).map((u) => toB64(u, 768))),
       }))),
     };
   }
@@ -269,7 +295,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       <label className="nm-field">ひとこと<textarea value={note.words} maxLength={120} placeholder="例：また行きたい！次は夜市をもっと回りたい" onChange={(e) => save({ words: e.target.value })} /></label>
       {allPhotos.length > 0 && (
         <>
-          <p className="nm-hint">{mode === 'ai' ? '主役の写真（あなたが写っている写真をえらぶと、あなたが真ん中に大きく描かれます）' : '真ん中に大きく入れる写真'}</p>
+          <p className="nm-hint">メインの写真（真ん中に大きく入れる、景色や料理の写真）</p>
           <div className="nm-phs">
             <button type="button" className="nm-ph" aria-pressed={coverKey == null} onClick={() => save({ cover: null })} style={{ fontSize: 12, color: 'var(--sub)' }}>なし</button>
             {allPhotos.map((p) => (
@@ -278,9 +304,28 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           </div>
         </>
       )}
+      {mode === 'ai' && (
+        <>
+          <p className="nm-hint">わたしたちの写真（3枚まで。すみに小さめに入ります）</p>
+          <div className="nm-phs">
+            {peoplePool.map((p) => {
+              const n = peopleKeys.indexOf(p.key);
+              return (
+                <button key={'pp' + p.key} type="button" className="nm-ph" aria-pressed={n >= 0} onClick={() => togglePeople(p.key)}>
+                  <img src={p.url} alt="" />{n >= 0 && <i>{n + 1}</i>}
+                </button>
+              );
+            })}
+            <label className="nm-add">
+              {peopleBusy ? '保存中…' : <>＋<br />写真を追加</>}
+              <input type="file" accept="image/*" multiple hidden onChange={(e) => { addPeople(e.target.files); e.target.value = ''; }} />
+            </label>
+          </div>
+        </>
+      )}
       {mode === 'tpl' && <label className="nm-check"><input type="checkbox" checked={!!note.logo} onChange={(e) => save({ logo: e.target.checked })} />Tabibiのロゴを入れる</label>}
 
-      {spots.length > 0 && <p className="nm-step">{mode === 'ai' ? '④' : '⑤'} 写真とコメント<small>{mode === 'ai' ? 'AIには1枚目の写真を使います' : '写真は2枚まで'}。上から3つが「BEST 3」になります</small></p>}
+      {spots.length > 0 && <p className="nm-step">{mode === 'ai' ? '④' : '⑤'} 写真とコメント<small>{'写真は2枚まで'}。上から3つが「BEST 3」になります</small></p>}
       {spots.map(({ s, it }, i) => {
         const keys = photoKeys(s);
         return (

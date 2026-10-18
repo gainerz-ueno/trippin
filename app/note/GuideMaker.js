@@ -288,7 +288,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       )}
       {photos.length > 0 ? (
         <>
-          <p className="nm-hint">表紙の写真{cv.mode === 'ai' ? '（あなたが写っている写真をえらぶと、あなたが大きく描かれます）' : ''}</p>
+          <p className="nm-hint">表紙のメインの写真（景色や料理の写真）</p>
           <div className="nm-phs">
             {photos.map((p) => (
               <button key={p.key} type="button" className="nm-ph" aria-pressed={(cv.photo || photos[0]?.key) === p.key} onClick={() => setCv({ ...cv, photo: p.key })}><img src={p.url} alt="" /></button>
