@@ -70,7 +70,7 @@ function buildPrompt(d) {
   const n = d.spots.length;
   const info = [['行き先', d.place], ['いつ', d.date], ['だれと', d.who], ['行った場所', n + 'か所'], ['書いた人', d.by]].filter(([, v]) => v);
   const counts = AXES.map(([k, cs]) => `${k} ${d.spots.filter((p) => cs.includes(p.cat)).length}`).join(', ');
-  const spots = d.spots.map((p, i) => `     ${i + 1}. 「${p.name}」${p.text ? ` — note: 「${short(p.text, 34)}」` : ''}${p.img ? ` (recreate from PHOTO ${p.photoNo})` : ''}`).join('\n');
+  const spots = d.spots.map((p, i) => `     ${i + 1}. 「${p.name}」${p.text ? ` — note: 「${short(p.text, 34)}」` : ''}${p.img ? ' (draw it from its reference image)' : ''}`).join('\n');
   const best = d.spots.slice(0, 3).map((p, i) => `${i + 1}位 「${p.name}」`).join(' / ');
   return [
     `Design ONE finished, high-quality vertical poster image (aspect ratio ${ar}) in Japanese: a "旅のトリセツ" (travel instruction manual) infographic, in the style of the hugely popular Japanese social-media "トリセツ" collage posters. Packed, lively and stylish, with a hand-made feel: many small hand-drawn illustrations, icons, doodles, stickers and decorations fill the space, yet every panel stays clean and readable.`,
@@ -78,7 +78,7 @@ function buildPrompt(d) {
     'Layout:',
     `- Top: the big hand-lettered title 「${d.title || '旅のトリセツ'}」${d.sub ? ` with a smaller subtitle 「${d.sub}」` : ''}.`,
     d.cover
-      ? `- Center (the hero, about 40% of the page): the main subject of PHOTO 1. If PHOTO 1 shows a person, draw that person large in a polished semi-realistic illustration style that keeps their face, hairstyle and outfit recognizable, standing in front of an illustrated scenic backdrop of ${d.place || 'the travel destination'} (famous landmarks, a wooden signpost with place names). If it shows no person, make that scene the big hero illustration.`
+      ? `- Center (the hero, about 40% of the page): the main subject of the MAIN reference image. If it shows a person, draw that person large in a polished semi-realistic illustration style that keeps their face, hairstyle and outfit recognizable, standing in front of an illustrated scenic backdrop of ${d.place || 'the travel destination'} (famous landmarks, a wooden signpost with place names). If it shows no person, make that scene the big hero illustration.`
       : `- Center (the hero, about 40% of the page): a big illustrated scenic view of ${d.place || 'the travel destination'} with its famous landmarks, built from the place photos.`,
     '- Around the hero, arrange labeled panels with hand-lettered headings and marker-highlight labels:',
     `  * 「基本情報」 panel with rows: ${info.map(([k, v]) => `「${k}」「${v}」`).join(' / ')}`,
@@ -87,7 +87,7 @@ function buildPrompt(d) {
     `  * 「旅のバランス」 hexagon radar chart with axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し (relative values: ${counts})`,
     d.words ? `  * 「ひとこと」 speech bubble saying 「${d.words}」` : '',
     '  * cute hand-drawn icons of things from this trip (the foods, drinks, shops and sights above), plus travel doodles: airplane, suitcase, map pin, camera, stars, hearts, crowns.',
-    'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible, in cute hand-written Japanese lettering. Do not invent other Japanese sentences. Short decorative English phrases such as "My Travel Manual" or "Good Trip!" are fine. Never write the word "PHOTO" or photo numbers on the image. No logos, no brand names, no watermarks, no QR codes, no app UI.',
+    'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible, in cute hand-written Japanese lettering. Do not invent other Japanese sentences. Short decorative English phrases such as "My Travel Manual" or "Good Trip!" are fine. Never write words like "PHOTO", "reference" or any photo numbers on the image. No logos, no brand names, no watermarks, no QR codes, no app UI.',
     'Fill the whole canvas edge to edge with no white margin.',
   ].filter(Boolean).join('\n');
 }
@@ -133,8 +133,8 @@ export async function POST(req) {
   }
 
   const parts = [{ text: buildPrompt(d) }];
-  if (d.cover) parts.push({ text: 'PHOTO 1 (main photo):' }, { inlineData: { mimeType: 'image/jpeg', data: d.cover } });
-  d.spots.forEach((p) => { if (p.img) parts.push({ text: `PHOTO ${p.photoNo} (place: ${p.name}):` }, { inlineData: { mimeType: 'image/jpeg', data: p.img } }); });
+  if (d.cover) parts.push({ text: 'MAIN reference image (do not label it):' }, { inlineData: { mimeType: 'image/jpeg', data: d.cover } });
+  d.spots.forEach((p) => { if (p.img) parts.push({ text: `Reference image for the place 「${p.name}」 (do not label it):` }, { inlineData: { mimeType: 'image/jpeg', data: p.img } }); });
 
   const out = await gen(parts, size === 'story' ? '9:16' : '4:5');
   if (!out.ok) {
