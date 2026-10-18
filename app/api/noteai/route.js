@@ -88,9 +88,21 @@ async function rpc(fn, token, body = {}) {
 const bearer = (req) => (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').slice(0, 4000);
 
 // 今日あと何回使えるか
+// 運営者のアカウントは回数の制限なし（動作確認のため）。ログインしているアカウントをSupabaseで確かめる
+const UNLIMITED = new Set(['be07854d-c007-4404-85cd-fddc9867e5ff']);
+async function isUnlimited(token) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    if (!r.ok) return false;
+    const u = await r.json();
+    return UNLIMITED.has(u?.id);
+  } catch { return false; }
+}
+
 export async function GET(req) {
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
+  if (await isUnlimited(token)) return json({ left: 999 });
   const r = await rpc('ai_credits_left', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);
@@ -236,6 +248,11 @@ export async function POST(req) {
 async function run(req, parts, size) {
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
+  if (await isUnlimited(token)) {
+    const o = await gen(parts, size === 'story' ? '9:16' : '4:5');
+    if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
+    return new Response(o.jpg, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' } });
+  }
   const r = await rpc('use_ai_credit', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);

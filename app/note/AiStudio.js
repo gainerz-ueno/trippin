@@ -262,7 +262,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
       <div className="nm-acts">
         <button type="button" className="nm-ai-btn" onClick={generate} disabled={!canMake || (!bare && sub === 'chat' && !(chat.done || chat.edited))} style={{ gridColumn: '1 / -1' }}>
           {makeLabel}
-          {!busy && left != null && left > 0 && <small>今日あと{left}回（直すときも1回に数えます）</small>}
+          {!busy && left != null && left > 0 && <small>{left >= 999 ? '回数の制限なし（運営者）' : `今日あと${left}回（直すときも1回に数えます）`}</small>}
         </button>
       </div>
 

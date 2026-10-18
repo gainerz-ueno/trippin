@@ -304,7 +304,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       <div className="nm-acts">
         <button type="button" className={cv.mode === 'ai' ? 'nm-ai-btn' : ''} onClick={makeCover} disabled={!!busy || (cv.mode === 'ai' && left === 0)} style={{ gridColumn: '1 / -1' }}>
           {busy === 'cover' ? (cv.mode === 'ai' ? 'AIが描いています…（30秒ほど）' : '表紙を作っています…') : cv.mode === 'ai' && left === 0 ? '今日の回数を使い切りました' : 'この表紙を作る'}
-          {cv.mode === 'ai' && busy !== 'cover' && left != null && left > 0 && <small>今日あと{left}回</small>}
+          {cv.mode === 'ai' && busy !== 'cover' && left != null && left > 0 && <small>{left >= 999 ? '回数の制限なし（運営者）' : `今日あと${left}回`}</small>}
         </button>
       </div>
 
