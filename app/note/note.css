@@ -271,3 +271,12 @@
 .nm-err{color:var(--accent);font-size:13px;margin:0}
 .nm-check{flex-direction:row;color:var(--ink);display:flex;align-items:center;gap:8px;font-size:14px}
 .nm-check input{width:18px;height:18px;accent-color:var(--accent)}
+
+.nm-mode{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.nm-mode button{font:inherit;font-weight:700;font-size:15px;border:2px solid var(--line);border-radius:14px;padding:10px 8px;background:var(--card);color:var(--ink);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+.nm-mode button small{font-weight:400;font-size:11px;color:var(--sub)}
+.nm-mode button[aria-selected="true"]{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.nm-ai-mini{background-size:cover;background-position:center;display:grid;place-items:center}
+.nm-ai-mini img{width:44%;height:auto}
+.nm-acts button.nm-ai-btn{display:flex;flex-direction:column;align-items:center;gap:2px;background:linear-gradient(135deg,#FF6F9C,#8A5CF6);color:#fff}
+.nm-acts button.nm-ai-btn small{font-weight:400;font-size:12px;opacity:.9}

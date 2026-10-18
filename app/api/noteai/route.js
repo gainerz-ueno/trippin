@@ -82,12 +82,12 @@ function buildPrompt(d) {
       : `- Center (the hero, about 40% of the page): a big illustrated scenic view of ${d.place || 'the travel destination'} with its famous landmarks, built from the place photos.`,
     '- Around the hero, arrange labeled panels with hand-lettered headings and marker-highlight labels:',
     `  * 「基本情報」 panel with rows: ${info.map(([k, v]) => `「${k}」「${v}」`).join(' / ')}`,
-    `  * 「行った場所」: one small framed photo card per place, with the place name and its short hand-written note:\n${spots}`,
+    `  * 「行った場所」: exactly ${n} small framed photo cards, one for each place below and each place only once, with the place name and its short hand-written note:\n${spots}`,
     n > 1 ? `  * 「BEST 3」 ranking with gold crowns: ${best}` : '',
     `  * 「旅のバランス」 hexagon radar chart with axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し (relative values: ${counts})`,
     d.words ? `  * 「ひとこと」 speech bubble saying 「${d.words}」` : '',
     '  * cute hand-drawn icons of things from this trip (the foods, drinks, shops and sights above), plus travel doodles: airplane, suitcase, map pin, camera, stars, hearts, crowns.',
-    'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible, in cute hand-written Japanese lettering. Do not invent other Japanese sentences. Short decorative English phrases such as "My Travel Manual" or "Good Trip!" are fine. No logos, no brand names, no watermarks, no QR codes, no app UI.',
+    'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible, in cute hand-written Japanese lettering. Do not invent other Japanese sentences. Short decorative English phrases such as "My Travel Manual" or "Good Trip!" are fine. Never write the word "PHOTO" or photo numbers on the image. No logos, no brand names, no watermarks, no QR codes, no app UI.',
     'Fill the whole canvas edge to edge with no white margin.',
   ].filter(Boolean).join('\n');
 }

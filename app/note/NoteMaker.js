@@ -5,7 +5,7 @@ import './note.css';
 import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
 import { FONTS, loadFont, embedCss } from './fonts';
 import { addPhotos, listPhotos } from '../photos';
-import { ensurePhotos } from '../cloud';
+import { ensurePhotos, supa } from '../cloud';
 
 const MAX = 6;
 const keyOf = (p) => p.cloudId || 'L' + p.id;
@@ -20,6 +20,24 @@ export function defaultNote(trip, items, unsorted) {
   };
 }
 
+// AIで作るときの雰囲気の見本（テンプレートの背景の絵）
+const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
+
+// 画像AIに渡す写真（長い辺1024pxのJPEG）
+async function toB64(url) {
+  if (!url) return null;
+  const blob = await (await fetch(url)).blob();
+  const bmp = await createImageBitmap(blob);
+  const k = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+async function accessToken() {
+  try { const { data } = await supa().auth.getSession(); return data.session?.access_token || null; } catch { return null; }
+}
+
 // 小さく縮めて見せる（中身は1080pxのまま）
 function Scaled({ width, children, size }) {
   const k = width / size.w;
@@ -32,7 +50,7 @@ function Scaled({ width, children, size }) {
   );
 }
 
-export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose }) {
+export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn }) {
   const tripsWithDone = folders.filter((f) => items.some((i) => i.done && i.trip === f));
   const [trip, setTrip] = useState(tripsWithDone.includes(trip0) ? trip0 : tripsWithDone[0] || trip0);
   const note = notes[trip] || defaultNote(trip, items, unsorted);
@@ -40,12 +58,14 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const [busy, setBusy] = useState(false);
   const [addBusy, setAddBusy] = useState(null);
   const [err, setErr] = useState('');
-  const [out, setOut] = useState(null); // { url, blob }
+  const [out, setOut] = useState(null); // { url, blob, ext }
+  const [left, setLeft] = useState(null); // AIで作る：今日あと何回
   const [boxW, setBoxW] = useState(320);
   const boxRef = useRef(null);
   const canvasRef = useRef(null);
   const urls = useRef([]);
 
+  const mode = note.mode === 'ai' ? 'ai' : 'tpl';
   const doneHere = items.filter((i) => i.done && i.trip === trip);
   const byId = new Map(items.map((i) => [i.id, i]));
   const spots = note.spots.map((s) => ({ s, it: byId.get(s.id) })).filter((x) => x.it && x.it.done);
@@ -137,6 +157,43 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     setAddBusy(null);
   }
 
+  // AIで作る：今日あと何回使えるか
+  async function loadLeft() {
+    const t = await accessToken();
+    if (!t) return;
+    try {
+      const r = await fetch('/api/noteai', { headers: { Authorization: 'Bearer ' + t } });
+      const d = await r.json();
+      if (r.ok && typeof d.left === 'number') setLeft(d.left);
+    } catch {}
+  }
+  useEffect(() => { if (mode === 'ai' && user) loadLeft(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [mode, user?.id]);
+
+  async function makeAi() {
+    setBusy(true); setErr(''); setOut(null);
+    try {
+      const t = await accessToken();
+      if (!t) throw new Error('「AIで作る」はGoogleでログインすると使えます');
+      const body = {
+        tpl: note.tpl, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
+        cover: await toB64(coverUrl),
+        spots: await Promise.all(canvasSpots.map(async (sp) => ({
+          name: sp.it.altName || sp.it.name, cat: sp.it.category || '', text: sp.text, img: await toB64(sp.urls[0]),
+        }))),
+      };
+      const r = await fetch('/api/noteai', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify(body) });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.error || 'AIで作れませんでした');
+      }
+      const blob = await r.blob();
+      setOut({ url: URL.createObjectURL(blob), blob, ext: 'jpg' });
+      setTimeout(() => document.getElementById('nm-out')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    } catch (e) { setErr(e.message || 'AIで作れませんでした'); }
+    setBusy(false);
+    loadLeft();
+  }
+
   async function makeImage() {
     setBusy(true); setErr(''); setOut(null);
     try {
@@ -150,15 +207,15 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       // Safari は1回目に写真が抜けることがあるので、もう1回作る
       if (/^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent)) blob = await toBlob(node, opts);
       if (!blob) throw new Error('画像を作れませんでした');
-      setOut({ url: URL.createObjectURL(blob), blob });
+      setOut({ url: URL.createObjectURL(blob), blob, ext: 'png' });
       setTimeout(() => document.getElementById('nm-out')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch (e) { setErr(e.message || '画像を作れませんでした'); }
     setBusy(false);
   }
-  const fileName = `tabibi-${(note.title || 'note').replace(/[\\/:*?"<>|\s]+/g, '_')}.png`;
+  const fileName = `tabibi-${(note.title || 'note').replace(/[\\/:*?"<>|\s]+/g, '_')}.${out?.ext || 'png'}`;
   async function share() {
     if (!out) return;
-    const file = new File([out.blob], fileName, { type: 'image/png' });
+    const file = new File([out.blob], fileName, { type: out.blob.type || 'image/png' });
     try {
       if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file] }); return; }
     } catch (e) { if (e?.name === 'AbortError') return; }
@@ -182,6 +239,11 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         <h2>1枚ノートを作る</h2>
         <button type="button" className="nm-close" onClick={onClose}>閉じる</button>
       </div>
+      <div className="nm-mode" role="tablist" aria-label="作り方">
+        <button type="button" role="tab" aria-selected={mode === 'tpl'} onClick={() => save({ mode: 'tpl' })}>テンプレートで作る<small>すぐできる・何枚でも</small></button>
+        <button type="button" role="tab" aria-selected={mode === 'ai'} onClick={() => save({ mode: 'ai' })}>AIで作る<small>イラストに仕上げる</small></button>
+      </div>
+      {mode === 'ai' && <p className="nm-hint">{AI_NOTE}</p>}
 
       {tripsWithDone.length > 1 && (
         <label className="nm-field">フォルダ
@@ -212,9 +274,17 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         </ul>
       )}
 
-      <p className="nm-step">② デザインをえらぶ</p>
+      <p className="nm-step">② {mode === 'ai' ? '雰囲気をえらぶ' : 'デザインをえらぶ'}</p>
       <div className="nm-tpls" ref={boxRef}>
-        {TEMPLATES.map((t) => (
+        {mode === 'ai' && TEMPLATES.map((t) => (
+          <button key={t.id} type="button" className="nm-tpl" aria-pressed={note.tpl === t.id} onClick={() => save({ tpl: t.id, font: t.font })}>
+            <div className="nm-mini nm-ai-mini" style={{ backgroundImage: `url(/note/${t.id}-post.jpg)`, height: Math.round(thumbW * 1.25) }}>
+              <img src={`/note/${t.id}-camera.png`} alt="" />
+            </div>
+            <span>{t.label}</span>
+          </button>
+        ))}
+        {mode === 'tpl' && TEMPLATES.map((t) => (
           <button key={t.id} type="button" className="nm-tpl" aria-pressed={note.tpl === t.id} onClick={() => save({ tpl: t.id, font: t.font })}>
             <div className="nm-mini">
               <Scaled width={thumbW} size={size}>
@@ -229,17 +299,21 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         {SIZES.map((s) => <button key={s.id} type="button" className="nm-seg" aria-pressed={note.size === s.id} onClick={() => save({ size: s.id })}>{s.label}</button>)}
       </div>
 
-      <p className="nm-step">③ 文字（フォント）をえらぶ</p>
-      <div className="nm-fonts">
-        {FONTS.map((f) => (
-          <button key={f.id} type="button" className="nm-font" aria-pressed={note.font === f.id} onClick={() => save({ font: f.id })}>
-            <b style={{ fontFamily: `"${f.family}"` }}>旅ノート</b>
-            <small>{f.label}</small>
-          </button>
-        ))}
-      </div>
+      {mode === 'tpl' && (
+        <>
+          <p className="nm-step">③ 文字（フォント）をえらぶ</p>
+          <div className="nm-fonts">
+            {FONTS.map((f) => (
+              <button key={f.id} type="button" className="nm-font" aria-pressed={note.font === f.id} onClick={() => save({ font: f.id })}>
+                <b style={{ fontFamily: `"${f.family}"` }}>旅ノート</b>
+                <small>{f.label}</small>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
-      <p className="nm-step">④ タイトル・名前</p>
+      <p className="nm-step">{mode === 'ai' ? '③' : '④'} タイトル・名前</p>
       <label className="nm-field">タイトル<input value={note.title} maxLength={24} onChange={(e) => save({ title: e.target.value })} /></label>
       <div className="nm-2">
         <label className="nm-field">小見出し<input value={note.sub} maxLength={12} onChange={(e) => save({ sub: e.target.value })} /></label>
@@ -252,7 +326,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       <label className="nm-field">ひとこと<textarea value={note.words} maxLength={120} placeholder="例：また行きたい！次は夜市をもっと回りたい" onChange={(e) => save({ words: e.target.value })} /></label>
       {allPhotos.length > 0 && (
         <>
-          <p className="nm-hint">真ん中に大きく入れる写真</p>
+          <p className="nm-hint">{mode === 'ai' ? '主役の写真（あなたが写っている写真をえらぶと、あなたが真ん中に大きく描かれます）' : '真ん中に大きく入れる写真'}</p>
           <div className="nm-phs">
             <button type="button" className="nm-ph" aria-pressed={coverKey == null} onClick={() => save({ cover: null })} style={{ fontSize: 12, color: 'var(--sub)' }}>なし</button>
             {allPhotos.map((p) => (
@@ -261,9 +335,9 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           </div>
         </>
       )}
-      <label className="nm-check"><input type="checkbox" checked={!!note.logo} onChange={(e) => save({ logo: e.target.checked })} />Tabibiのロゴを入れる</label>
+      {mode === 'tpl' && <label className="nm-check"><input type="checkbox" checked={!!note.logo} onChange={(e) => save({ logo: e.target.checked })} />Tabibiのロゴを入れる</label>}
 
-      {spots.length > 0 && <p className="nm-step">⑤ 写真とコメント<small>写真は2枚まで。上から3つが「BEST 3」になります</small></p>}
+      {spots.length > 0 && <p className="nm-step">{mode === 'ai' ? '④' : '⑤'} 写真とコメント<small>{mode === 'ai' ? 'AIには1枚目の写真を使います' : '写真は2枚まで'}。上から3つが「BEST 3」になります</small></p>}
       {spots.map(({ s, it }, i) => {
         const keys = photoKeys(s);
         return (
@@ -294,16 +368,40 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         );
       })}
 
-      <p className="nm-step">⑥ できあがり</p>
-      <div className="nm-preview" style={{ width: boxW }}>
-        <Scaled width={boxW} size={size}>
-          <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} />
-        </Scaled>
-      </div>
-      {err && <p className="nm-err">{err}</p>}
-      <div className="nm-acts">
-        <button type="button" onClick={makeImage} disabled={busy || spots.length === 0} style={{ gridColumn: '1 / -1' }}>{busy ? '画像を作っています…' : '画像にする'}</button>
-      </div>
+      {mode === 'tpl' ? (
+        <>
+          <p className="nm-step">⑥ できあがり</p>
+          <div className="nm-preview" style={{ width: boxW }}>
+            <Scaled width={boxW} size={size}>
+              <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} />
+            </Scaled>
+          </div>
+          {err && <p className="nm-err">{err}</p>}
+          <div className="nm-acts">
+            <button type="button" onClick={makeImage} disabled={busy || spots.length === 0} style={{ gridColumn: '1 / -1' }}>{busy ? '画像を作っています…' : '画像にする'}</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="nm-step">⑤ AIで作る</p>
+          {!user ? (
+            <div className="nm-acts">
+              <p className="nm-hint" style={{ gridColumn: '1 / -1' }}>「AIで作る」はGoogleでログインすると使えます。</p>
+              <button type="button" onClick={onSignIn} style={{ gridColumn: '1 / -1' }}>Googleでログイン</button>
+            </div>
+          ) : (
+            <>
+              {err && <p className="nm-err">{err}</p>}
+              <div className="nm-acts">
+                <button type="button" className="nm-ai-btn" onClick={makeAi} disabled={busy || spots.length === 0 || left === 0} style={{ gridColumn: '1 / -1' }}>
+                  {busy ? 'AIが描いています…（30秒ほど）' : left === 0 ? '今日の回数を使い切りました' : 'AIで作る'}
+                  {!busy && left != null && left > 0 && <small>今日あと{left}回</small>}
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
       {out && (
         <div id="nm-out" className="nm-out nm">
           <img src={out.url} alt="できあがったノート" />

@@ -1374,7 +1374,7 @@ export default function Home() {
           )}
           {tab === 'done' && noteOpen && (
             <NoteMaker items={items} folders={allFolders} trip={trip} notes={notes} onSave={saveNote} unsorted={UNSORTED}
-              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => setNoteOpen(false)} />
+              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => setNoteOpen(false)} user={user} onSignIn={() => signIn()} />
           )}
           <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
