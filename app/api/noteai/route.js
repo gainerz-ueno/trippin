@@ -2,10 +2,7 @@
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
-import { createHash, timingSafeEqual } from 'node:crypto';
 // 【一時的】動作確認用（確認が終わったら消す）
-const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
-function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -289,10 +286,6 @@ export async function POST(req) {
     const b = body.box && typeof body.box === 'object' ? body.box : null;
     const n = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
     const box = mark && b ? { x0: n(b.x0), y0: n(b.y0), x1: n(b.x1), y1: n(b.y1) } : null;
-    if (box && body.alg === 'whole1' && isTest(req.headers.get('x-art-token'))) {
-      const p1 = [{ text: editPrompt({ instruction }) + '\nThe user drew a RED outline on the image around the part to change. Apply the change to what is inside the red outline, and remove the red outline completely in the result.' }, { inlineData: { mimeType: 'image/jpeg', data: mark } }];
-      return run(req, () => gen(p1, size === 'story' ? '9:16' : '4:5'));
-    }
     if (box) return run(req, () => editArea(base, mark, box, instruction));
     const parts = [{ text: editPrompt({ instruction }) }, { inlineData: { mimeType: 'image/jpeg', data: base } }];
     return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
@@ -331,7 +324,6 @@ export async function POST(req) {
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
 async function run(req, job) {
   const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
-  if (isTest(req.headers.get('x-art-token'))) { const o = await make(); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg' } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) {
