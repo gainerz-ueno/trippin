@@ -130,7 +130,7 @@ export async function GET(req) {
 
 function peopleLine(d) {
   if (!d.people.length || d.peopleStyle === 'none') return '';
-  return `- 「わたしたち」 corner (small, about 15% of the page, near a side or bottom - NOT the center): the travelers from the "us" reference photos, shown ${PEOPLE[d.peopleStyle] || PEOPLE.cutout}. Every person in those photos appears once.`;
+  return `- 「わたしたち」 corner (small, about 15% of the page, near a side or bottom - NOT the center): the travelers from the "us" reference photos, shown ${PEOPLE[d.peopleStyle] || PEOPLE.cutout}. Show exactly the people in those photos (${d.people.length} photo${d.people.length > 1 ? 's' : ''}), each person once - do NOT add any other person who is not in those photos.`;
 }
 
 // トリセツ型（スキル：insta-torisetsu-design）
