@@ -1,9 +1,9 @@
 'use client';
-// 行ったタブ：まず「1枚ノートを作る」。作ったノートがここにたまり、2枚たまったら「ガイドブックにまとめる」が出てくる
+// 行ったタブ：まず「タビセツを作る」。作ったタビセツがここにたまり、2枚たまったら「ガイドブックにまとめる」が出てくる
 import { useEffect, useState } from 'react';
 import { listPages, listGuides, guideUrls } from '../cloud';
 
-const NEED = 2; // ガイドブックにまとめられるノートの枚数
+const NEED = 2; // ガイドブックにまとめられるタビセツの枚数
 
 export default function NoteShelf({ user, onSignIn, onMakeNote, onMakeGuide, refreshKey }) {
   const [pages, setPages] = useState(null); // null＝読み込み中
@@ -30,18 +30,18 @@ export default function NoteShelf({ user, onSignIn, onMakeNote, onMakeGuide, ref
   return (
     <div className="shelf">
       <button type="button" className="nm-open shelf-make" onClick={onMakeNote}>
-        1枚ノートを作る<small>行った場所の写真と感想で、旅の1枚をつくる</small>
+        タビセツを作る<small>行った場所の写真と感想で、旅の1枚をつくる</small>
       </button>
 
       <div className="shelf-box">
         <div className="shelf-head">
-          <b>わたしのノート</b>
+          <b>わたしのタビセツ</b>
           {user && pages && <span>{n}枚</span>}
         </div>
 
         {!user && (
           <>
-            <p className="shelf-hint">作ったノートは、Googleでログインすると保存してためておけます。{NEED}枚たまると、ガイドブックにまとめられます。</p>
+            <p className="shelf-hint">作ったタビセツは、Googleでログインすると保存してためておけます。{NEED}枚たまると、ガイドブックにまとめられます。</p>
             <button type="button" className="shelf-sub" onClick={onSignIn}>Googleでログイン</button>
           </>
         )}
@@ -57,7 +57,7 @@ export default function NoteShelf({ user, onSignIn, onMakeNote, onMakeGuide, ref
         )}
 
         {user && pages && n === 0 && (
-          <p className="shelf-hint">ノートができたら「わたしのノートに保存」を押すと、ここにたまります。{NEED}枚たまると、ガイドブックにまとめられます。</p>
+          <p className="shelf-hint">タビセツができたら「わたしのタビセツに保存」を押すと、ここにたまります。{NEED}枚たまると、ガイドブックにまとめられます。</p>
         )}
 
         {user && pages && n > 0 && n < NEED && (
@@ -68,7 +68,7 @@ export default function NoteShelf({ user, onSignIn, onMakeNote, onMakeGuide, ref
         )}
 
         {user && n >= NEED && (
-          <button type="button" className="nm-open guide shelf-guide" onClick={onMakeGuide}>ガイドブックにまとめる<small>ノート{n}枚から選んで1冊に</small></button>
+          <button type="button" className="nm-open guide shelf-guide" onClick={onMakeGuide}>ガイドブックにまとめる<small>タビセツ{n}枚から選んで1冊に</small></button>
         )}
 
         {user && guides > 0 && (

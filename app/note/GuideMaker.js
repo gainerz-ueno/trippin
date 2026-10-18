@@ -1,5 +1,5 @@
 'use client';
-// 自分のガイドブック：保存した1枚ノートを選んで並べ、表紙（テンプレート／AI）をつけて1冊にする
+// 自分のガイドブック：保存したタビセツを選んで並べ、表紙（テンプレート／AI）をつけて1冊にする
 import { useEffect, useRef, useState } from 'react';
 import './note.css';
 import CoverCanvas from './CoverCanvas';
@@ -13,7 +13,7 @@ const keyOf = (p) => p.cloudId || 'L' + p.id;
 const blank = (author = '') => ({ id: null, title: '', author, description: '', page_ids: [], cover_id: null, published: true });
 
 export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn, onClose, unsorted }) {
-  const [pages, setPages] = useState(null); // 保存したノート・表紙
+  const [pages, setPages] = useState(null); // 保存したタビセツ・表紙
   const [urls, setUrls] = useState({});
   const [guides, setGuides] = useState([]);
   const [g, setG] = useState(blank());
@@ -205,7 +205,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
 
       <p className="nm-step">② ページをえらぶ<small>えらんだ順に並びます（{sel.length}ページ）</small></p>
       {notes.length === 0 ? (
-        <p className="nm-hint">まだ保存したノートがありません。「1枚ノートを作る」で画像にしたあと「わたしのノートに保存」を押すと、ここに並びます。</p>
+        <p className="nm-hint">まだ保存したタビセツがありません。「タビセツを作る」で画像にしたあと「わたしのタビセツに保存」を押すと、ここに並びます。</p>
       ) : (
         <div className="gm-grid">
           {notes.map((p) => {
@@ -269,7 +269,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
         <div className="nm-fonts">
           {FONTS.map((f) => (
             <button key={f.id} type="button" className="nm-font" aria-pressed={cv.font === f.id} onClick={() => setCv({ ...cv, font: f.id })}>
-              <b style={{ fontFamily: `"${f.family}"` }}>旅ノート</b><small>{f.label}</small>
+              <b style={{ fontFamily: `"${f.family}"` }}>タビセツ</b><small>{f.label}</small>
             </button>
           ))}
         </div>

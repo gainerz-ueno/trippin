@@ -1,5 +1,5 @@
 'use client';
-// 1枚ノート・ガイドブックで共通に使うもの
+// タビセツ・ガイドブックで共通に使うもの
 import { supa } from '../cloud';
 import { embedCss } from './fonts';
 
@@ -44,7 +44,7 @@ export async function renderNode(node, size, fontId) {
   return blob;
 }
 
-// 「AIで作る」（ノート・表紙）。成功すると画像（JPEG）が返る
+// 「AIで作る」（タビセツ・表紙）。成功すると画像（JPEG）が返る
 export async function callAi(body) {
   const t = await accessToken();
   if (!t) throw new Error('「AIで作る」はGoogleでログインすると使えます');

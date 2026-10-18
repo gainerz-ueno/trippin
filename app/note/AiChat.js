@@ -1,5 +1,5 @@
 'use client';
-// 1枚ノートを作る：はじめから最後までチャットボット。
+// タビセツを作る：はじめから最後までチャットボット。
 // 最初は「テンプレートで作る／AIで作る」の質問だけ。答えると、ボットが「入力中…」のあと次の質問がふわっと出てくる
 import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, SIZES } from './NoteCanvas';
@@ -116,7 +116,7 @@ export default function ChatFlow(props) {
       Q.push({ id: 'login', bot: '「AIで作る」は、Googleでログインすると使えるよ', ui: () => <div className="as-chips"><button type="button" className="as-ok" onClick={onSignIn}>Googleでログイン</button></div> });
     }
     if (trips.length > 1) {
-      Q.push({ id: 'folder', bot: 'どの旅のノートにする？', ui: () => chips(trips.map((f) => [f, f]), (v) => { setTrip(v); answer('folder', v); }) });
+      Q.push({ id: 'folder', bot: 'どの旅のタビセツにする？', ui: () => chips(trips.map((f) => [f, f]), (v) => { setTrip(v); answer('folder', v); }) });
     }
     if (!doneHere.length) {
       Q.push({ id: 'none', bot: 'このフォルダにはまだ「行った」お店がないよ。先に「行った」に入れてね', ui: () => null });
@@ -166,7 +166,7 @@ export default function ChatFlow(props) {
           <div className="nm-fonts">
             {FONTS.map((f) => (
               <button key={f.id} type="button" className="nm-font" onClick={() => answer('font', f.label, { font: f.id })}>
-                <b style={{ fontFamily: `"${f.family}"` }}>旅ノート</b><small>{f.label}</small>
+                <b style={{ fontFamily: `"${f.family}"` }}>タビセツ</b><small>{f.label}</small>
               </button>
             ))}
           </div>

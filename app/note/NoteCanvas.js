@@ -1,5 +1,5 @@
 'use client';
-// 1枚ノート（旅の取扱説明書）の見た目。幅1080pxで作って、そのまま画像にする
+// タビセツ（旅の取扱説明書）の見た目。幅1080pxで作って、そのまま画像にする
 // テンプレートごとに並べ方から別のデザイン。背景の絵・ステッカーは public/note/ に用意してある
 import { fontOf } from './fonts';
 
@@ -8,7 +8,7 @@ export const TEMPLATES = [
   { id: 'water', label: '水彩フラワー', font: 'klee' },
   { id: 'sky', label: '青空', font: 'maru' },
   { id: 'vintage', label: 'ヴィンテージ', font: 'mincho' },
-  { id: 'notebook', label: 'ノート', font: 'yomogi' },
+  { id: 'notebook', label: '日記帳', font: 'yomogi' },
   { id: 'collage', label: 'コラージュ', font: 'yusei' },
 ];
 export const SIZES = [
@@ -236,7 +236,7 @@ function Vintage({ note, tpl, spots, coverUrl, info, best }) {
   );
 }
 
-// ---------- ノート：写真をテープで貼った日記 ----------
+// ---------- 日記帳：写真をテープで貼った日記 ----------
 function Notebook({ note, tpl, spots, coverUrl, info, best }) {
   const pics = [coverUrl, ...spots.map((s) => s.urls[0])].filter((u, i, a) => u && a.indexOf(u) === i).slice(0, 4);
   const k = pics.length;

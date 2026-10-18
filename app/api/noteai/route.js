@@ -1,4 +1,4 @@
-// 「AIで作る」1枚ノート：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
+// 「AIで作る」タビセツ：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';

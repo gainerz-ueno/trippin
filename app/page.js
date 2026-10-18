@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import MapView from './MapView';
-// 1枚ノート（開いたときだけ読み込む）
+// タビセツ（開いたときだけ読み込む）
 const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
 const GuideMaker = dynamic(() => import('./note/GuideMaker'), { ssr: false });
 const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
@@ -753,9 +753,9 @@ export default function Home() {
   const useNear = !!(hotel && nearHotel && hotel.lat != null);
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
-  const [notes, setNotes] = useState({}); // フォルダごとの1枚ノート
+  const [notes, setNotes] = useState({}); // フォルダごとのタビセツ
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
-  const [shelfKey, setShelfKey] = useState(0); // わたしのノートを読み直す合図
+  const [shelfKey, setShelfKey] = useState(0); // わたしのタビセツを読み直す合図
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
   const [photoBusy, setPhotoBusy] = useState(null);
@@ -870,7 +870,7 @@ export default function Home() {
           setFolders((prev) => [...new Set([...(cloudSettings.folders || []), ...prev])]);
           setCustomCats((prev) => [...new Set([...(cloudSettings.customCats || []), ...prev])]);
           if (cloudSettings.hotel !== undefined) setHotel(cloudSettings.hotel || null);
-          // ノートはフォルダごとに新しいほうを使う
+          // タビセツはフォルダごとに新しいほうを使う
           if (Array.isArray(cloudSettings.prompts)) setPrompts((prev) => [...prev, ...cloudSettings.prompts.filter((c) => !prev.some((p) => p.name === c.name))].slice(0, 20));
           if (cloudSettings.notes) setNotes((prev) => {
             const out = { ...prev };

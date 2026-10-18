@@ -183,7 +183,7 @@ export async function fetchShared(id) {
   return data; // { folder, items } または null
 }
 
-// ---- 自分のガイドブック（保存したノート＝ページ、表紙、ガイドブック） ----
+// ---- 自分のガイドブック（保存したタビセツ＝ページ、表紙、ガイドブック） ----
 const GUIDE = 'guide';
 const newUuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
 
