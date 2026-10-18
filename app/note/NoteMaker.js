@@ -14,7 +14,7 @@ export function defaultNote(trip, items, unsorted) {
   const done = items.filter((i) => i.done && i.trip === trip).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
   return {
     tpl: 'lovely', font: 'hachimaru', size: 'post',
-    title: trip === unsorted ? '旅のノート' : `${trip}の旅`, sub: 'TRAVEL NOTE', by: '', date: '', words: '', logo: true, cover: null,
+    title: trip === unsorted ? '旅のノート' : `${trip}の旅`, sub: '旅の取扱説明書', by: '', who: '', date: '', words: '', logo: true,
     spots: done.slice(0, MAX).map((i) => ({ id: i.id, text: null, photos: null })),
     updatedAt: 0,
   };
@@ -92,9 +92,12 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     if (s.photos) return s.photos.filter((k) => list.some((p) => p.key === k));
     return list.length ? [list[0].key] : [];
   };
+  const place = trip === unsorted ? '' : trip;
   const urlOf = (id, k) => (photoMap[id] || []).find((p) => p.key === k)?.url;
   const allPhotos = spots.flatMap(({ it }) => (photoMap[it.id] || []).map((p) => ({ ...p, id: it.id })));
-  const coverUrl = note.cover ? allPhotos.find((p) => p.key === note.cover)?.url || null : null;
+  // 主役の写真：えらんでいなければ1枚目の写真（「なし」をえらんだら null）
+  const coverUrl = note.cover === null ? null : (note.cover ? allPhotos.find((p) => p.key === note.cover)?.url : null) || allPhotos[0]?.url || null;
+  const coverKey = note.cover === null ? null : (note.cover && allPhotos.some((p) => p.key === note.cover) ? note.cover : allPhotos[0]?.key);
 
   const canvasSpots = spots.map(({ s, it }) => ({
     it, text: (s.text ?? it.review ?? '').trim(), urls: photoKeys(s).map((k) => urlOf(it.id, k)).filter(Boolean),
@@ -215,7 +218,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           <button key={t.id} type="button" className="nm-tpl" aria-pressed={note.tpl === t.id} onClick={() => save({ tpl: t.id, font: t.font })}>
             <div className="nm-mini">
               <Scaled width={thumbW} size={size}>
-                <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} />
+                <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} />
               </Scaled>
             </div>
             <span>{t.label}</span>
@@ -239,25 +242,28 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       <p className="nm-step">④ タイトル・名前</p>
       <label className="nm-field">タイトル<input value={note.title} maxLength={24} onChange={(e) => save({ title: e.target.value })} /></label>
       <div className="nm-2">
-        <label className="nm-field">小見出し<input value={note.sub} maxLength={24} onChange={(e) => save({ sub: e.target.value })} /></label>
+        <label className="nm-field">小見出し<input value={note.sub} maxLength={12} onChange={(e) => save({ sub: e.target.value })} /></label>
         <label className="nm-field">日付<input value={note.date} maxLength={24} placeholder="例：2026.10" onChange={(e) => save({ date: e.target.value })} /></label>
       </div>
-      <label className="nm-field">名前（by ◯◯）<input value={note.by} maxLength={20} placeholder="例：のり" onChange={(e) => save({ by: e.target.value })} /></label>
+      <div className="nm-2">
+        <label className="nm-field">だれと<input value={note.who || ''} maxLength={20} placeholder="例：友だち3人" onChange={(e) => save({ who: e.target.value })} /></label>
+        <label className="nm-field">書いた人<input value={note.by} maxLength={20} placeholder="例：のり" onChange={(e) => save({ by: e.target.value })} /></label>
+      </div>
       <label className="nm-field">ひとこと<textarea value={note.words} maxLength={120} placeholder="例：また行きたい！次は夜市をもっと回りたい" onChange={(e) => save({ words: e.target.value })} /></label>
       {allPhotos.length > 0 && (
         <>
-          <p className="nm-hint">タイトルの横に入れる写真（なしでもOK）</p>
+          <p className="nm-hint">真ん中に大きく入れる写真</p>
           <div className="nm-phs">
-            <button type="button" className="nm-ph" aria-pressed={!note.cover} onClick={() => save({ cover: null })} style={{ fontSize: 12, color: 'var(--sub)' }}>なし</button>
+            <button type="button" className="nm-ph" aria-pressed={coverKey == null} onClick={() => save({ cover: null })} style={{ fontSize: 12, color: 'var(--sub)' }}>なし</button>
             {allPhotos.map((p) => (
-              <button key={p.key} type="button" className="nm-ph" aria-pressed={note.cover === p.key} onClick={() => save({ cover: p.key })}><img src={p.url} alt="" /></button>
+              <button key={p.key} type="button" className="nm-ph" aria-pressed={coverKey === p.key} onClick={() => save({ cover: p.key })}><img src={p.url} alt="" /></button>
             ))}
           </div>
         </>
       )}
       <label className="nm-check"><input type="checkbox" checked={!!note.logo} onChange={(e) => save({ logo: e.target.checked })} />Tabibiのロゴを入れる</label>
 
-      {spots.length > 0 && <p className="nm-step">⑤ 写真とコメント<small>写真は2枚まで</small></p>}
+      {spots.length > 0 && <p className="nm-step">⑤ 写真とコメント<small>写真は2枚まで。上から3つが「BEST 3」になります</small></p>}
       {spots.map(({ s, it }, i) => {
         const keys = photoKeys(s);
         return (
@@ -291,7 +297,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       <p className="nm-step">⑥ できあがり</p>
       <div className="nm-preview" style={{ width: boxW }}>
         <Scaled width={boxW} size={size}>
-          <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} />
+          <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} />
         </Scaled>
       </div>
       {err && <p className="nm-err">{err}</p>}

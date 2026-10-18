@@ -29,7 +29,7 @@ export async function middleware(req) {
   const { pathname } = req.nextUrl;
   if (pathname === '/login' || pathname === '/api/login') return NextResponse.next();
   // 共有リンク（/s/...）は、パスワードなしで誰でも見られる。見るのに使う地図の鍵とお店の写真も同じ
-  if (pathname.startsWith('/s/') || pathname === '/api/mapkey' || pathname === '/api/noteart') return NextResponse.next();
+  if (pathname.startsWith('/s/') || pathname === '/api/mapkey') return NextResponse.next();
   if (pathname === '/api/photo') {
     if (tooMany(ipOf(req), 200, 'photo:')) return new NextResponse('too many', { status: 429 });
     return NextResponse.next();
