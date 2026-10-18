@@ -81,7 +81,7 @@ function FreeInput({ ph, onSend, max = 120 }) {
   );
 }
 
-export default function AiStudio({ note, save, buildBody, user, onSignIn, left, refreshLeft, onImage, hasOut, prompts, onPrompts, busy, setBusy, hideSub }) {
+export default function AiStudio({ note, save, buildBody, user, onSignIn, left, refreshLeft, onImage, hasOut, prompts, onPrompts, busy, setBusy, hideSub, bare }) {
   const sub = note.aiSub || 'auto';
   const prefs = note.aiPrefs || prefDefault(note.tpl);
   const chat = note.aiChat || { answers: {}, prompt: '', edited: false, done: false };
@@ -118,10 +118,10 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
     setBusy(true); setErr('');
     try {
       const body = await buildBody();
-      body.photo = 'real';
-      body.peopleStyle = 'cutout';
-      if (sub === 'pick') { body.prefs = prefs; body.photo = prefs.photo === 'redraw' ? 'redraw' : 'real'; body.peopleStyle = ['cutout', 'likeness', 'chibi', 'none'].includes(prefs.hero) ? prefs.hero : 'cutout'; }
-      if (sub === 'chat') { body.custom = prompt.slice(0, 1200); body.photo = /イラストに描き直す/.test(prompt) ? 'redraw' : 'real';
+      if (!bare) { body.photo = 'real'; body.peopleStyle = 'cutout'; }
+      if (bare) { /* チャットで集めた内容をそのまま使う */ }
+      else if (sub === 'pick') { body.prefs = prefs; body.photo = prefs.photo === 'redraw' ? 'redraw' : 'real'; body.peopleStyle = ['cutout', 'likeness', 'chibi', 'none'].includes(prefs.hero) ? prefs.hero : 'cutout'; }
+      else if (sub === 'chat') { body.custom = prompt.slice(0, 1200); body.photo = /イラストに描き直す/.test(prompt) ? 'redraw' : 'real';
         body.peopleStyle = /写真は入れない/.test(prompt) ? 'none' : /ミニキャラ/.test(prompt) ? 'chibi' : /似顔絵/.test(prompt) ? 'likeness' : 'cutout'; }
       const blob = await callAi(body);
       const v = { url: URL.createObjectURL(blob), blob };
@@ -179,9 +179,9 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
         ))}
       </div>}
 
-      {sub === 'auto' && <p className="nm-hint">えらんだ雰囲気で、AIがおまかせで仕上げます。</p>}
+      {!bare && sub === 'auto' && <p className="nm-hint">えらんだ雰囲気で、AIがおまかせで仕上げます。</p>}
 
-      {sub === 'pick' && (
+      {!bare && sub === 'pick' && (
         <div className="as-pick">
           {PREF_GROUPS.map(([k, label, opts]) => (
             <div key={k} className="as-pg">
@@ -200,7 +200,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
         </div>
       )}
 
-      {sub === 'chat' && (
+      {!bare && sub === 'chat' && (
         <div className="as-chat">
           {prompts.length > 0 && (
             <div className="as-mine">
@@ -260,7 +260,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
 
       {err && <p className="nm-err">{err}</p>}
       <div className="nm-acts">
-        <button type="button" className="nm-ai-btn" onClick={generate} disabled={!canMake || (sub === 'chat' && !(chat.done || chat.edited))} style={{ gridColumn: '1 / -1' }}>
+        <button type="button" className="nm-ai-btn" onClick={generate} disabled={!canMake || (!bare && sub === 'chat' && !(chat.done || chat.edited))} style={{ gridColumn: '1 / -1' }}>
           {makeLabel}
           {!busy && left != null && left > 0 && <small>今日あと{left}回（直すときも1回に数えます）</small>}
         </button>

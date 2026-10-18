@@ -6,6 +6,7 @@ import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
 import { FONTS, loadFont } from './fonts';
 import { Scaled, toB64, renderNode, aiLeft, downloadBlob, shareBlob } from './util';
 import AiStudio from './AiStudio';
+import AiChat, { aiOptions } from './AiChat';
 import { addPhotos, listPhotos } from '../photos';
 import { ensurePhotos, savePage } from '../cloud';
 
@@ -164,6 +165,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   async function buildBody() {
     return {
       tpl: note.tpl, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
+      ...aiOptions(note),
       cover: await toB64(coverUrl),
       people: await Promise.all(peopleUrls.map((u) => toB64(u, 768))),
       spots: await Promise.all(canvasSpots.map(async (sp) => ({
@@ -198,24 +200,15 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   useEffect(() => { setSaved(''); }, [out]);
   useEffect(() => () => { if (out) URL.revokeObjectURL(out.url); }, [out]);
 
-  // AIで作る：1画面ずつ進む
-  const AI_STEPS = ['作り方', 'お店', '写真', '文字', '作る'];
-  const [aiStep, setAiStep] = useState(1);
-  const panelRef = useRef(null);
-  function goStep(n) {
-    setAiStep(Math.max(1, Math.min(5, n)));
-    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 30);
-  }
   const ai = mode === 'ai';
-  const show = (n) => !ai || aiStep === n;
-  const aiSub = note.aiSub || 'auto';
+  const show = () => !ai;
 
   const size = sizeOf(note.size);
   const thumbW = Math.max(60, Math.floor((boxW - 20 - 48) / 3)); // すき間10px×2、枠と余白16px×3
   const canShare = typeof navigator !== 'undefined' && !!navigator.share;
 
   return (
-    <div className="nm panel" ref={panelRef}>
+    <div className="nm panel">
       <div className="nm-head">
         <h2>1枚ノートを作る</h2>
         <button type="button" className="nm-close" onClick={onClose}>閉じる</button>
@@ -224,28 +217,6 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         <button type="button" role="tab" aria-selected={mode === 'tpl'} onClick={() => save({ mode: 'tpl' })}>テンプレートで作る<small>すぐできる・何枚でも</small></button>
         <button type="button" role="tab" aria-selected={mode === 'ai'} onClick={() => save({ mode: 'ai' })}>AIで作る<small>イラストに仕上げる</small></button>
       </div>
-      {ai && (
-        <div className="wz-bar">
-          {AI_STEPS.map((l, i) => (
-            <button key={l} type="button" className={'wz-dot' + (aiStep === i + 1 ? ' on' : aiStep > i + 1 ? ' done' : '')} onClick={() => goStep(i + 1)}>
-              <b>{i + 1}</b><span>{l}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {ai && aiStep === 1 && (
-        <>
-          <p className="nm-step">1 / 5　作り方をえらぶ</p>
-          <p className="nm-hint">{AI_NOTE}</p>
-          <div className="wz-subs">
-            {[['auto', 'おまかせ', '雰囲気をえらぶだけ。いちばんかんたん'], ['pick', '好みを選ぶ', '絵のタッチ・色・文字などをボタンでえらぶ'], ['chat', 'チャットで作る', 'ボットの質問に答えて、自分だけのプロンプトを作る']].map(([k, l, d]) => (
-              <button key={k} type="button" aria-pressed={aiSub === k} onClick={() => saveKeep({ aiSub: k })}><b>{l}</b><small>{d}</small></button>
-            ))}
-          </div>
-        </>
-      )}
-
       {show(2) && tripsWithDone.length > 1 && (
         <label className="nm-field">フォルダ
           <select value={trip} onChange={(e) => { setTrip(e.target.value); setOut(null); }} style={{ font: 'inherit', fontSize: 16, padding: '8px 10px', borderRadius: 10, border: '1px solid var(--line)', background: 'var(--card)', color: 'var(--ink)' }}>
@@ -329,7 +300,6 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       </div>
       <label className="nm-field">ひとこと<textarea value={note.words} maxLength={120} placeholder="例：また行きたい！次は夜市をもっと回りたい" onChange={(e) => save({ words: e.target.value })} /></label>
       </>)}
-      {ai && aiStep === 3 && <p className="nm-step">3 / 5　写真をえらぶ</p>}
       {show(3) && allPhotos.length > 0 && (
         <>
           <p className="nm-hint">メインの写真（真ん中に大きく入れる、景色や料理の写真）</p>
@@ -341,30 +311,9 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           </div>
         </>
       )}
-      {ai && aiStep === 3 && (
-        <>
-          <p className="nm-hint">わたしたちの写真（3枚まで。すみに小さめに入ります）</p>
-          <div className="nm-phs">
-            {peoplePool.map((p) => {
-              const n = peopleKeys.indexOf(p.key);
-              return (
-                <button key={'pp' + p.key} type="button" className="nm-ph" aria-pressed={n >= 0} onClick={() => togglePeople(p.key)}>
-                  <img src={p.url} alt="" />{n >= 0 && <i>{n + 1}</i>}
-                </button>
-              );
-            })}
-            <label className="nm-add">
-              {peopleBusy ? '保存中…' : <>＋<br />写真を追加</>}
-              <input type="file" accept="image/*" multiple hidden onChange={(e) => { addPeople(e.target.files); e.target.value = ''; }} />
-            </label>
-          </div>
-        </>
-      )}
       {mode === 'tpl' && <label className="nm-check"><input type="checkbox" checked={!!note.logo} onChange={(e) => save({ logo: e.target.checked })} />Tabibiのロゴを入れる</label>}
 
       {!ai && spots.length > 0 && <p className="nm-step">⑤ 写真とコメント<small>写真は2枚まで。上から3つが「BEST 3」になります</small></p>}
-      {ai && aiStep === 3 && spots.length > 0 && <p className="nm-hint">お店ごとの写真（2枚まで）</p>}
-      {ai && aiStep === 4 && spots.length > 0 && <p className="nm-hint">お店ごとのコメント（「行った」の感想・メモが入っています）</p>}
       {(show(3) || show(4)) && spots.map(({ s, it }, i) => {
         const keys = photoKeys(s);
         return (
@@ -408,22 +357,18 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
             <button type="button" onClick={makeImage} disabled={busy || spots.length === 0} style={{ gridColumn: '1 / -1' }}>{busy ? '画像を作っています…' : '画像にする'}</button>
           </div>
         </>
-      ) : aiStep !== 5 ? (
-        <div className="wz-nav">
-          {aiStep > 1 ? <button type="button" className="sub" onClick={() => goStep(aiStep - 1)}>戻る</button> : <span />}
-          <button type="button" onClick={() => goStep(aiStep + 1)} disabled={aiStep === 2 && spots.length === 0}>次へ</button>
-        </div>
       ) : (
-        <>
-          <p className="nm-step">5 / 5　{aiSub === 'pick' ? '好みを選んで作る' : aiSub === 'chat' ? 'チャットで作る' : 'AIで作る'}</p>
+        <AiChat note={note} save={saveKeep} user={user} onSignIn={onSignIn} doneHere={doneHere} spots={spots} photoMap={photoMap}
+          toggleSpot={toggleSpot} togglePhoto={togglePhoto} photoKeys={photoKeys} addMore={addMore} addBusy={addBusy}
+          allPhotos={allPhotos} coverKey={coverKey} peoplePool={peoplePool} peopleKeys={peopleKeys} togglePeople={togglePeople}
+          addPeople={addPeople} peopleBusy={peopleBusy} prompts={prompts} onPrompts={onPrompts} max={MAX}>
           <AiStudio note={note} save={saveKeep} buildBody={buildBody} user={user} onSignIn={onSignIn}
             left={left} refreshLeft={loadLeft} busy={busy} setBusy={setBusy}
             onImage={(blob) => setOut((o) => { if (o) URL.revokeObjectURL(o.url); return { url: URL.createObjectURL(blob), blob, ext: 'jpg' }; })}
-            hasOut={!!out} prompts={prompts} onPrompts={onPrompts} hideSub />
-          <div className="wz-nav"><button type="button" className="sub" onClick={() => goStep(4)}>戻る</button></div>
-        </>
+            hasOut={!!out} prompts={prompts} onPrompts={onPrompts} hideSub bare />
+        </AiChat>
       )}
-      {out && (!ai || aiStep === 5) && (
+      {out && (
         <div id="nm-out" className="nm-out nm">
           {mode !== 'ai' && <img src={out.url} alt="できあがったノート" />}
           <p className="nm-hint">{mode === 'ai' ? 'いまえらんでいる絵を保存・シェアします。' : '画像を長押しして保存することもできます。'}</p>
