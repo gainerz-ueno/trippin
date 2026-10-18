@@ -164,7 +164,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   // AIに渡す中身（写真と文字）
   async function buildBody() {
     return {
-      tpl: note.tpl, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
+      tpl: note.tpl, taste: note.aiTaste, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
       ...aiOptions(note),
       cover: await toB64(coverUrl),
       people: await Promise.all(peopleUrls.map((u) => toB64(u, 768))),

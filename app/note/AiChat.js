@@ -3,6 +3,7 @@
 // 最初は「テンプレートで作る／AIで作る」の質問だけ。答えると、ボットが「入力中…」のあと次の質問がふわっと出てくる
 import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, SIZES } from './NoteCanvas';
+import { TASTES } from './tastes';
 import { FONTS } from './fonts';
 
 const TYPES = ['トリセツ風ポスター', '旅の雑誌の1ページ', '絵日記', '映画のポスター風'];
@@ -32,7 +33,7 @@ export function aiOptions(note) {
 export function briefText(note) {
   const st = note.aiStyle || 'auto';
   const pr = note.aiPrefs || {};
-  const tpl = TEMPLATES.find((t) => t.id === note.tpl)?.label || '';
+  const tpl = TASTES.find((t) => t.id === note.aiTaste)?.label || TEMPLATES.find((t) => t.id === note.tpl)?.label || '';
   if (st === 'mine') return note.aiCustom || '';
   const lines = [];
   if (st === 'pick') {
@@ -144,11 +145,11 @@ export default function ChatFlow(props) {
       Q.push({
         id: 'tpl', bot: '雰囲気はどれにする？',
         ui: () => (
-          <div className="ac-tpls">
-            {TEMPLATES.map((t) => (
-              <button key={t.id} type="button" onClick={() => answer('tpl', t.label, { tpl: t.id, font: t.font })}>
-                <span className="nm-ai-mini" style={{ backgroundImage: `url(/note/${t.id}-post.jpg)` }}><img src={`/note/${t.id}-camera.png`} alt="" /></span>
-                <b>{t.label}</b>
+          <div className="ac-tpls ac-tastes">
+            {TASTES.map((t) => (
+              <button key={t.id} type="button" onClick={() => answer('tpl', t.label, { tpl: t.tpl, font: t.font, aiTaste: t.id })}>
+                <img className="ac-taste-img" src={`/note/taste-${t.id}.jpg`} alt="" loading="lazy" />
+                <b>{t.label}</b><small>{t.sub}</small>
               </button>
             ))}
           </div>

@@ -453,3 +453,7 @@
 .mk canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
 .mk-me{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
 .mk-me img{width:120px;border-radius:8px;border:2px solid rgba(255,255,255,.8)}
+
+.ac-tastes{grid-template-columns:repeat(2,1fr)}
+.ac-tastes .ac-taste-img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:8px;display:block;background:#eee}
+.ac-tastes small{font-size:11px;opacity:.7;margin-top:-3px}
