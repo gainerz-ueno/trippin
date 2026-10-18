@@ -210,7 +210,7 @@ function areaPrompt(d) {
     'The SECOND image is the same part with a RED outline drawn by the user around the thing to change. The change is about what is inside the red outline.',
     'Make the change clearly and visibly - the user must be able to see the difference at a glance. Returning the image unchanged is a failure.',
     'If the user asks to make something bigger, enlarge it a lot (about 1.5 times) and move or shrink the things next to it to make room. If they ask to remove something, fill the space naturally with the background.',
-    'Near the edges of the image keep everything exactly as it is (same position, colors and background), because this part will be pasted back into the poster.',
+    'Only along the very outer border of the image (a thin strip) keep the background the same, because this part will be pasted back into the poster. Inside, you may move, resize and redraw freely to make the change.',
     'The result must NOT contain any red outline or marking. All Japanese text must stay correct and clearly legible. No logos, watermarks or words like "PHOTO".',
     'Keep the same aspect ratio and fill the whole canvas edge to edge.',
   ].join('\n');
@@ -222,7 +222,7 @@ async function editArea(base, mark, box, instruction) {
   const { width: W, height: H } = await sharp(bb).metadata();
   // 囲んだ範囲のまわりに少し余白をとり、AIが描ける縦横比に合わせる
   let x0 = (box.x0 / 100) * W, x1 = (box.x1 / 100) * W, y0 = (box.y0 / 100) * H, y1 = (box.y1 / 100) * H;
-  const m = 0.08 * Math.min(W, H);
+  const m = 0.12 * Math.min(W, H);
   x0 -= m; x1 += m; y0 -= m; y1 += m;
   let w = Math.max(x1 - x0, W * 0.4), h = Math.max(y1 - y0, W * 0.4);
   const r = w / h;
