@@ -16,11 +16,11 @@ export function Scaled({ width, children, size }) {
 }
 
 // 画像AIに渡す写真（長い辺1024pxのJPEG）
-export async function toB64(url) {
+export async function toB64(url, max = 1024) {
   if (!url) return null;
   const blob = await (await fetch(url)).blob();
   const bmp = await createImageBitmap(blob);
-  const k = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
+  const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas');
   c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);

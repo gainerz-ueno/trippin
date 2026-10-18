@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import './note.css';
 import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
 import { FONTS, loadFont } from './fonts';
-import { Scaled, toB64, renderNode, callAi, aiLeft, downloadBlob, shareBlob } from './util';
+import { Scaled, toB64, renderNode, aiLeft, downloadBlob, shareBlob } from './util';
+import AiStudio from './AiStudio';
 import { addPhotos, listPhotos } from '../photos';
 import { ensurePhotos, savePage } from '../cloud';
 
@@ -24,7 +25,7 @@ export function defaultNote(trip, items, unsorted) {
 // AIで作るときの雰囲気の見本（テンプレートの背景の絵）
 const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
 
-export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn }) {
+export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn, prompts = [], onPrompts }) {
   const tripsWithDone = folders.filter((f) => items.some((i) => i.done && i.trip === f));
   const [trip, setTrip] = useState(tripsWithDone.includes(trip0) ? trip0 : tripsWithDone[0] || trip0);
   const note = notes[trip] || defaultNote(trip, items, unsorted);
@@ -135,23 +136,18 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   async function loadLeft() { const n = await aiLeft(); if (n != null) setLeft(n); }
   useEffect(() => { if (mode === 'ai' && user) loadLeft(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [mode, user?.id]);
 
-  async function makeAi() {
-    setBusy(true); setErr(''); setOut(null);
-    try {
-      const body = {
-        tpl: note.tpl, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
-        cover: await toB64(coverUrl),
-        spots: await Promise.all(canvasSpots.map(async (sp) => ({
-          name: sp.it.altName || sp.it.name, cat: sp.it.category || '', text: sp.text, img: await toB64(sp.urls[0]),
-        }))),
-      };
-      const blob = await callAi(body);
-      setOut({ url: URL.createObjectURL(blob), blob, ext: 'jpg' });
-      setTimeout(() => document.getElementById('nm-out')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-    } catch (e) { setErr(e.message || 'AIで作れませんでした'); }
-    setBusy(false);
-    loadLeft();
+  // AIに渡す中身（写真と文字）
+  async function buildBody() {
+    return {
+      tpl: note.tpl, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
+      cover: await toB64(coverUrl),
+      spots: await Promise.all(canvasSpots.map(async (sp) => ({
+        name: sp.it.altName || sp.it.name, cat: sp.it.category || '', text: sp.text, img: await toB64(sp.urls[0]),
+      }))),
+    };
   }
+  // AIの画面での変更（できた絵は消さない）
+  function saveKeep(patch) { onSave(trip, { ...note, ...patch, updatedAt: Date.now() }); }
 
   async function makeImage() {
     setBusy(true); setErr(''); setOut(null);
@@ -331,28 +327,16 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       ) : (
         <>
           <p className="nm-step">⑤ AIで作る</p>
-          {!user ? (
-            <div className="nm-acts">
-              <p className="nm-hint" style={{ gridColumn: '1 / -1' }}>「AIで作る」はGoogleでログインすると使えます。</p>
-              <button type="button" onClick={onSignIn} style={{ gridColumn: '1 / -1' }}>Googleでログイン</button>
-            </div>
-          ) : (
-            <>
-              {err && <p className="nm-err">{err}</p>}
-              <div className="nm-acts">
-                <button type="button" className="nm-ai-btn" onClick={makeAi} disabled={busy || spots.length === 0 || left === 0} style={{ gridColumn: '1 / -1' }}>
-                  {busy ? 'AIが描いています…（30秒ほど）' : left === 0 ? '今日の回数を使い切りました' : 'AIで作る'}
-                  {!busy && left != null && left > 0 && <small>今日あと{left}回</small>}
-                </button>
-              </div>
-            </>
-          )}
+          <AiStudio note={note} save={saveKeep} buildBody={buildBody} user={user} onSignIn={onSignIn}
+            left={left} refreshLeft={loadLeft} busy={busy} setBusy={setBusy}
+            onImage={(blob) => setOut((o) => { if (o) URL.revokeObjectURL(o.url); return { url: URL.createObjectURL(blob), blob, ext: 'jpg' }; })}
+            hasOut={!!out} prompts={prompts} onPrompts={onPrompts} />
         </>
       )}
       {out && (
         <div id="nm-out" className="nm-out nm">
-          <img src={out.url} alt="できあがったノート" />
-          <p className="nm-hint">画像を長押しして保存することもできます。</p>
+          {mode !== 'ai' && <img src={out.url} alt="できあがったノート" />}
+          <p className="nm-hint">{mode === 'ai' ? 'いまえらんでいる絵を保存・シェアします。' : '画像を長押しして保存することもできます。'}</p>
           <div className="nm-acts">
             {canShare && <button type="button" onClick={share}>SNSにシェア</button>}
             <button type="button" className={canShare ? 'sub' : ''} onClick={download} style={canShare ? undefined : { gridColumn: '1 / -1' }}>画像を保存</button>

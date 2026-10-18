@@ -755,6 +755,7 @@ export default function Home() {
   const [notes, setNotes] = useState({}); // フォルダごとの1枚ノート
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
+  const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
   const [photoBusy, setPhotoBusy] = useState(null);
   async function onPhotos(itemId, files, kind) {
     if (!files?.length) return;
@@ -784,6 +785,7 @@ export default function Home() {
       }
     } catch {}
     try { const n = localStorage.getItem('trippin.notes'); if (n) setNotes(JSON.parse(n) || {}); } catch {}
+    try { const pr = JSON.parse(localStorage.getItem('trippin.prompts') || '[]'); if (Array.isArray(pr)) setPrompts(pr); } catch {}
     try { const c = localStorage.getItem('trippin.country'); if (c && COUNTRY_LIST.some(([k]) => k === c)) setCountry(c); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
@@ -805,8 +807,8 @@ export default function Home() {
   }, [hotel, loaded]);
   useEffect(() => {
     if (!loaded) return;
-    try { localStorage.setItem('trippin.notes', JSON.stringify(notes)); } catch {}
-  }, [notes, loaded]);
+    try { localStorage.setItem('trippin.notes', JSON.stringify(notes)); localStorage.setItem('trippin.prompts', JSON.stringify(prompts)); } catch {}
+  }, [notes, prompts, loaded]);
   useEffect(() => {
     if (!loaded) return;
     try { localStorage.setItem('trippin.folders', JSON.stringify(folders)); localStorage.setItem('trippin.folder', trip); } catch {}
@@ -845,7 +847,7 @@ export default function Home() {
     const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setUser(session?.user || null));
     return () => sub.subscription.unsubscribe();
   }, []);
-  const settingsData = () => ({ folders, hotel, customCats, notes });
+  const settingsData = () => ({ folders, hotel, customCats, notes, prompts });
   useEffect(() => {
     if (!loaded || !user) { setCloudUser(null); synced.current = false; return; }
     let alive = true;
@@ -867,6 +869,7 @@ export default function Home() {
           setCustomCats((prev) => [...new Set([...(cloudSettings.customCats || []), ...prev])]);
           if (cloudSettings.hotel !== undefined) setHotel(cloudSettings.hotel || null);
           // ノートはフォルダごとに新しいほうを使う
+          if (Array.isArray(cloudSettings.prompts)) setPrompts((prev) => [...prev, ...cloudSettings.prompts.filter((c) => !prev.some((p) => p.name === c.name))].slice(0, 20));
           if (cloudSettings.notes) setNotes((prev) => {
             const out = { ...prev };
             for (const [k, v] of Object.entries(cloudSettings.notes)) if (!out[k] || (v?.updatedAt || 0) > (out[k].updatedAt || 0)) out[k] = v;
@@ -909,7 +912,7 @@ export default function Home() {
     const t = setTimeout(() => { pushSettings(settingsData()).catch(() => {}); }, 1000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folders, hotel, customCats, notes, user]);
+  }, [folders, hotel, customCats, notes, prompts, user]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1381,7 +1384,7 @@ export default function Home() {
           )}
           {tab === 'done' && noteOpen === 'note' && (
             <NoteMaker items={items} folders={allFolders} trip={trip} notes={notes} onSave={saveNote} unsorted={UNSORTED}
-              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => setNoteOpen(false)} user={user} onSignIn={() => signIn()} />
+              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => setNoteOpen(false)} user={user} onSignIn={() => signIn()} prompts={prompts} onPrompts={setPrompts} />
           )}
           <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
