@@ -2,10 +2,6 @@
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
-import { createHash, timingSafeEqual } from 'node:crypto';
-// 【一時的】動作確認用（確認が終わったら消す）
-const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
-function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -238,7 +234,6 @@ export async function POST(req) {
 
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
 async function run(req, parts, size) {
-  if (isTest(req.headers.get('x-art-token'))) { const o = await gen(parts, size === 'story' ? '9:16' : '4:5'); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg' } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   const r = await rpc('use_ai_credit', token);
