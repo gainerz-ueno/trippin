@@ -92,6 +92,23 @@ function buildPrompt(d) {
   ].filter(Boolean).join('\n');
 }
 
+function coverPrompt(d) {
+  const ar = d.size === 'story' ? '9:16' : '4:5';
+  return [
+    `Design ONE finished, high-quality travel GUIDEBOOK COVER image (aspect ratio ${ar}) in Japanese, like the cover of a stylish Japanese travel magazine or guidebook made by the traveler themself.`,
+    `Theme / art style: ${STYLES[d.tpl]}.`,
+    `- A big, eye-catching hand-lettered title 「${d.title || '旅のガイドブック'}」${d.sub ? ` and a subtitle 「${d.sub}」` : ''}.`,
+    '- A small decorative label "TRAVEL GUIDE BOOK".',
+    d.author || d.date ? `- A small line at the bottom: 「${[d.author && 'by ' + d.author, d.date].filter(Boolean).join('　')}」` : '',
+    d.cover
+      ? `- Hero (about half of the cover): the main subject of the MAIN reference image. If it shows a person, draw that person large in a polished semi-realistic illustration style that keeps their face, hairstyle and outfit recognizable, in front of an illustrated scenic backdrop of ${d.place || 'the travel destination'}. If it shows no person, make that scene the hero illustration.`
+      : `- Hero (about half of the cover): a big illustrated scenic view of ${d.place || 'the travel destination'} with its famous landmarks.`,
+    '- Decorate with cute hand-drawn travel icons and doodles (airplane, suitcase, map pin, camera, local foods, stars, hearts).',
+    'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible. Do not invent other Japanese text. Never write words like "PHOTO" or "reference". No logos, no brand names, no watermarks, no barcodes, no prices.',
+    'Fill the whole canvas edge to edge with no white margin.',
+  ].filter(Boolean).join('\n');
+}
+
 export async function POST(req) {
   const test = isTest(req.headers.get('x-art-token'));
   let body;
@@ -107,16 +124,18 @@ export async function POST(req) {
   // 入力チェック
   const tpl = STYLES[body.tpl] ? body.tpl : null;
   const size = body.size === 'story' ? 'story' : 'post';
+  const isCover = body.kind === 'cover';
+  if (isCover && !tpl) return json({ error: 'デザインをえらんでください' }, 400);
   const spotsIn = Array.isArray(body.spots) ? body.spots.slice(0, 6) : [];
-  if (!tpl || !spotsIn.length) return json({ error: 'お店とデザインをえらんでください' }, 400);
+  if (!isCover && (!tpl || !spotsIn.length)) return json({ error: 'お店とデザインをえらんでください' }, 400);
   const d = {
     tpl, size,
     title: s(body.title, 24), sub: s(body.sub, 12), place: s(body.place, 30), date: s(body.date, 24),
-    who: s(body.who, 20), by: s(body.by, 20), words: s(body.words, 80),
+    who: s(body.who, 20), by: s(body.by, 20), words: s(body.words, 80), author: s(body.author, 30),
     cover: img(body.cover),
     spots: spotsIn.map((p) => ({ name: s(p?.name, 40), cat: s(p?.cat, 20), text: s(p?.text, 200), img: img(p?.img) })).filter((p) => p.name),
   };
-  if (!d.spots.length) return json({ error: 'お店をえらんでください' }, 400);
+  if (!isCover && !d.spots.length) return json({ error: 'お店をえらんでください' }, 400);
   let no = d.cover ? 1 : 0;
   d.spots.forEach((p) => { if (p.img) p.photoNo = ++no; });
 
@@ -132,9 +151,9 @@ export async function POST(req) {
     if (!ticket) return json({ error: '「AIで作る」は1日3回までです。また明日使ってください' }, 429);
   }
 
-  const parts = [{ text: buildPrompt(d) }];
+  const parts = [{ text: isCover ? coverPrompt(d) : buildPrompt(d) }];
   if (d.cover) parts.push({ text: 'MAIN reference image (do not label it):' }, { inlineData: { mimeType: 'image/jpeg', data: d.cover } });
-  d.spots.forEach((p) => { if (p.img) parts.push({ text: `Reference image for the place 「${p.name}」 (do not label it):` }, { inlineData: { mimeType: 'image/jpeg', data: p.img } }); });
+  if (!isCover) d.spots.forEach((p) => { if (p.img) parts.push({ text: `Reference image for the place 「${p.name}」 (do not label it):` }, { inlineData: { mimeType: 'image/jpeg', data: p.img } }); });
 
   const out = await gen(parts, size === 'story' ? '9:16' : '4:5');
   if (!out.ok) {

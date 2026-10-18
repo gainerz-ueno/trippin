@@ -18,7 +18,7 @@ export const SIZES = [
 export const sizeOf = (id) => SIZES.find((s) => s.id === id) || SIZES[0];
 
 // 絵のふちにかからないよう、中身を置く範囲（上 右 下 左）
-const PAD = {
+export const PAD = {
   lovely: { post: [92, 92, 84, 92], story: [110, 92, 104, 92] },
   water: { post: [124, 132, 112, 132], story: [150, 128, 146, 128] },
   sky: { post: [100, 70, 190, 70], story: [140, 70, 290, 70] },
@@ -37,10 +37,10 @@ function catSticker(c) {
   if (c === '観光') return 'camera';
   return 'pin';
 }
-function Ph({ src, className = '', style }) {
+export function Ph({ src, className = '', style }) {
   return src ? <img className={'ph ' + className} src={src} alt="" style={style} /> : <div className={'ph ph-empty ' + className} style={style} />;
 }
-function Title({ note, tpl, className = '' }) {
+export function Title({ note, tpl, className = '' }) {
   const t = note.title || '';
   return (
     <h1 className={'nt-title ' + className}>

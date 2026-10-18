@@ -29,7 +29,7 @@ export async function middleware(req) {
   const { pathname } = req.nextUrl;
   if (pathname === '/login' || pathname === '/api/login') return NextResponse.next();
   // 共有リンク（/s/...）は、パスワードなしで誰でも見られる。見るのに使う地図の鍵とお店の写真も同じ
-  if (pathname.startsWith('/s/') || pathname === '/api/mapkey') return NextResponse.next();
+  if (pathname.startsWith('/s/') || pathname.startsWith('/g/') || pathname === '/api/mapkey') return NextResponse.next();
   // 【一時的】AIで作るの動作確認（合言葉の確認は /api/noteai の中でする）
   if (pathname === '/api/noteai' && req.headers.has('x-art-token')) return NextResponse.next();
   if (pathname === '/api/photo') {

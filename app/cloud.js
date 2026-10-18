@@ -181,3 +181,78 @@ export async function fetchShared(id) {
   if (error) throw error;
   return data; // { folder, items } または null
 }
+
+// ---- 自分のガイドブック（保存したノート＝ページ、表紙、ガイドブック） ----
+const GUIDE = 'guide';
+const newUuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
+
+// どんな画像でもJPEGにそろえる（保存の量を小さく）
+async function toJpeg(blob) {
+  const bmp = await createImageBitmap(blob);
+  const k = Math.min(1, 1440 / bmp.width);
+  const c = document.createElement('canvas');
+  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  const out = await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error('画像を保存できませんでした'))), 'image/jpeg', 0.9));
+  return { blob: out, w: c.width, h: c.height };
+}
+
+export async function savePage({ blob, kind = 'note', trip = '', title = '' }) {
+  if (!uid) throw new Error('Googleでログインしてください');
+  const j = await toJpeg(blob);
+  const id = newUuid();
+  const path = `${uid}/${kind === 'cover' ? 'c' : 'p'}/${id}.jpg`;
+  const up = await supa().storage.from(GUIDE).upload(path, j.blob, { contentType: 'image/jpeg' });
+  if (up.error) throw up.error;
+  const row = { id, user_id: uid, kind, trip: String(trip).slice(0, 60), title: String(title).slice(0, 60), path, w: j.w, h: j.h };
+  const { error } = await supa().from('note_pages').insert(row);
+  if (error) { await supa().storage.from(GUIDE).remove([path]); throw error; }
+  return row;
+}
+export async function listPages() {
+  if (!uid) return [];
+  const { data, error } = await supa().from('note_pages').select('id,kind,trip,title,path,w,h,created_at').order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+export async function deletePage(p) {
+  if (!uid) return;
+  await supa().from('note_pages').delete().eq('id', p.id);
+  await supa().storage.from(GUIDE).remove([p.path]);
+}
+// 画像を見るための一時的なURL（1時間）
+export async function guideUrls(paths) {
+  const list = [...new Set(paths.filter(Boolean))];
+  if (!list.length) return {};
+  const { data, error } = await supa().storage.from(GUIDE).createSignedUrls(list, 3600);
+  if (error) throw error;
+  return Object.fromEntries((data || []).filter((d) => d.signedUrl).map((d) => [d.path, d.signedUrl]));
+}
+export async function listGuides() {
+  if (!uid) return [];
+  const { data, error } = await supa().from('guidebooks').select('*').order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+export async function saveGuide(g) {
+  if (!uid) throw new Error('Googleでログインしてください');
+  const row = {
+    id: g.id || shareId(), user_id: uid, title: String(g.title || '').slice(0, 60) || '旅のガイドブック',
+    author: String(g.author || '').slice(0, 30), description: String(g.description || '').slice(0, 300),
+    cover_id: g.cover_id || null, page_ids: (g.page_ids || []).slice(0, 60), published: !!g.published,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supa().from('guidebooks').upsert(row);
+  if (error) throw error;
+  return row;
+}
+export async function deleteGuide(id) {
+  if (!uid) return;
+  const { error } = await supa().from('guidebooks').delete().eq('id', id);
+  if (error) throw error;
+}
+export async function fetchGuide(id) {
+  const { data, error } = await supa().rpc('guidebook_view', { gid: id });
+  if (error) throw error;
+  return data; // { title, author, description, price, cover, pages } または null
+}

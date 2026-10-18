@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import MapView from './MapView';
 // 1枚ノート（開いたときだけ読み込む）
 const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
+const GuideMaker = dynamic(() => import('./note/GuideMaker'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare } from './cloud';
@@ -752,7 +753,7 @@ export default function Home() {
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
   const [notes, setNotes] = useState({}); // フォルダごとの1枚ノート
-  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [photoBusy, setPhotoBusy] = useState(null);
   async function onPhotos(itemId, files, kind) {
@@ -1370,9 +1371,15 @@ export default function Home() {
               onShow={(id) => { setView('list'); setTimeout(() => document.getElementById('item-' + id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }} />
           )}
           {tab === 'done' && !noteOpen && doneTotal > 0 && (
-            <button type="button" className="nm-open" onClick={() => setNoteOpen(true)}>1枚ノートを作る</button>
+            <div className="nm-opens">
+              <button type="button" className="nm-open" onClick={() => setNoteOpen('note')}>1枚ノートを作る</button>
+              <button type="button" className="nm-open guide" onClick={() => setNoteOpen('guide')}>ガイドブックを作る</button>
+            </div>
           )}
-          {tab === 'done' && noteOpen && (
+          {tab === 'done' && noteOpen === 'guide' && (
+            <GuideMaker items={items} folders={allFolders} trip={trip} user={user} onSignIn={() => signIn()} onClose={() => setNoteOpen(false)} unsorted={UNSORTED} />
+          )}
+          {tab === 'done' && noteOpen === 'note' && (
             <NoteMaker items={items} folders={allFolders} trip={trip} notes={notes} onSave={saveNote} unsorted={UNSORTED}
               photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => setNoteOpen(false)} user={user} onSignIn={() => signIn()} />
           )}

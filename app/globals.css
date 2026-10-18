@@ -313,3 +313,5 @@ header{align-items:center}
 
 .share-title{margin:0;font-family:var(--display);font-size:22px;font-weight:900}
 .nm-open{font:inherit;font-weight:700;font-size:15px;border:0;border-radius:12px;padding:12px;cursor:pointer;background:var(--go);color:#fff}
+.nm-opens{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.nm-open.guide{background:#8A5CF6}

@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './note.css';
 import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
-import { FONTS, loadFont, embedCss } from './fonts';
+import { FONTS, loadFont } from './fonts';
+import { Scaled, toB64, renderNode, callAi, aiLeft, downloadBlob, shareBlob } from './util';
 import { addPhotos, listPhotos } from '../photos';
-import { ensurePhotos, supa } from '../cloud';
+import { ensurePhotos, savePage } from '../cloud';
 
 const MAX = 6;
 const keyOf = (p) => p.cloudId || 'L' + p.id;
@@ -22,33 +23,6 @@ export function defaultNote(trip, items, unsorted) {
 
 // AIで作るときの雰囲気の見本（テンプレートの背景の絵）
 const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
-
-// 画像AIに渡す写真（長い辺1024pxのJPEG）
-async function toB64(url) {
-  if (!url) return null;
-  const blob = await (await fetch(url)).blob();
-  const bmp = await createImageBitmap(blob);
-  const k = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
-}
-async function accessToken() {
-  try { const { data } = await supa().auth.getSession(); return data.session?.access_token || null; } catch { return null; }
-}
-
-// 小さく縮めて見せる（中身は1080pxのまま）
-function Scaled({ width, children, size }) {
-  const k = width / size.w;
-  return (
-    <div style={{ width, height: Math.round(size.h * k), position: 'relative', overflow: 'hidden' }}>
-      <div style={{ width: size.w, height: size.h, transform: `scale(${k})`, transformOrigin: '0 0', position: 'absolute', top: 0, left: 0 }}>
-        {children}
-      </div>
-    </div>
-  );
-}
 
 export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn }) {
   const tripsWithDone = folders.filter((f) => items.some((i) => i.done && i.trip === f));
@@ -158,22 +132,12 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   }
 
   // AIで作る：今日あと何回使えるか
-  async function loadLeft() {
-    const t = await accessToken();
-    if (!t) return;
-    try {
-      const r = await fetch('/api/noteai', { headers: { Authorization: 'Bearer ' + t } });
-      const d = await r.json();
-      if (r.ok && typeof d.left === 'number') setLeft(d.left);
-    } catch {}
-  }
+  async function loadLeft() { const n = await aiLeft(); if (n != null) setLeft(n); }
   useEffect(() => { if (mode === 'ai' && user) loadLeft(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [mode, user?.id]);
 
   async function makeAi() {
     setBusy(true); setErr(''); setOut(null);
     try {
-      const t = await accessToken();
-      if (!t) throw new Error('「AIで作る」はGoogleでログインすると使えます');
       const body = {
         tpl: note.tpl, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
         cover: await toB64(coverUrl),
@@ -181,12 +145,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           name: sp.it.altName || sp.it.name, cat: sp.it.category || '', text: sp.text, img: await toB64(sp.urls[0]),
         }))),
       };
-      const r = await fetch('/api/noteai', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify(body) });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        throw new Error(d.error || 'AIで作れませんでした');
-      }
-      const blob = await r.blob();
+      const blob = await callAi(body);
       setOut({ url: URL.createObjectURL(blob), blob, ext: 'jpg' });
       setTimeout(() => document.getElementById('nm-out')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch (e) { setErr(e.message || 'AIで作れませんでした'); }
@@ -197,36 +156,24 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   async function makeImage() {
     setBusy(true); setErr(''); setOut(null);
     try {
-      const { toBlob } = await import('html-to-image');
-      const node = canvasRef.current;
-      const size = sizeOf(note.size);
-      const fontEmbedCSS = await embedCss(note.font, (node.textContent || '') + '0123456789');
-      await Promise.all([...node.querySelectorAll('img')].map((img) => (img.decode ? img.decode().catch(() => {}) : null)));
-      const opts = { width: size.w, height: size.h, pixelRatio: 1, fontEmbedCSS, skipAutoScale: true };
-      let blob = await toBlob(node, opts);
-      // Safari は1回目に写真が抜けることがあるので、もう1回作る
-      if (/^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent)) blob = await toBlob(node, opts);
-      if (!blob) throw new Error('画像を作れませんでした');
+      const blob = await renderNode(canvasRef.current, sizeOf(note.size), note.font);
       setOut({ url: URL.createObjectURL(blob), blob, ext: 'png' });
       setTimeout(() => document.getElementById('nm-out')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     } catch (e) { setErr(e.message || '画像を作れませんでした'); }
     setBusy(false);
   }
   const fileName = `tabibi-${(note.title || 'note').replace(/[\\/:*?"<>|\s]+/g, '_')}.${out?.ext || 'png'}`;
-  async function share() {
+  function share() { if (out) shareBlob(out.blob, fileName); }
+  function download() { if (out) downloadBlob(out.blob, fileName); }
+  // ガイドブックのページとしてクラウドに保存
+  const [saved, setSaved] = useState('');
+  async function addToGuide() {
     if (!out) return;
-    const file = new File([out.blob], fileName, { type: out.blob.type || 'image/png' });
-    try {
-      if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file] }); return; }
-    } catch (e) { if (e?.name === 'AbortError') return; }
-    download();
+    setSaved('saving');
+    try { await savePage({ blob: out.blob, kind: 'note', trip, title: note.title }); setSaved('done'); }
+    catch (e) { setSaved(''); setErr(e.message || '保存できませんでした'); }
   }
-  function download() {
-    if (!out) return;
-    const a = document.createElement('a');
-    a.href = out.url; a.download = fileName;
-    document.body.appendChild(a); a.click(); a.remove();
-  }
+  useEffect(() => { setSaved(''); }, [out]);
   useEffect(() => () => { if (out) URL.revokeObjectURL(out.url); }, [out]);
 
   const size = sizeOf(note.size);
@@ -409,6 +356,13 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           <div className="nm-acts">
             {canShare && <button type="button" onClick={share}>SNSにシェア</button>}
             <button type="button" className={canShare ? 'sub' : ''} onClick={download} style={canShare ? undefined : { gridColumn: '1 / -1' }}>画像を保存</button>
+            {user ? (
+              <button type="button" className="sub nm-guide-add" onClick={addToGuide} disabled={saved !== ''} style={{ gridColumn: '1 / -1' }}>
+                {saved === 'done' ? 'ガイドブック用に保存しました' : saved === 'saving' ? '保存しています…' : 'ガイドブックに入れる'}
+              </button>
+            ) : (
+              <p className="nm-hint" style={{ gridColumn: '1 / -1' }}>Googleでログインすると、このノートを「自分のガイドブック」に入れられます。</p>
+            )}
           </div>
         </div>
       )}
