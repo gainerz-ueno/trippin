@@ -53,7 +53,9 @@ export async function callAi(body) {
     const d = await r.json().catch(() => ({}));
     throw new Error(d.error || 'AIで作れませんでした');
   }
-  return r.blob();
+  const b = await r.blob();
+  try { b.fixJa = decodeURIComponent(r.headers.get('x-fix-ja') || ''); } catch { b.fixJa = ''; }
+  return b;
 }
 export async function aiLeft() {
   const t = await accessToken();

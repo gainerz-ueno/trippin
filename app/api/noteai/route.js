@@ -2,6 +2,10 @@
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
+import { createHash, timingSafeEqual } from 'node:crypto';
+// 【一時的】動作確認用（確認が終わったら消す）
+const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
+function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
 // 【一時的】動作確認用（確認が終わったら消す）
 
 export const runtime = 'nodejs';
@@ -101,6 +105,7 @@ async function isUnlimited(token) {
 }
 
 export async function GET(req) {
+  if (isTest(req.headers.get('x-art-token'))) { const o = await make(); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg', 'x-fix-en': encodeURIComponent(o.en || ''), 'x-fix-ja': encodeURIComponent(o.ja || ''), 'x-diff': String(o.diff ?? '') } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) return json({ left: 999 });
@@ -204,6 +209,8 @@ function areaPrompt(d) {
   return [
     'The FIRST image is a cut-out part of a finished Japanese travel poster. Edit this part.',
     `The user wants this change (written in Japanese): 「${d.instruction}」`,
+    d.concrete ? `What exactly to do: ${d.concrete}` : '',
+    d.retry ? 'IMPORTANT: a previous attempt returned the image without the change. This time the change MUST be clearly visible.' : '',
     'The SECOND image is the same part with a RED outline drawn by the user around the thing to change. The change is about what is inside the red outline.',
     'Make the change clearly and visibly - the user must be able to see the difference at a glance. Returning the image unchanged is a failure.',
     'If the user asks to make something bigger, enlarge it a lot (about 1.5 times) and move or shrink the things next to it to make room. If they ask to remove something, fill the space naturally with the background.',
@@ -211,6 +218,46 @@ function areaPrompt(d) {
     'The result must NOT contain any red outline or marking. All Japanese text must stay correct and clearly legible. No logos, watermarks or words like "PHOTO".',
     'Keep the same aspect ratio and fill the whole canvas edge to edge.',
   ].join('\n');
+}
+
+// 「〜が低い」のようなあいまいな言い方を、AIが確実に直せる具体的な指示に言いかえる（安いテキスト用AIで）
+const TEXT_MODEL = 'gemini-2.5-flash';
+async function understand(instruction, markedB64) {
+  try {
+    const r = await fetch(`${GEMINI}/${TEXT_MODEL}:generateContent`, {
+      method: 'POST',
+      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [
+          { text: [
+            'This is part of a Japanese travel poster. The user drew a RED outline around the thing they want changed, and wrote this request in Japanese:',
+            `「${instruction}」`,
+            'Look at what is inside the red outline and rewrite the request as ONE clear, concrete image-edit instruction in English that says exactly what to change and what it should become (exact numbers, words, colors, sizes, shapes).',
+            'If the request is a complaint (for example "X is low", "X is too small", "this is wrong"), turn it into the fix (raise X to a clearly higher value, make it bigger, correct it). If a chart value must change, also say how the chart shape must change to match.',
+            'Write any Japanese text that must appear on the image inside 「」 exactly.',
+            'Reply in exactly two lines:',
+            'EN: <the instruction in English>',
+            'JA: <what you will do, in short natural Japanese, under 30 characters>',
+          ].join('\n') },
+          { inlineData: { mimeType: 'image/jpeg', data: markedB64 } },
+        ] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 300, thinkingConfig: { thinkingBudget: 0 } },
+      }),
+    });
+    const d = await r.json();
+    const t = (d.candidates?.[0]?.content?.parts || []).map((x) => x.text || '').join('');
+    const en = (t.match(/EN:\s*(.+)/) || [])[1]?.trim();
+    const ja = (t.match(/JA:\s*(.+)/) || [])[1]?.trim();
+    return en ? { en: en.slice(0, 500), ja: (ja || '').slice(0, 60) } : null;
+  } catch { return null; }
+}
+
+// 直す前と後がほとんど同じかどうか
+async function sameish(a, b, w, h) {
+  const g = (x) => sharp(x, x.length === w * h * 3 ? { raw: { width: w, height: h, channels: 3 } } : undefined).resize(48, Math.max(8, Math.round(48 * h / w)), { fit: 'fill' }).greyscale().raw().toBuffer();
+  const [p, q] = await Promise.all([g(a), g(b)]);
+  let sum = 0; for (let i = 0; i < p.length; i++) sum += Math.abs(p[i] - q[i]);
+  return sum / p.length;
 }
 
 const RATIOS = [['1:1', 1], ['4:5', 0.8], ['3:4', 0.75], ['2:3', 2 / 3], ['9:16', 0.5625], ['5:4', 1.25], ['4:3', 4 / 3], ['3:2', 1.5], ['16:9', 16 / 9]];
@@ -233,14 +280,21 @@ async function editArea(base, mark, box, instruction) {
   const top = Math.round(Math.max(0, Math.min(H - h, cy - h / 2)));
   const cut = (buf) => sharp(buf).resize(W, H, { fit: 'fill' }).extract({ left, top, width: w, height: h }).jpeg({ quality: 92 }).toBuffer();
   const [c1, c2] = await Promise.all([cut(bb), cut(Buffer.from(mark, 'base64'))]);
-  const parts = [{ text: areaPrompt({ instruction }) },
-    { text: 'FIRST image (the part to edit):' }, { inlineData: { mimeType: 'image/jpeg', data: c1.toString('base64') } },
-    { text: 'SECOND image (same part, red outline shows what to change):' }, { inlineData: { mimeType: 'image/jpeg', data: c2.toString('base64') } }];
-  const o = await gen(parts, ar, true);
-  if (!o.ok) return o;
-  // 直した部分を元の絵に、ふちをなじませて貼りもどす
-  const fixed = await sharp(o.raw).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+  const u = await understand(instruction, c2.toString('base64'));
   const orig = await sharp(c1).removeAlpha().raw().toBuffer();
+  let fixed = null, diff = 0;
+  for (let t = 0; t < 2; t++) {
+    const parts = [{ text: areaPrompt({ instruction, concrete: u?.en, retry: t > 0 }) },
+      { text: 'FIRST image (the part to edit):' }, { inlineData: { mimeType: 'image/jpeg', data: c1.toString('base64') } },
+      { text: 'SECOND image (same part, red outline shows what to change):' }, { inlineData: { mimeType: 'image/jpeg', data: c2.toString('base64') } }];
+    const o = await gen(parts, ar, true);
+    if (!o.ok) { if (fixed) break; return o; }
+    fixed = await sharp(o.raw).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer();
+    diff = await sameish(fixed, orig, w, h);
+    console.log('noteai edit', JSON.stringify({ instruction, en: u?.en, try: t, diff: Math.round(diff * 10) / 10 }));
+    if (diff >= 3) break; // ちゃんと変わっていればOK。ほとんど同じなら1回だけやり直す
+  }
+  // 直した部分を元の絵に、ふちをなじませて貼りもどす
   const f = Math.max(6, Math.round(Math.min(w, h) * 0.06));
   // AIが全体の色味を少し変えてしまうことがあるので、ふちの色に合わせて戻す
   for (let ch = 0; ch < 3; ch++) {
@@ -265,7 +319,7 @@ async function editArea(base, mark, box, instruction) {
   }
   const patch = await sharp(px, { raw: { width: w, height: h, channels: 4 } }).png().toBuffer();
   const jpg = await sharp(bb).composite([{ input: patch, left, top }]).resize({ width: 1440, withoutEnlargement: true }).jpeg({ quality: 88, mozjpeg: true }).toBuffer();
-  return { ok: true, jpg };
+  return { ok: true, jpg, ja: u?.ja || '', en: u?.en || '', diff };
 }
 
 export async function POST(req) {
@@ -324,12 +378,13 @@ export async function POST(req) {
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
 async function run(req, job) {
   const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
+  if (isTest(req.headers.get('x-art-token'))) { const o = await make(); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg', 'x-fix-en': encodeURIComponent(o.en || ''), 'x-fix-ja': encodeURIComponent(o.ja || ''), 'x-diff': String(o.diff ?? '') } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) {
     const o = await make();
     if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
-    return new Response(o.jpg, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' } });
+    return new Response(o.jpg, { headers: imgHeaders(o) });
   }
   const r = await rpc('use_ai_credit', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
@@ -342,7 +397,12 @@ async function run(req, job) {
     await rpc('refund_ai_credit', token, { ticket }).catch(() => {});
     return json({ error: 'AIがうまく描けませんでした。もう一度試してください（回数は減っていません）' }, 502);
   }
-  return new Response(out.jpg, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' } });
+  return new Response(out.jpg, { headers: imgHeaders(out) });
+}
+function imgHeaders(o) {
+  const h = { 'content-type': 'image/jpeg', 'cache-control': 'no-store' };
+  if (o.ja) h['x-fix-ja'] = encodeURIComponent(o.ja);
+  return h;
 }
 
 async function gen(parts, aspect, rawOut) {
