@@ -16,12 +16,12 @@ export async function GET(req) {
 }
 export async function POST(req) {
   if (!ok(req.headers.get('x-art-token'))) return new Response('not found', { status: 404 });
-  const { model, prompt, aspect } = await req.json();
+  const { model, prompt, aspect, size } = await req.json();
   if (!/^[a-z0-9.\-]+$/.test(model || '')) return new Response('bad', { status: 400 });
   const r = await fetch(`${BASE}/models/${model}:generateContent`, {
     method: 'POST',
     headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY, 'content-type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: String(prompt).slice(0, 4000) }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect || '1:1' } } }),
+    body: JSON.stringify({ contents: [{ parts: [{ text: String(prompt).slice(0, 4000) }] }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect || '1:1', ...(size ? { imageSize: size } : {}) } } }),
   });
   const d = await r.json();
   const part = d.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
