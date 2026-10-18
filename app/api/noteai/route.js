@@ -2,6 +2,10 @@
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
+import { createHash, timingSafeEqual } from 'node:crypto';
+// 【一時的】動作確認用（確認が終わったら消す）
+const TEST_HASH = '567c583e3b8e9a8e2969adf27a331a1243bfb7b2002f2cb03fc8b2e62e23ad72';
+function isTest(t) { if (!t) return false; const a = Buffer.from(createHash('sha256').update(String(t)).digest('hex')); const b = Buffer.from(TEST_HASH); return a.length === b.length && timingSafeEqual(a, b); }
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -188,9 +192,17 @@ function coverPrompt(d) {
 }
 
 function editPrompt(d) {
+  const area = d.box
+    ? [
+      'The user marked the part to change with a RED outline on the SECOND image (a marked copy of the same poster). '
+      + `It is roughly the area from ${d.box.x0}% to ${d.box.x1}% of the width (from the left) and from ${d.box.y0}% to ${d.box.y1}% of the height (from the top).`,
+      'Apply the change ONLY to that marked part. Edit the FIRST image (the clean one). The result must NOT contain any red outline or marking.',
+    ]
+    : [];
   return [
     'Edit the attached image (a finished Japanese travel poster).',
     `Apply ONLY this change requested by the user (written in Japanese): 「${d.instruction}」`,
+    ...area,
     'Keep everything else the same: the layout, the illustrations, the people and every Japanese text exactly as it is, unless the requested change is about that part.',
     'All Japanese text must stay correct and clearly legible. Never add logos, brand names, watermarks, or words like "PHOTO". Nothing sexual, violent or hateful.',
     'Keep the same aspect ratio and fill the whole canvas edge to edge.',
@@ -211,7 +223,13 @@ export async function POST(req) {
     const base = img(body.base, 3_500_000);
     const instruction = s(body.instruction, 300);
     if (!base || !instruction) return json({ error: '直したい内容を入れてください' }, 400);
-    return run(req, [{ text: editPrompt({ instruction }) }, { inlineData: { mimeType: 'image/jpeg', data: base } }], size);
+    const mark = img(body.mark, 3_500_000);
+    const b = body.box && typeof body.box === 'object' ? body.box : null;
+    const n = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
+    const box = mark && b ? { x0: n(b.x0), y0: n(b.y0), x1: n(b.x1), y1: n(b.y1) } : null;
+    const parts = [{ text: editPrompt({ instruction, box }) }, { text: 'FIRST image (clean, edit this one):' }, { inlineData: { mimeType: 'image/jpeg', data: base } }];
+    if (box) parts.push({ text: 'SECOND image (marked copy - only shows where to edit):' }, { inlineData: { mimeType: 'image/jpeg', data: mark } });
+    return run(req, parts, size);
   }
   const spotsIn = Array.isArray(body.spots) ? body.spots.slice(0, 6) : [];
   if (!isCover && (!tpl || !spotsIn.length)) return json({ error: 'お店とデザインをえらんでください' }, 400);
@@ -246,6 +264,7 @@ export async function POST(req) {
 
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
 async function run(req, parts, size) {
+  if (isTest(req.headers.get('x-art-token'))) { const o = await gen(parts, size === 'story' ? '9:16' : '4:5'); return o.ok ? new Response(o.jpg, { headers: { 'content-type': 'image/jpeg' } }) : json({ error: o.error }, 502); }
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) {

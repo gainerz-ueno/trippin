@@ -81,6 +81,64 @@ function FreeInput({ ph, onSend, max = 120 }) {
   );
 }
 
+// 絵の上を指でなぞって（またはタップして）直したい場所を囲む
+const QUICK_AREA = ['もっと大きく', 'もっと小さく', 'ここを消して', '色を変えて', '文字を正しく直して', '別の写真にして'];
+const QUICK_ALL = ['もっとパステルに', 'もっと鮮やかに', '飾りを増やして', '飾りを減らしてすっきり', 'タイトルをもっと大きく'];
+function MarkPad({ src, strokes, setStrokes }) {
+  const cv = useRef(null);
+  const wrap = useRef(null);
+  const drawing = useRef(null);
+  function redraw(list) {
+    const c = cv.current; if (!c) return;
+    const w = c.clientWidth, h = c.clientHeight;
+    c.width = w * 2; c.height = h * 2;
+    const g = c.getContext('2d'); g.scale(2, 2); g.clearRect(0, 0, w, h);
+    g.strokeStyle = '#FF2D2D'; g.lineWidth = 4; g.lineCap = 'round'; g.lineJoin = 'round';
+    g.shadowColor = 'rgba(255,255,255,.9)'; g.shadowBlur = 3;
+    for (const st of list) {
+      if (st.length === 1) { g.beginPath(); g.arc(st[0][0] * w, st[0][1] * h, w * 0.07, 0, Math.PI * 2); g.stroke(); continue; }
+      g.beginPath(); st.forEach(([x, y], i) => (i ? g.lineTo(x * w, y * h) : g.moveTo(x * w, y * h))); g.stroke();
+    }
+  }
+  useEffect(() => { redraw(strokes); }, [strokes]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pt = (e) => { const r = cv.current.getBoundingClientRect(); return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))]; };
+  return (
+    <div className="mk" ref={wrap}>
+      <img src={src} alt="直したいところを囲む" onLoad={() => redraw(strokes)} />
+      <canvas ref={cv}
+        onPointerDown={(e) => { e.preventDefault(); cv.current.setPointerCapture(e.pointerId); drawing.current = [pt(e)]; redraw([...strokes, drawing.current]); }}
+        onPointerMove={(e) => { if (!drawing.current) return; drawing.current.push(pt(e)); redraw([...strokes, drawing.current]); }}
+        onPointerUp={() => {
+          const d = drawing.current; drawing.current = null; if (!d) return;
+          const moved = d.some(([x, y]) => Math.hypot(x - d[0][0], y - d[0][1]) > 0.02);
+          setStrokes([...strokes, moved ? d : [d[0]]]);
+        }} />
+    </div>
+  );
+}
+// 囲んだ線を描きこんだ画像と、囲んだ範囲（0〜1）を作る
+async function markImage(src, strokes) {
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+  const k = Math.min(1, 1440 / Math.max(img.width, img.height));
+  const w = Math.round(img.width * k), h = Math.round(img.height * k);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h);
+  g.strokeStyle = '#FF0000'; g.lineWidth = Math.max(6, w * 0.008); g.lineCap = 'round'; g.lineJoin = 'round';
+  let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+  for (const st of strokes) {
+    if (st.length === 1) {
+      const r = 0.07; const [x, y] = st[0];
+      g.beginPath(); g.arc(x * w, y * h, w * r, 0, Math.PI * 2); g.stroke();
+      x0 = Math.min(x0, x - r); x1 = Math.max(x1, x + r); y0 = Math.min(y0, y - r * w / h); y1 = Math.max(y1, y + r * w / h);
+      continue;
+    }
+    g.beginPath(); st.forEach(([x, y], i) => (i ? g.lineTo(x * w, y * h) : g.moveTo(x * w, y * h))); g.stroke();
+    st.forEach(([x, y]) => { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); });
+  }
+  const cl = (v) => Math.round(Math.min(1, Math.max(0, v)) * 100);
+  return { mark: c.toDataURL('image/jpeg', 0.85).split(',')[1], box: { x0: cl(x0), y0: cl(y0), x1: cl(x1), y1: cl(y1) } };
+}
+
 export default function AiStudio({ note, save, buildBody, user, onSignIn, left, refreshLeft, onImage, hasOut, prompts, onPrompts, busy, setBusy, hideSub, bare }) {
   const sub = note.aiSub || 'auto';
   const prefs = note.aiPrefs || prefDefault(note.tpl);
@@ -91,7 +149,9 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
   const [versions, setVersions] = useState([]); // [{url, blob}]
   const [cur, setCur] = useState(-1);
   const [fixLog, setFixLog] = useState([]); // [{who, text}]
-  const [fix, setFix] = useState(null); // えらんだ直し方
+  const [fix, setFix] = useState(null); // null / 'mark'（場所を囲む）/ 'what'（どう直すか）
+  const [strokes, setStrokes] = useState([]);
+  const [area, setArea] = useState(null); // 囲んだ場所（なければ全体）
   const [err, setErr] = useState('');
   const [pName, setPName] = useState('');
   const endRef = useRef(null);
@@ -128,7 +188,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
       setVersions((a) => [...a, v]);
       setCur(versions.length);
       setFixLog([{ who: 'bot', text: 'できたよ！直したいところはある？' }]);
-      setFix(null);
+      setFix(null); setStrokes([]); setArea(null);
       setTimeout(() => document.getElementById('as-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
     } catch (e) { setErr(e.message || 'AIで作れませんでした'); }
     setBusy(false); refreshLeft();
@@ -142,7 +202,8 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
     setBusy(true); setErr('');
     try {
       const b64 = await toB64(base.url, 1440);
-      const blob = await callAi({ kind: 'edit', size: note.size, base: b64, instruction: text });
+      const blob = await callAi({ kind: 'edit', size: note.size, base: b64, instruction: text, ...(area ? { mark: area.mark, box: area.box } : {}) });
+      setArea(null); setStrokes([]);
       const v = { url: URL.createObjectURL(blob), blob };
       setVersions((a) => [...a, v]);
       setCur(versions.length);
@@ -268,7 +329,9 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
 
       {versions.length > 0 && (
         <div id="as-result" className="as-result">
-          <img className="as-main" src={versions[cur]?.url} alt="できあがった絵" />
+          {fix === 'mark'
+            ? <MarkPad src={versions[cur]?.url} strokes={strokes} setStrokes={setStrokes} />
+            : <img className="as-main" src={versions[cur]?.url} alt="できあがった絵" />}
           {versions.length > 1 && (
             <div className="as-vers">
               {versions.map((v, i) => (
@@ -283,19 +346,37 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
             </div>
           )}
           <div className="as-chat as-fix">
-            {fixLog.map((m, i) => <p key={i} className={m.who === 'bot' ? 'as-bot' : 'as-me as-me-static'}>{m.text}</p>)}
+            {fixLog.map((m, i) => (m.img
+              ? <div key={i} className="as-me as-me-static mk-me"><img src={m.img} alt="" /><span>{m.text}</span></div>
+              : <p key={i} className={m.who === 'bot' ? 'as-bot' : 'as-me as-me-static'}>{m.text}</p>))}
             {busy && <p className="as-bot as-typing">描き直しています…</p>}
             {!busy && !fix && (
-              <Chips opts={FIXES.map((f) => f.label)} onPick={(l) => {
-                const f = FIXES.find((x) => x.label === l);
-                setFix(f); setFixLog((x) => [...x, { who: 'me', text: l }, { who: 'bot', text: f.ask }]);
-              }} extra={<button type="button" className="as-ok" onClick={() => setFixLog((x) => [...x, { who: 'me', text: 'これで完成' }, { who: 'bot', text: 'おつかれさま！下のボタンから保存・シェアできるよ' }])}>これで完成</button>} />
+              <div className="as-chips">
+                <button type="button" onClick={() => {
+                  setFix('mark'); setStrokes([]);
+                  setFixLog((x) => [...x, { who: 'me', text: '場所をえらんで直す' }, { who: 'bot', text: '上の絵の、直したいところを指でなぞって囲んでね（タップだけでもOK）' }]);
+                  setTimeout(() => document.getElementById('as-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+                }}>場所をえらんで直す</button>
+                <button type="button" onClick={() => { setArea(null); setFix('what'); setFixLog((x) => [...x, { who: 'me', text: '全体を直す' }, { who: 'bot', text: 'どう直す？' }]); }}>全体を直す</button>
+                <button type="button" className="as-ok" onClick={() => setFixLog((x) => [...x, { who: 'me', text: 'これで完成' }, { who: 'bot', text: 'おつかれさま！下のボタンから保存・シェアできるよ' }])}>これで完成</button>
+              </div>
             )}
-            {!busy && fix && (
+            {!busy && fix === 'mark' && (
+              <div className="as-chips">
+                <button type="button" className="as-ok" disabled={!strokes.length} onClick={async () => {
+                  const m = await markImage(versions[cur].url, strokes);
+                  setArea(m); setFix('what');
+                  setFixLog((x) => [...x, { who: 'me', text: 'ここを直したい', img: 'data:image/jpeg;base64,' + m.mark }, { who: 'bot', text: '囲んだところを、どう直す？' }]);
+                }}>ここを直す</button>
+                <button type="button" disabled={!strokes.length} onClick={() => setStrokes([])}>囲みを消す</button>
+                <button type="button" onClick={() => { setFix(null); setStrokes([]); setFixLog((x) => x.slice(0, -2)); }}>やめる</button>
+              </div>
+            )}
+            {!busy && fix === 'what' && (
               <>
-                {fix.opts && <Chips opts={fix.opts} onPick={(o) => applyFix(o)} />}
-                <FreeInput ph={fix.ph || '自分で書く'} max={300} onSend={(t) => applyFix(t)} />
-                <button type="button" className="as-stop" onClick={() => { setFix(null); setFixLog((x) => x.slice(0, -2)); }}>やめる</button>
+                <Chips opts={area ? QUICK_AREA : QUICK_ALL} onPick={(o) => applyFix(o)} />
+                <FreeInput ph={area ? '例：この写真をもっと大きく' : '例：タイトルをもっと大きく'} max={300} onSend={(t) => applyFix(t)} />
+                <button type="button" className="as-stop" onClick={() => { setFix(null); setArea(null); setStrokes([]); setFixLog((x) => x.slice(0, area ? -4 : -2)); }}>やめる</button>
               </>
             )}
             {left === 0 && <p className="nm-hint">今日の回数を使い切ったので、直すのはまた明日できます。</p>}
