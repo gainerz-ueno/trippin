@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { NaverLinks } from './naver';
 import dynamic from 'next/dynamic';
 import MapView from './MapView';
 // タビセツ（開いたときだけ読み込む）
@@ -636,6 +637,7 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
                   <div className="acts">
                     <button type="button" onClick={() => onShow(it.id)}>リストで見る</button>
                     <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
+                    <NaverLinks place={it} route={false} />
                   </div>
                 </div>
               );
@@ -648,6 +650,7 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
                 <p className="ai-reason">{pk.reason}</p>
                 <div className="acts side-acts-inline">
                   <a href={safeUrl(pl.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
+                  <NaverLinks place={pl} route={false} />
                   {savedIds.has(pl.placeId)
                     ? <button type="button" disabled>追加済み</button>
                     : <button type="button" className="add" onClick={() => setPick(pick === pl.placeId ? null : pl.placeId)}>候補に追加 ▾</button>}
@@ -1115,6 +1118,7 @@ export default function Home() {
             )}
             <div className="side-acts">
               <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
+              <NaverLinks place={it} />
               {it.done
                 ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
                 : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
@@ -1326,6 +1330,7 @@ export default function Home() {
                     </button>
                     <div className="side-acts">
                       <a href={safeUrl(p.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
+                      <NaverLinks place={p} route={false} />
                       {savedIds.has(p.placeId)
                         ? <button className="added" disabled>追加済み（{items.find((i) => i.placeId === p.placeId)?.trip}）</button>
                         : <button className="add" aria-expanded={pickFor === 's:' + p.placeId} onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加 ▾</button>}
