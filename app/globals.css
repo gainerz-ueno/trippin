@@ -1,15 +1,17 @@
 :root{
-  --bg:#EEF3F7; --card:#FFFFFF; --ink:#1C2836; --sub:#5E6E80; --line:#D5DEE7;
-  --accent:#E2574C; --accent-ink:#FFFFFF; --go:#2B8A68; --star:#E39B12; --chip:#E1E9F0;
-  --copybg:#F4F7FA; --copyline:#CFDAE4; --copybtn:#2F5D7C; --copybtn-ink:#FFFFFF;
+  --bg:#FBF6EF; --card:#FFFFFF; --ink:#1E2633; --sub:#5D6675; --line:#ECE3D6;
+  --accent:#E5483B; --accent-dark:#B8362B; --accent-ink:#FFFFFF; --go:#0B7C77; --teal:#0F8F8A; --teal-tint:#E6F4F3;
+  --star:#F4B23A; --chip:#F1E9DD; --shadow:0 1px 0 #ECE3D6,0 6px 18px rgba(80,60,30,.06);
+  --copybg:#FBF6EF; --copyline:#ECE3D6; --copybtn:#0B7C77; --copybtn-ink:#FFFFFF;
   --display:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Noto Sans JP",sans-serif;
   --body:"Noto Sans JP","Hiragino Sans","Yu Gothic",sans-serif;
   color-scheme:light;
 }
 @media (prefers-color-scheme: dark){:root{
-  --bg:#121A23; --card:#1B2633; --ink:#E7EDF3; --sub:#97A6B6; --line:#2C3A4A;
-  --accent:#F06B5F; --accent-ink:#1A0F0E; --go:#45B48C; --star:#F2B23A; --chip:#243241;
-  --copybg:#152030; --copyline:#33475C; --copybtn:#8FB8D6; --copybtn-ink:#0F1A24; color-scheme:dark}}
+  --bg:#151B24; --card:#1F2732; --ink:#F3EEE6; --sub:#A7B0BD; --line:#2E3846;
+  --accent:#E85A4D; --accent-dark:#A93A30; --accent-ink:#FFFFFF; --go:#3DBDB6; --teal:#3DBDB6; --teal-tint:#173335;
+  --star:#F4B23A; --chip:#2A3340; --shadow:0 1px 0 #2E3846;
+  --copybg:#1A222C; --copyline:#2E3846; --copybtn:#3DBDB6; --copybtn-ink:#0F1A24; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.6;
@@ -335,3 +337,123 @@ header{align-items:center}
 .naver{white-space:normal !important;line-height:1.25;background:#03C75A !important;border-color:#03C75A !important;color:#fff !important}
 .naver small{display:block;font-size:10px;font-weight:500;opacity:.9}
 .acts .naver{font:inherit;font-size:12px;font-weight:700;border-radius:999px;padding:6px 10px;cursor:pointer;border:1px solid}
+
+
+/* ===================== 新デザイン（2026-10） ===================== */
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.wrap{padding-block:14px calc(96px + env(safe-area-inset-bottom,0px));gap:14px}
+.apphead{display:flex;align-items:center;justify-content:space-between}
+h1.logo img{height:30px}
+.login-btn,.login-btn.on{display:inline-flex;align-items:center;gap:6px;font-size:13px;height:36px;padding:0 14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink)}
+.ctxrow{display:flex;gap:8px;flex-wrap:wrap}
+.ctx-chip{position:relative;font:inherit;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:999px;cursor:pointer;max-width:100%;color:var(--sub);background:transparent;border:1.5px dashed var(--line)}
+.ctx-chip.trip{background:var(--ink);color:var(--bg);border:0;flex-direction:row}
+.ctx-chip.trip select{font:inherit;font-weight:700;color:inherit;background:transparent;border:0;padding:0 18px 0 0;margin-right:-14px;appearance:none;-webkit-appearance:none;width:auto;max-width:44vw;cursor:pointer;position:relative;z-index:1}
+.ctx-chip.trip select option{color:#1E2633}
+.ctx-chip.hotel.on{border-style:solid;color:var(--ink);background:var(--card)}
+.ctx-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50vw}
+.top-hotel{display:none}
+
+/* 下のメニュー */
+.tabs.bottomnav{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:30;display:grid;grid-template-columns:repeat(3,1fr);background:var(--card);border-radius:0;border-top:1px solid var(--line);padding:6px max(12px,calc(50% - 268px)) calc(8px + env(safe-area-inset-bottom,0px))}
+.tabs.bottomnav button{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:700;color:var(--sub);background:none;box-shadow:none;border-radius:12px;padding:6px 4px;min-height:52px}
+.tabs.bottomnav button[aria-selected="true"]{color:var(--accent);background:none;box-shadow:none}
+.tabs.bottomnav button[aria-selected="true"] svg path,.tabs.bottomnav button[aria-selected="true"] svg circle{stroke-width:2.6}
+
+/* さがす */
+.panel{border:0;border-radius:24px;box-shadow:var(--shadow);gap:14px}
+.search-head p{margin:0;font-size:13px;color:var(--sub);font-weight:500}
+.search-head h2{font-family:var(--display);font-weight:900;font-size:28px;margin:0;letter-spacing:.02em}
+.kw{flex-direction:row;align-items:center;gap:10px;background:var(--bg);border:1.5px solid var(--line);border-radius:18px;padding:0 14px;color:var(--sub)}
+.kw input{border:0;background:transparent;padding:14px 0;font-size:15px}
+.kw input:focus-visible{outline:0}
+.kw:focus-within{border-color:var(--accent)}
+.catsearch{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:2px;margin:0 -6px}
+.catsearch button{font:inherit;font-size:11.5px;font-weight:700;color:var(--ink);background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:14px;cursor:pointer}
+.catsearch button:hover{background:var(--bg)}
+.catsearch button:disabled{opacity:.5;cursor:default}
+.panel input:not([type=checkbox]),.panel select{border-radius:12px}
+.btn{background:var(--accent)}
+.btn.search-go{font-family:var(--display);font-size:17px;font-weight:900;border-radius:18px;padding:14px;box-shadow:0 5px 0 var(--accent-dark);margin-bottom:5px}
+.btn.search-go:active{transform:translateY(3px);box-shadow:0 2px 0 var(--accent-dark)}
+.btn.ghost{background:var(--chip);color:var(--ink)}
+.shot{padding:0;border:0;background:none}
+.shot-card{font:inherit;text-align:left;width:100%;border:0;background:var(--teal-tint);color:var(--ink);border-radius:20px;padding:14px;display:flex;align-items:center;gap:12px;cursor:pointer}
+.shot-card span{display:flex;flex-direction:column;gap:2px}
+.shot-card b{font-family:var(--display);font-size:16px}
+.shot-card small{font-size:12.5px;color:var(--sub);line-height:1.5}
+.shot-card:disabled{opacity:.7}
+
+/* お店のカード */
+.item{border:0;border-radius:22px;box-shadow:var(--shadow);padding:12px;gap:10px}
+.item.done{border-left:0}
+.thumbwrap{flex:none;align-self:flex-start;width:auto}
+.thumb{width:92px;height:92px;border-radius:16px}
+.thumbbtn{border-radius:16px}
+.photo-star{top:auto;bottom:4px;right:4px;width:32px;height:32px;font-size:17px;background:rgba(0,0,0,.4)}
+.line{background:var(--bg);border-color:var(--line)}
+.copy{background:var(--card);color:var(--ink);border:1.5px solid var(--line)}
+.copy.ok{background:var(--go);border-color:var(--go);color:#fff}
+.fromhotel{color:var(--go)}
+.actrow{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch}
+.act{font:inherit;font-size:13px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:40px;padding:0 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
+.act.primary{flex:1;border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
+.act.icon{width:40px;padding:0}
+.act.added{flex:1;color:var(--sub);background:var(--bg);cursor:default}
+.dd-wrap{position:relative;display:inline-flex}
+.dd-wrap.grow{flex:1}
+.dd-wrap.grow .act{width:100%}
+.more-dd{left:auto;right:0;width:190px}
+.dd-item{font:inherit;font-size:14px;width:100%;display:block;text-align:left;background:none;border:0;color:var(--ink);padding:10px 10px;border-radius:8px;cursor:pointer;text-decoration:none}
+.dd-item:hover{background:var(--bg)}
+.dd-item.del{color:var(--accent)}
+label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
+.naver-row .naver{flex:1;height:40px;border-radius:12px !important;font-size:13px;font-weight:700;border:0;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer}
+.actrow .naver{border-radius:12px !important;padding:0 12px;height:40px;font-size:12px;font-weight:700;border:0;cursor:pointer}
+.side-confirm{flex-direction:row;flex-wrap:wrap;align-items:center;border-radius:14px;padding:10px;gap:8px}
+.side-confirm span{flex:1 1 100%;text-align:left}
+.side-confirm button{flex:1;height:38px;border-radius:10px}
+.detailbar{background:none;border:0;color:var(--sub);font-size:13px;padding:4px;border-radius:8px}
+.detailbar.on{background:none;color:var(--ink)}
+.memo,.review-text{border:0;background:var(--bg);border-radius:14px;padding:10px 12px}
+.memo::before,.review-text::before{content:"“";font-family:var(--display);font-weight:900;color:var(--accent);margin-right:4px}
+.review-add{border-color:var(--line);color:var(--sub);border-radius:14px}
+.result-bar select{border-radius:999px;background:var(--card)}
+
+/* 候補・行った */
+.trip-head h2{font-family:var(--display);font-weight:900;font-size:26px;margin:0}
+.trip-head p{margin:0;font-size:12.5px;color:var(--sub)}
+.folderbar{background:none;border:0;padding:0;gap:6px}
+.fb-label{display:none}
+.fb-chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.fb-chips::-webkit-scrollbar{display:none}
+.fb-chips button{flex:none;height:34px;border:1.5px solid var(--line)}
+.fb-chips button[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:#fff}
+.fb-links{justify-content:flex-start}
+.chips button{height:36px;padding:0 13px;border:1.5px solid var(--line);font-weight:500}
+.chips button[aria-pressed="true"]{font-weight:700}
+.viewtoggle{border-radius:999px;max-width:200px}
+.viewtoggle button{border-radius:999px}
+.ai-open{display:flex;align-items:center;gap:12px;text-align:left;background:#1E2633;color:#fff;border-radius:18px;padding:12px 14px}
+.ai-open-t{flex:1;display:flex;flex-direction:column}
+.ai-open-t b{font-family:var(--display);font-size:15px}
+.ai-open-t small{font-size:12px;font-weight:500;color:#C9D1DC}
+.ai{border:0;box-shadow:var(--shadow);border-radius:20px}
+.empty{border-radius:20px;background:var(--card);border:1.5px dashed var(--line)}
+
+/* タビセツの入口 */
+.shelf-hero{background:var(--accent);color:#fff;border-radius:24px;padding:16px;display:flex;gap:10px;align-items:center;overflow:hidden}
+.sh-text{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+.sh-kicker{font-size:11px;font-weight:700;letter-spacing:.08em;color:#FFE3A3}
+.sh-title{font-family:var(--display);font-weight:900;font-size:21px;line-height:1.3}
+.sh-lead{font-size:12px;line-height:1.5;color:#FFE9E6}
+.shelf-hero .nm-open.shelf-make{align-self:flex-start;margin-top:4px;background:#fff;color:var(--accent-dark);border-radius:999px;padding:9px 18px;font-size:14px}
+.sh-pics{flex:none;width:108px;height:140px;position:relative}
+.sh-pics img{position:absolute;width:80px;height:100px;object-fit:cover;border-radius:8px;border:3px solid #fff}
+.sh-pics img:first-child{left:0;top:16px;transform:rotate(-8deg)}
+.sh-pics img:last-child{right:0;top:32px;transform:rotate(6deg)}
+.shelf-box{border:0;border-radius:22px;box-shadow:var(--shadow)}
+.shelf-head b{font-family:var(--display);font-size:16px}
+.shelf-bar i{background:var(--teal)}
+.nm-open.guide{background:var(--teal)}
+@media (prefers-color-scheme: dark){.ai-open{background:var(--card);border:1.5px solid var(--line)}}

@@ -29,9 +29,18 @@ export default function NoteShelf({ user, onSignIn, onMakeNote, onMakeGuide, ref
   const n = pages?.length || 0;
   return (
     <div className="shelf">
-      <button type="button" className="nm-open shelf-make" onClick={onMakeNote}>
-        タビセツを作る<small>行った場所の写真と感想で、旅の1枚をつくる</small>
-      </button>
+      <div className="shelf-hero">
+        <div className="sh-text">
+          <span className="sh-kicker">TRAVEL MANUAL</span>
+          <b className="sh-title">旅の1枚、<br />タビセツを作ろう</b>
+          <span className="sh-lead">行った場所の写真と感想で、インスタに映える1枚に</span>
+          <button type="button" className="nm-open shelf-make" onClick={onMakeNote}>タビセツを作る</button>
+        </div>
+        <div className="sh-pics" aria-hidden="true">
+          <img src="/note/taste-yumekawa.jpg" alt="" />
+          <img src="/note/taste-pop.jpg" alt="" />
+        </div>
+      </div>
 
       <div className="shelf-box">
         <div className="shelf-head">

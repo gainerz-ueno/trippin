@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NaverLinks } from './naver';
+import { NaverLinks, inKorea } from './naver';
+import { CatIcon, CAT_SEARCH, IcSearch, IcBookmark, IcCheckCircle, IcCheck, IcPin, IcPen, IcHotel, IcPlane, IcUser, IcDown, IcRight, IcMore } from './icons';
 import dynamic from 'next/dynamic';
 import MapView from './MapView';
 // タビセツ（開いたときだけ読み込む）
@@ -600,7 +601,13 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
     }
   }
 
-  if (!open) return <button type="button" className="ai-open" onClick={() => setOpen(true)}>AIナビゲーター（この後どんな気分）</button>;
+  if (!open) return (
+    <button type="button" className="ai-open" onClick={() => setOpen(true)}>
+      <CatIcon id="ai" size={40} />
+      <span className="ai-open-t"><b>AIナビゲーター</b><small>この後どんな気分？ 候補から次の行き先を提案</small></span>
+      <IcRight size={18} />
+    </button>
+  );
   const byId = new Map(items.map((i) => [i.id, i]));
   return (
     <div className="ai">
@@ -751,6 +758,7 @@ export default function Home() {
   const [mapUsed, setMapUsed] = useState(false); // 地図は一度作ったら作り直さない（地図の表示回数を増やさない）
   useEffect(() => { if (view === 'map') setMapUsed(true); }, [view]);
   const [memoFor, setMemoFor] = useState(null);
+  const [moreFor, setMoreFor] = useState(null); // 「…」メニューを開いているお店
   const [reviewFor, setReviewFor] = useState(null);
   const [hotel, setHotel] = useState(null); // 今回の宿泊先（1つ。すべての画面の軸）
   const useNear = !!(hotel && nearHotel && hotel.lat != null);
@@ -1108,7 +1116,7 @@ export default function Home() {
     return (
       <article key={it.id} id={'item-' + it.id} className={'item' + (it.done ? ' done' : '')}>
         <div className="item-top">
-          <div className="thumbwrap side">
+          <div className="thumbwrap">
             <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
               {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" onError={() => refreshPhoto(it)} /> : <div className="thumb" />}
             </button>
@@ -1116,28 +1124,6 @@ export default function Home() {
             {it.done && (
               <button className={'star photo-star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
             )}
-            <div className="side-acts">
-              <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
-              <NaverLinks place={it} />
-              {it.done
-                ? <button onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
-                : <button className="go" onClick={() => update(it.id, { done: true })}>行った</button>}
-              <button onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}>{it.memo ? 'メモを直す' : 'メモ'}</button>
-              <label className="photo-add">
-                {photoBusy === it.id ? '保存中…' : it.done ? '写真を追加' : 'メモ画像を追加'}
-                <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files, it.done ? 'visit' : 'memo'); e.target.value = ''; }} />
-              </label>
-              {safeUrl(it.srcUrl) && <a href={safeUrl(it.srcUrl)} target="_blank" rel="noopener noreferrer">元の投稿</a>}
-              {confirmId === it.id ? (
-                <div className="side-confirm">
-                  <span>削除しますか？</span>
-                  <button className="del-yes" onClick={() => remove(it.id)}>削除する</button>
-                  <button onClick={() => setConfirmId(null)}>やめる</button>
-                </div>
-              ) : (
-                <button className="del" onClick={() => setConfirmId(it.id)}>削除</button>
-              )}
-            </div>
           </div>
           <div className="body">
             <NameBlock p={it} />
@@ -1171,6 +1157,38 @@ export default function Home() {
             </span>
           </div>
         </div>
+        <div className="actrow">
+          {it.done
+            ? <button type="button" className="act" onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
+            : <button type="button" className="act primary go" onClick={() => update(it.id, { done: true })}><IcCheck size={16} />行った</button>}
+          <a className="act" href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
+          <button type="button" className="act" onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}><IcPen size={16} />メモ</button>
+          <span className="dd-wrap">
+            <button type="button" className="act icon" aria-label="そのほかの操作" aria-expanded={moreFor === it.id} onClick={() => setMoreFor(moreFor === it.id ? null : it.id)}><IcMore size={18} /></button>
+            {moreFor === it.id && (
+              <div className="dropdown more-dd">
+                <ul>
+                  <li>
+                    <label className="dd-item photo-add">
+                      {photoBusy === it.id ? '保存中…' : it.done ? '写真を追加' : 'メモ画像を追加'}
+                      <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files, it.done ? 'visit' : 'memo'); e.target.value = ''; setMoreFor(null); }} />
+                    </label>
+                  </li>
+                  {safeUrl(it.srcUrl) && <li><a className="dd-item" href={safeUrl(it.srcUrl)} target="_blank" rel="noopener noreferrer">元の投稿を見る</a></li>}
+                  <li><button type="button" className="dd-item del" onClick={() => { setConfirmId(it.id); setMoreFor(null); }}>削除</button></li>
+                </ul>
+              </div>
+            )}
+          </span>
+        </div>
+        {inKorea(it) && <div className="actrow naver-row"><NaverLinks place={it} /></div>}
+        {confirmId === it.id && (
+          <div className="side-confirm">
+            <span>「{it.altName || it.name}」を削除しますか？</span>
+            <button className="del-yes" onClick={() => remove(it.id)}>削除する</button>
+            <button onClick={() => setConfirmId(null)}>やめる</button>
+          </div>
+        )}
         {memoFor === it.id ? (
           <MemoEditor initial={it.memo} onSave={(v) => { update(it.id, { memo: v }); setMemoFor(null); }} onCancel={() => setMemoFor(null)} />
         ) : it.memo ? (
@@ -1204,30 +1222,29 @@ export default function Home() {
 
   return (
     <main className="wrap">
-      <header>
+      <header className="apphead">
         <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
-        <div className="head-right">
-          <div className="tag">行きたい場所リスト</div>
-          {user
-            ? <button type="button" className="login-btn" onClick={() => signOut()}>ログアウト</button>
-            : <button type="button" className="login-btn on" onClick={() => signIn()}>Googleでログイン</button>}
-        </div>
+        {user
+          ? <button type="button" className="login-btn" onClick={() => signOut()}><IcUser size={16} />ログアウト</button>
+          : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}
       </header>
 
       {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
-      <div className="hotelbar top-hotel">
-        {hotel ? (
-          <>
-            <span className="hb-label">ホテル</span>
-            <span className="hb-name">{hotel.name}</span>
-            <button type="button" onClick={() => setHotelEdit((v) => !v)}>変更</button>
-          </>
-        ) : (
-          <div className="hb-first">
-            <button type="button" className="hb-set" onClick={() => setHotelEdit((v) => !v)}>今回の宿泊先（ホテル）を登録</button>
-            <p className="hb-note">※登録すると宿泊先を軸に行動しやすくなります</p>
-          </div>
+      <div className="ctxrow">
+        {tab === 'search' && (
+        <label className="ctx-chip trip">
+          <IcPlane size={15} />
+          <span className="sr">旅（フォルダ）</span>
+          <select value={trip} onChange={(e) => { setTrip(e.target.value); setCatFilter('すべて'); }}>
+            {allFolders.map((f) => <option key={f} value={f}>{f === UNSORTED ? f : `${f}の旅`}</option>)}
+          </select>
+          <IcDown size={12} />
+        </label>
         )}
+        <button type="button" className={'ctx-chip hotel' + (hotel ? ' on' : '')} aria-expanded={hotelEdit} onClick={() => setHotelEdit((v) => !v)}>
+          <IcHotel size={15} />
+          <span className="ctx-t">{hotel ? hotel.name : '宿泊先を登録'}</span>
+        </button>
       </div>
       {hotelEdit && (
         <HotelPicker country={country} current={hotel}
@@ -1236,22 +1253,34 @@ export default function Home() {
           onClose={() => setHotelEdit(false)} />
       )}
 
-      <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={tab === 'search'} onClick={() => setTab('search')}>さがす</button>
-        <button role="tab" aria-selected={tab === 'cand'} onClick={() => { setTab('cand'); setCatFilter('すべて'); }}>候補 <span className="count">{candTotal}</span></button>
-        <button role="tab" aria-selected={tab === 'done'} onClick={() => { setTab('done'); setCatFilter('すべて'); }}>行った <span className="count">{doneTotal}</span></button>
-      </div>
+      <nav className="tabs bottomnav" role="tablist" aria-label="メニュー">
+        <button role="tab" aria-selected={tab === 'search'} onClick={() => { setTab('search'); window.scrollTo({ top: 0 }); }}><IcSearch size={24} /><span>さがす</span></button>
+        <button role="tab" aria-selected={tab === 'cand'} onClick={() => { setTab('cand'); setCatFilter('すべて'); window.scrollTo({ top: 0 }); }}><IcBookmark size={24} /><span>候補 <span className="count">{candTotal}</span></span></button>
+        <button role="tab" aria-selected={tab === 'done'} onClick={() => { setTab('done'); setCatFilter('すべて'); window.scrollTo({ top: 0 }); }}><IcCheckCircle size={24} /><span>行った <span className="count">{doneTotal}</span></span></button>
+      </nav>
 
       {tab === 'search' && (
         <>
           <form className="panel" onSubmit={(e) => { e.preventDefault(); shotFile.current = null; setShotShops([]); runSearch(false); }}>
-            <h2>Googleマップでお店をさがす</h2>
+            <div className="search-head">
+              <p>Googleマップのお店・名所から</p>
+              <h2>どこに行く？</h2>
+            </div>
             {hotel && (
               <label className="near-hotel"><input type="checkbox" checked={nearHotel} onChange={(e) => setNearHotel(e.target.checked)} />宿泊先の近い順にさがす</label>
             )}
-            <label htmlFor="kw">キーワード・店名
-              <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="例：魯肉飯" />
+            <label htmlFor="kw" className="kw">
+              <IcSearch size={20} />
+              <span className="sr">キーワード・店名</span>
+              <input id="kw" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="店名・料理・エリア（例：魯肉飯）" />
             </label>
+            <div className="catsearch" aria-label="カテゴリーからさがす">
+              {CAT_SEARCH.map((c) => (
+                <button type="button" key={c.id} disabled={busy} onClick={() => { setKeyword(c.q); shotFile.current = null; setShotShops([]); runSearch(false, { keyword: c.q }); }}>
+                  <CatIcon id={c.id} size={44} />{c.label}
+                </button>
+              ))}
+            </div>
             <div className="row">
               <label htmlFor="ct">国
                 <select id="ct" value={useNear ? hotel.country || country : country} disabled={useNear} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
@@ -1281,12 +1310,14 @@ export default function Home() {
                 </select>
               </label>
             </div>
-<div className="shot">
+            <button className="btn search-go" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
+            {error && <p className="err">{error}</p>}
+            <div className="shot">
               <input ref={shotInput} id="shot" type="file" accept="image/*" hidden onChange={(e) => readShot(e.target.files?.[0])} />
-              <button type="button" className="btn ghost" disabled={shotBusy} onClick={() => shotInput.current?.click()}>
-                {shotBusy ? 'スクショを読み取っています…' : 'スクショからさがす'}
+              <button type="button" className="shot-card" disabled={shotBusy} onClick={() => shotInput.current?.click()}>
+                <CatIcon id="shot" size={44} />
+                <span><b>{shotBusy ? 'スクショを読み取っています…' : 'スクショからさがす'}</b><small>SNSのスクショをAIが読み取って、お店・街・国を見つけます</small></span>
               </button>
-              <p className="shot-lead">SNSのスクショ画像から独自AIが店名・街・国を読み取って検索</p>
               {shotShops.length > 1 && (
                 <div className="shot-shops">
                   <p className="hint">読み取ったお店（押すと検索します）</p>
@@ -1299,9 +1330,7 @@ export default function Home() {
               )}
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
-            <button className="btn" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
             <p className="hint">国を選ぶと、その国の中だけを探します。</p>
-            {error && <p className="err">{error}</p>}
           </form>
 
           <div className="list" ref={resultsTop} style={{ scrollMarginTop: '72px' }}>
@@ -1324,21 +1353,10 @@ export default function Home() {
             {sorted.map((p) => (
               <article className="item" key={p.placeId}>
                 <div className="item-top">
-                  <div className="thumbwrap side">
+                  <div className="thumbwrap">
                     <button type="button" className="thumbbtn" onClick={() => toggleDetail('s:' + p.placeId)} aria-label="詳細を見る">
                       {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
                     </button>
-                    <div className="side-acts">
-                      <a href={safeUrl(p.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
-                      <NaverLinks place={p} route={false} />
-                      {savedIds.has(p.placeId)
-                        ? <button className="added" disabled>追加済み（{items.find((i) => i.placeId === p.placeId)?.trip}）</button>
-                        : <button className="add" aria-expanded={pickFor === 's:' + p.placeId} onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加 ▾</button>}
-                      {pickFor === 's:' + p.placeId && !savedIds.has(p.placeId) && (
-                        <CategoryDropdown customCats={customCats} onAddCustom={addCustomCat}
-                          onPick={(c) => addCandidate(p, c)} onClose={closePick} />
-                      )}
-                    </div>
                   </div>
                   <div className="body">
                     <NameBlock p={p} />
@@ -1346,6 +1364,21 @@ export default function Home() {
                     {sort === 'near' && here && p.lat != null && <p className="dist">現在地から{distanceKm(here, p).toFixed(1)}km</p>}
                     {fromHotel(hotel, p) && <p className="fromhotel">{fromHotel(hotel, p)}</p>}
                   </div>
+                </div>
+                <div className="actrow">
+                  {savedIds.has(p.placeId)
+                    ? <button type="button" className="act added" disabled>追加済み（{items.find((i) => i.placeId === p.placeId)?.trip}）</button>
+                    : (
+                      <span className="dd-wrap grow">
+                        <button type="button" className="act primary add" aria-expanded={pickFor === 's:' + p.placeId} onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加 ▾</button>
+                        {pickFor === 's:' + p.placeId && (
+                          <CategoryDropdown customCats={customCats} onAddCustom={addCustomCat}
+                            onPick={(c) => addCandidate(p, c)} onClose={closePick} />
+                        )}
+                      </span>
+                    )}
+                  <a className="act" href={safeUrl(p.mapsUrl)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
+                  <NaverLinks place={p} route={false} />
                 </div>
                 <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
                   {openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細を開く'}
@@ -1364,6 +1397,10 @@ export default function Home() {
 
       {tab !== 'search' && (
         <>
+          <div className="trip-head">
+            <h2>{trip === UNSORTED ? UNSORTED : `${trip}の旅`}</h2>
+            <p>{hotel ? `宿泊先：${hotel.name} ・ ` : ''}候補 {items.filter((i) => i.trip === trip && !i.done).length} ・ 行った {items.filter((i) => i.trip === trip && i.done).length}</p>
+          </div>
           <FolderBar folders={allFolders} current={trip} counts={folderCounts} totals={folderTotals} onSelect={(f) => { setTrip(f); setCatFilter('すべて'); }}
             onCreate={createFolder} onRename={renameFolder} onDelete={deleteFolder} user={user} />
           {usedCats.length > 0 && (
