@@ -1,5 +1,5 @@
 'use client';
-// ガイドブックの表紙（テンプレートで作る）。幅1080pxで作って、そのまま画像にする
+// eガイドブックの表紙（テンプレートで作る）。幅1080pxで作って、そのまま画像にする
 import { fontOf } from './fonts';
 import { sizeOf, PAD, Ph, Title } from './NoteCanvas';
 

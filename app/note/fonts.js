@@ -1,5 +1,5 @@
 'use client';
-// タビセツで使うフォント（Google Fonts から、使うときだけ読み込む）
+// eタビセツで使うフォント（Google Fonts から、使うときだけ読み込む）
 export const FONTS = [
   { id: 'yomogi', label: '手書き', family: 'Yomogi', q: 'Yomogi' },
   { id: 'klee', label: 'ペン字', family: 'Klee One', q: 'Klee+One:wght@400;600' },
@@ -62,7 +62,7 @@ function toDataUrl(url) {
   return dataUrlCache.get(url);
 }
 
-// 画像にするための @font-face（タビセツに出てくる文字の分だけ。通信量を小さくする）
+// 画像にするための @font-face（eタビセツに出てくる文字の分だけ。通信量を小さくする）
 export async function embedCss(id, text) {
   const f = fontOf(id);
   await loadFont(f.id);

@@ -1,5 +1,5 @@
 'use client';
-// 自分のガイドブック：保存したタビセツを選んで並べ、表紙（テンプレート／AI）をつけて1冊にする
+// 自分のeガイドブック：保存したeタビセツを選んで並べ、表紙（テンプレート／AI）をつけて1冊にする
 import { useEffect, useRef, useState } from 'react';
 import './note.css';
 import CoverCanvas from './CoverCanvas';
@@ -13,7 +13,7 @@ const keyOf = (p) => p.cloudId || 'L' + p.id;
 const blank = (author = '') => ({ id: null, title: '', author, description: '', page_ids: [], cover_id: null, published: true });
 
 export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn, onClose, unsorted }) {
-  const [pages, setPages] = useState(null); // 保存したタビセツ・表紙
+  const [pages, setPages] = useState(null); // 保存したeタビセツ・表紙
   const [urls, setUrls] = useState({});
   const [guides, setGuides] = useState([]);
   const [g, setG] = useState(blank());
@@ -76,8 +76,8 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
   if (!user) {
     return (
       <div className="nm panel">
-        <div className="nm-head"><h2>ガイドブックにまとめる</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
-        <p className="nm-hint">ガイドブックはクラウドに保存して、リンクで見てもらう仕組みです。Googleでログインすると作れます。</p>
+        <div className="nm-head"><h2>eガイドブックにまとめる</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
+        <p className="nm-hint">eガイドブックはクラウドに保存して、リンクで見てもらう仕組みです。Googleでログインすると作れます。</p>
         <div className="nm-acts"><button type="button" onClick={onSignIn} style={{ gridColumn: '1 / -1' }}>Googleでログイン</button></div>
       </div>
     );
@@ -93,7 +93,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
   const thumbW = Math.max(60, Math.floor((boxW - 20 - 48) / 3));
   const place = folder === unsorted ? '' : folder;
   const coverText = {
-    title: cv.title || g.title || (place ? `${place}の旅` : '旅のガイドブック'),
+    title: cv.title || g.title || (place ? `${place}の旅` : '旅のeガイドブック'),
     sub: cv.sub || `${(g.author || 'わたし')}の歩き方`,
     author: cv.author || g.author, date: cv.date,
   };
@@ -139,7 +139,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
   async function save() {
     setBusy('save'); setErr(''); setMsg('');
     try {
-      if (!g.title.trim()) throw new Error('ガイドブックの名前を入れてください');
+      if (!g.title.trim()) throw new Error('eガイドブックの名前を入れてください');
       if (!sel.length) throw new Error('ページを1つ以上えらんでください');
       const row = await saveGuide({ ...g, page_ids: sel });
       setG((x) => ({ ...x, id: row.id }));
@@ -162,12 +162,12 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
 
   return (
     <div className="nm panel gm">
-      <div className="nm-head"><h2>ガイドブックにまとめる</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
+      <div className="nm-head"><h2>eガイドブックにまとめる</h2><button type="button" className="nm-close" onClick={onClose}>閉じる</button></div>
       {pages === null && <p className="nm-hint">読み込んでいます…</p>}
 
       {guides.length > 0 && (
         <>
-          <p className="nm-step">作ったガイドブック</p>
+          <p className="nm-step">作ったeガイドブック</p>
           <ul className="gm-list">
             {guides.map((x) => {
               const c = x.cover_id && pageById.get(x.cover_id);
@@ -194,9 +194,9 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       )}
 
       <div id="gm-edit" />
-      <p className="nm-step">{g.id ? '① ガイドブックを直す' : '① 新しいガイドブック'}</p>
+      <p className="nm-step">{g.id ? '① eガイドブックを直す' : '① 新しいeガイドブック'}</p>
       {g.id && <button type="button" className="nm-seg" onClick={() => { setG(blank(g.author)); setMsg(''); }}>新しく作る</button>}
-      <label className="nm-field">ガイドブックの名前<input value={g.title} maxLength={60} placeholder="例：のりの台北ガイド" onChange={(e) => setG({ ...g, title: e.target.value })} /></label>
+      <label className="nm-field">eガイドブックの名前<input value={g.title} maxLength={60} placeholder="例：のりの台北ガイド" onChange={(e) => setG({ ...g, title: e.target.value })} /></label>
       <div className="nm-2">
         <label className="nm-field">書いた人<input value={g.author} maxLength={30} placeholder="例：のり" onChange={(e) => setG({ ...g, author: e.target.value })} /></label>
         <label className="nm-check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={g.published} onChange={(e) => setG({ ...g, published: e.target.checked })} />リンクで公開する</label>
@@ -205,7 +205,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
 
       <p className="nm-step">② ページをえらぶ<small>えらんだ順に並びます（{sel.length}ページ）</small></p>
       {notes.length === 0 ? (
-        <p className="nm-hint">まだ保存したタビセツがありません。「タビセツを作る」で画像にしたあと「わたしのタビセツに保存」を押すと、ここに並びます。</p>
+        <p className="nm-hint">まだ保存したeタビセツがありません。「eタビセツを作る」で画像にしたあと「わたしのeタビセツに保存」を押すと、ここに並びます。</p>
       ) : (
         <div className="gm-grid">
           {notes.map((p) => {
@@ -269,7 +269,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
         <div className="nm-fonts">
           {FONTS.map((f) => (
             <button key={f.id} type="button" className="nm-font" aria-pressed={cv.font === f.id} onClick={() => setCv({ ...cv, font: f.id })}>
-              <b style={{ fontFamily: `"${f.family}"` }}>タビセツ</b><small>{f.label}</small>
+              <b style={{ fontFamily: `"${f.family}"` }}>eタビセツ</b><small>{f.label}</small>
             </button>
           ))}
         </div>
@@ -311,14 +311,14 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       <p className="nm-step">④ 保存する</p>
       {err && <p className="nm-err">{err}</p>}
       <div className="nm-acts">
-        <button type="button" onClick={save} disabled={!!busy} style={{ gridColumn: '1 / -1' }}>{busy === 'save' ? '保存しています…' : g.id ? 'ガイドブックを保存し直す' : 'ガイドブックを作る'}</button>
+        <button type="button" onClick={save} disabled={!!busy} style={{ gridColumn: '1 / -1' }}>{busy === 'save' ? '保存しています…' : g.id ? 'eガイドブックを保存し直す' : 'eガイドブックを作る'}</button>
       </div>
       {msg && (
         <div className="gm-done">
           <p>保存しました。{guides.find((x) => x.id === msg)?.published ? 'リンクを送ると、だれでもスマホでめくって読めます。' : '「リンクで公開する」にチェックを入れて保存し直すと、リンクで見てもらえます。'}</p>
           {guides.find((x) => x.id === msg)?.published && (
             <div className="nm-acts">
-              <a className="gm-btn" href={`/g/${msg}`} target="_blank" rel="noopener noreferrer">ガイドブックを見る</a>
+              <a className="gm-btn" href={`/g/${msg}`} target="_blank" rel="noopener noreferrer">eガイドブックを見る</a>
               <button type="button" className="sub" onClick={() => copy(msg)}>リンクをコピー</button>
             </div>
           )}

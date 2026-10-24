@@ -157,7 +157,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
   const endRef = useRef(null);
 
   useEffect(() => () => versions.forEach((v) => URL.revokeObjectURL(v.url)), []); // eslint-disable-line react-hooks/exhaustive-deps
-  // えらんでいる版を、保存・シェア・ガイドブックの対象にする
+  // えらんでいる版を、保存・シェア・eガイドブックの対象にする
   useEffect(() => { if (cur >= 0 && versions[cur]) onImage(versions[cur].blob); }, [cur]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!hasOut && cur >= 0 && versions[cur]) onImage(versions[cur].blob); }, [hasOut]); // eslint-disable-line react-hooks/exhaustive-deps
 

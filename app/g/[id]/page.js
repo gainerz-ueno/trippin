@@ -1,5 +1,5 @@
 'use client';
-// ガイドブックを読むページ（リンクを知っている人なら、ログインもパスワードもいらない）
+// eガイドブックを読むページ（リンクを知っている人なら、ログインもパスワードもいらない）
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchGuide, guideUrls } from '../../cloud';
@@ -28,10 +28,10 @@ export default function GuidePage() {
     <main className="gv">
       <header className="gv-head">
         <a href="/" className="gv-logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></a>
-        <span>旅のガイドブック</span>
+        <span>旅のeガイドブック</span>
       </header>
       {g === undefined && <p className="gv-msg">読み込んでいます…</p>}
-      {g === null && <p className="gv-msg">このガイドブックは見つかりませんでした。公開が止められたか、リンクがまちがっているかもしれません。</p>}
+      {g === null && <p className="gv-msg">このeガイドブックは見つかりませんでした。公開が止められたか、リンクがまちがっているかもしれません。</p>}
       {g && (
         <>
           <section className="gv-intro">
@@ -49,8 +49,8 @@ export default function GuidePage() {
             ))}
           </div>
           <footer className="gv-foot">
-            <p>このガイドブックは「Tabibi」で作られました。</p>
-            <a href="/">Tabibiで自分のガイドブックを作る</a>
+            <p>このeガイドブックは「Tabibi」で作られました。</p>
+            <a href="/">Tabibiで自分のeガイドブックを作る</a>
           </footer>
         </>
       )}

@@ -4,7 +4,7 @@ import { NaverLinks, inKorea } from './naver';
 import { CatIcon, CAT_SEARCH, IcSearch, IcBookmark, IcCheckCircle, IcCheck, IcPin, IcPen, IcHotel, IcPlane, IcUser, IcDown, IcRight, IcMore } from './icons';
 import dynamic from 'next/dynamic';
 import MapView from './MapView';
-// タビセツ（開いたときだけ読み込む）
+// eタビセツ（開いたときだけ読み込む）
 const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
 const GuideMaker = dynamic(() => import('./note/GuideMaker'), { ssr: false });
 const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
@@ -764,9 +764,9 @@ export default function Home() {
   const useNear = !!(hotel && nearHotel && hotel.lat != null);
   const [hotelEdit, setHotelEdit] = useState(false);
   const [photoVer, setPhotoVer] = useState(0);
-  const [notes, setNotes] = useState({}); // フォルダごとのタビセツ
+  const [notes, setNotes] = useState({}); // フォルダごとのeタビセツ
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
-  const [shelfKey, setShelfKey] = useState(0); // わたしのタビセツを読み直す合図
+  const [shelfKey, setShelfKey] = useState(0); // わたしのeタビセツを読み直す合図
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
   const [photoBusy, setPhotoBusy] = useState(null);
@@ -881,7 +881,7 @@ export default function Home() {
           setFolders((prev) => [...new Set([...(cloudSettings.folders || []), ...prev])]);
           setCustomCats((prev) => [...new Set([...(cloudSettings.customCats || []), ...prev])]);
           if (cloudSettings.hotel !== undefined) setHotel(cloudSettings.hotel || null);
-          // タビセツはフォルダごとに新しいほうを使う
+          // eタビセツはフォルダごとに新しいほうを使う
           if (Array.isArray(cloudSettings.prompts)) setPrompts((prev) => [...prev, ...cloudSettings.prompts.filter((c) => !prev.some((p) => p.name === c.name))].slice(0, 20));
           if (cloudSettings.notes) setNotes((prev) => {
             const out = { ...prev };

@@ -1,4 +1,4 @@
-// 「AIで作る」タビセツ：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
+// 「AIで作る」eタビセツ：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
@@ -245,7 +245,7 @@ function coverPrompt(d) {
     `Theme / art style: ${STYLES[d.tpl]}.`,
     d.prefs,
     d.custom ? `User's design brief (written in Japanese; follow it carefully): 「${d.custom}」` : '',
-    `- A big, eye-catching hand-lettered title 「${d.title || '旅のガイドブック'}」${d.sub ? ` and a subtitle 「${d.sub}」` : ''}.`,
+    `- A big, eye-catching hand-lettered title 「${d.title || '旅のeガイドブック'}」${d.sub ? ` and a subtitle 「${d.sub}」` : ''}.`,
     '- A small decorative label "TRAVEL GUIDE BOOK".',
     d.author || d.date ? `- A small line at the bottom: 「${[d.author && 'by ' + d.author, d.date].filter(Boolean).join('　')}」` : '',
     d.cover

@@ -1,5 +1,5 @@
 'use client';
-// 「行った」のお店・スポットから、タビセツ（画像）を作る
+// 「行った」のお店・スポットから、eタビセツ（画像）を作る
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './note.css';
 import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
@@ -17,7 +17,7 @@ export function defaultNote(trip, items, unsorted) {
   const done = items.filter((i) => i.done && i.trip === trip).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
   return {
     tpl: 'lovely', font: 'hachimaru', size: 'post',
-    title: trip === unsorted ? 'わたしのタビセツ' : `${trip}の旅`, sub: '旅の取扱説明書', by: '', who: '', date: '', words: '', logo: true,
+    title: trip === unsorted ? 'わたしのeタビセツ' : `${trip}の旅`, sub: '旅の取扱説明書', by: '', who: '', date: '', words: '', logo: true,
     spots: done.slice(0, MAX).map((i) => ({ id: i.id, text: null, photos: null })),
     updatedAt: 0,
   };
@@ -189,7 +189,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const fileName = `tabibi-${(note.title || 'note').replace(/[\\/:*?"<>|\s]+/g, '_')}.${out?.ext || 'png'}`;
   function share() { if (out) shareBlob(out.blob, fileName); }
   function download() { if (out) downloadBlob(out.blob, fileName); }
-  // ガイドブックのページとしてクラウドに保存
+  // eガイドブックのページとしてクラウドに保存
   const [saved, setSaved] = useState('');
   async function addToGuide() {
     if (!out) return;
@@ -207,7 +207,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   return (
     <div className="nm panel" ref={boxRef}>
       <div className="nm-head">
-        <h2>タビセツを作る</h2>
+        <h2>eタビセツを作る</h2>
         <button type="button" className="nm-close" onClick={onClose}>閉じる</button>
       </div>
       <ChatFlow note={note} save={saveKeep} user={user} onSignIn={onSignIn}
@@ -251,17 +251,17 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         )} />
       {out && (
         <div id="nm-out" className="nm-out nm">
-          {mode !== 'ai' && <img src={out.url} alt="できあがったタビセツ" />}
+          {mode !== 'ai' && <img src={out.url} alt="できあがったeタビセツ" />}
           <p className="nm-hint">{mode === 'ai' ? 'いまえらんでいる絵を保存・シェアします。' : '画像を長押しして保存することもできます。'}</p>
           <div className="nm-acts">
             {canShare && <button type="button" onClick={share}>SNSにシェア</button>}
             <button type="button" className={canShare ? 'sub' : ''} onClick={download} style={canShare ? undefined : { gridColumn: '1 / -1' }}>画像を保存</button>
             {user ? (
               <button type="button" className="sub nm-guide-add" onClick={addToGuide} disabled={saved !== ''} style={{ gridColumn: '1 / -1' }}>
-                {saved === 'done' ? 'わたしのタビセツに保存しました' : saved === 'saving' ? '保存しています…' : 'わたしのタビセツに保存'}
+                {saved === 'done' ? 'わたしのeタビセツに保存しました' : saved === 'saving' ? '保存しています…' : 'わたしのeタビセツに保存'}
               </button>
             ) : (
-              <p className="nm-hint" style={{ gridColumn: '1 / -1' }}>Googleでログインすると、このタビセツを「わたしのタビセツ」に保存できます。2枚たまるとガイドブックにまとめられます。</p>
+              <p className="nm-hint" style={{ gridColumn: '1 / -1' }}>Googleでログインすると、このeタビセツを「わたしのeタビセツ」に保存できます。2枚たまるとeガイドブックにまとめられます。</p>
             )}
           </div>
         </div>

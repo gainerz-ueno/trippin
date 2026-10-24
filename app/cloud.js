@@ -183,7 +183,7 @@ export async function fetchShared(id) {
   return data; // { folder, items } または null
 }
 
-// ---- 自分のガイドブック（保存したタビセツ＝ページ、表紙、ガイドブック） ----
+// ---- 自分のeガイドブック（保存したeタビセツ＝ページ、表紙、eガイドブック） ----
 const GUIDE = 'guide';
 const newUuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => ((Math.random() * 16) | 0).toString(16)));
 
@@ -238,7 +238,7 @@ export async function listGuides() {
 export async function saveGuide(g) {
   if (!uid) throw new Error('Googleでログインしてください');
   const row = {
-    id: g.id || shareId(), user_id: uid, title: String(g.title || '').slice(0, 60) || '旅のガイドブック',
+    id: g.id || shareId(), user_id: uid, title: String(g.title || '').slice(0, 60) || '旅のeガイドブック',
     author: String(g.author || '').slice(0, 30), description: String(g.description || '').slice(0, 300),
     cover_id: g.cover_id || null, page_ids: (g.page_ids || []).slice(0, 60), published: !!g.published,
     updated_at: new Date().toISOString(),

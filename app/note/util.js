@@ -1,5 +1,5 @@
 'use client';
-// タビセツ・ガイドブックで共通に使うもの
+// eタビセツ・eガイドブックで共通に使うもの
 import { supa } from '../cloud';
 import { embedCss } from './fonts';
 
@@ -44,7 +44,7 @@ export async function renderNode(node, size, fontId) {
   return blob;
 }
 
-// 「AIで作る」（タビセツ・表紙）。成功すると画像（JPEG）が返る
+// 「AIで作る」（eタビセツ・表紙）。成功すると画像（JPEG）が返る
 export async function callAi(body) {
   const t = await accessToken();
   if (!t) throw new Error('「AIで作る」はGoogleでログインすると使えます');
