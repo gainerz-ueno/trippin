@@ -5,7 +5,7 @@
 name: Cloudflare に公開
 on:
   push:
-    branches: [main]
+    branches: [main, cloudflare]
   workflow_dispatch:
 concurrency:
   group: deploy
