@@ -1,6 +1,7 @@
 // 「AIで作る」eタビセツ：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
-// ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
+// ・Googleでログインしている人だけ。回数は無料／プレミアムで決まる（app/lib/plan.js。数えるのはSupabaseの ai_quota_use。失敗したら回数を戻す）
 import sharp from 'sharp';
+import { PLAN } from '../../lib/plan';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
 import { gfetch, MOCK } from '../../lib/gfetch';
 const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
@@ -93,8 +94,8 @@ function img(b64, max = 2_000_000) {
 }
 
 async function rpc(fn, token, body = {}) {
-  // テスト用モード：回数の数え方だけ、にせ物で動かす（1日3回）
-  if (MOCK) return mockRpc(fn, token);
+  // テスト用モード：回数の数え方だけ、にせ物で動かす（本物と同じ回数の決まり）
+  if (MOCK) return mockRpc(fn, token, body);
   // つながらないときは「回数を確認できませんでした」として扱う（落ちないように）
   return fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
@@ -104,14 +105,19 @@ async function rpc(fn, token, body = {}) {
     signal: AbortSignal.timeout(10000),
   }).catch(() => new Response('{}', { status: 503 }));
 }
+// テスト用：トークンは mock-token:ユーザー名。名前が premium で始まる人は月払い、premiumyear で始まる人は年払い
 const mockUses = new Map();
-function mockRpc(fn, token) {
+function mockRpc(fn, token, body) {
   const ok = (v) => new Response(JSON.stringify(v), { status: 200, headers: { 'content-type': 'application/json' } });
-  if (token !== 'mock-token') return new Response('{}', { status: 401 });
-  const n = mockUses.get(token) || 0;
-  if (fn === 'ai_credits_left') return ok(Math.max(0, 3 - n));
-  if (fn === 'use_ai_credit') { if (n >= 3) return ok(null); mockUses.set(token, n + 1); return ok('t' + (n + 1)); }
-  if (fn === 'refund_ai_credit') { mockUses.set(token, Math.max(0, n - 1)); return ok(true); }
+  const m = /^mock-token(?::([\w-]{1,40}))?$/.exec(token);
+  if (!m) return new Response('{}', { status: 401 });
+  const name = m[1] || 'mock-user';
+  const plan = name.startsWith('premiumyear') ? 'premium_year' : name.startsWith('premium') ? 'premium_month' : 'free';
+  const limit = plan === 'premium_year' ? PLAN.AI_YEAR : plan === 'premium_month' ? PLAN.AI_MONTH : PLAN.AI_FREE_TOTAL;
+  const n = mockUses.get(name) || 0;
+  if (fn === 'my_plan') return ok({ plan, limit, used: n, left: Math.max(0, limit - n) });
+  if (fn === 'ai_quota_use') { if (n >= limit) return ok(null); mockUses.set(name, n + 1); return ok('t' + (n + 1)); }
+  if (fn === 'ai_quota_refund') { mockUses.set(name, Math.max(0, n - 1)); return ok(true); }
   return new Response('{}', { status: 404 });
 }
 const bearer = (req) => (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').slice(0, 4000);
@@ -132,17 +138,19 @@ async function isUnlimited(token) {
 export async function GET(req) {
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
-  if (await isUnlimited(token)) return json({ left: 999 });
-  const r = await rpc('ai_credits_left', token);
+  if (await isUnlimited(token)) return json({ left: 999, plan: 'owner', limit: 999 });
+  const r = await rpc('my_plan', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);
-  return json({ left: await r.json() });
+  const p = await r.json().catch(() => null);
+  if (!p || typeof p.left !== 'number') return json({ error: '回数を確認できませんでした' }, 500);
+  return json({ left: p.left, plan: p.plan, limit: p.limit });
 }
 
 // 買ったお土産（文字だけ。写真は送らない＝AIに渡す量を増やさない）
 function svLine(d, bullet = '- ') {
   if (!d.souvenirs?.length) return '';
-  return `${bullet}「買ったお土産」 small panel with exactly ${d.souvenirs.length} items, each a tiny hand-drawn illustration of the item with its name${d.souvenirs.some((x) => x.price) ? ' and price' : ''}: ${d.souvenirs.map((x) => `「${x.name}」${x.price ? `「${x.price}」` : ''}${x.good ? ' (mark with a small heart)' : ''}`).join(' / ')}`;
+  return `${bullet}「買ったお土産」 small panel with exactly ${d.souvenirs.length} items, each a tiny hand-drawn illustration of the item with its name${d.souvenirs.some((x) => x.price) ? ' and price' : ''}: ${d.souvenirs.map((x) => `「${x.name}」${x.price ? `「${x.price}」` : ''}${x.good ? ' (mark with a small star ★)' : ''}`).join(' / ')}`;
 }
 
 function peopleLine(d) {
@@ -468,7 +476,7 @@ export async function POST(req) {
   return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
 }
 
-// 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
+// 回数を1つ使って絵を描く（回数は app/lib/plan.js。うまく描けなかったら回数を戻す）
 async function run(req, job) {
   if (!GKEY()) return json({ error: '「AIで作る」の設定がまだ終わっていません（運営者の設定待ち）' }, 500);
   const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
@@ -479,15 +487,15 @@ async function run(req, job) {
     if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
     return new Response(o.jpg, { headers: imgHeaders(o) });
   }
-  const r = await rpc('use_ai_credit', token);
+  const r = await rpc('ai_quota_use', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);
   const ticket = await r.json();
-  if (!ticket) return json({ error: '「AIで作る」は1日3回までです（直すときも1回に数えます）。また明日使ってください' }, 429);
+  if (!ticket) return json({ error: `「AIで作る」の回数を使い切りました（無料は合計${PLAN.AI_FREE_TOTAL}回、プレミアムは月${PLAN.AI_MONTH}回・年払いは年${PLAN.AI_YEAR}回。直すときも1回に数えます）`, quota: true }, 429);
 
   const out = await make();
   if (!out.ok) {
-    await rpc('refund_ai_credit', token, { ticket }).catch(() => {});
+    await rpc('ai_quota_refund', token, { ticket }).catch(() => {});
     return json({ error: 'AIがうまく描けませんでした。もう一度試してください（回数は減っていません）' }, 502);
   }
   return new Response(out.jpg, { headers: imgHeaders(out) });
@@ -506,6 +514,8 @@ async function gen(parts, aspect, rawOut) {
       body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect, imageSize: '2K' } } }),
     }, 100000);
     const d = await r.json().catch(() => ({}));
+    // 1回あたりの本当の量を測る（docs/マネタイズ根拠.md「わからないこと」：文字の入力トークン）。Vercel のログで見る
+    if (d.usageMetadata) console.log('[tabibi] noteai usage', JSON.stringify({ in: d.usageMetadata.promptTokenCount, out: d.usageMetadata.candidatesTokenCount, imgs: parts.filter((p) => p.inlineData).length }));
     const part = d.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
     if (!part) return { ok: false, error: d.error?.message || d.candidates?.[0]?.finishReason || 'no image' };
     if (rawOut) return { ok: true, raw: Buffer.from(part.inlineData.data, 'base64') };

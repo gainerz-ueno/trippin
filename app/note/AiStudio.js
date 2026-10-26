@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { toB64, callAi } from './util';
 import { jaError } from '../lib/api';
+import { PLAN } from '../lib/plan';
 
 // ---- 好みを選ぶ ----
 export const PREF_GROUPS = [
@@ -232,7 +233,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
   }
 
   const canMake = !busy && left !== 0;
-  const makeLabel = busy ? 'AIが描いています…（30秒ほど）' : left === 0 ? '今日の回数を使い切りました' : versions.length ? 'もう一度ちがう絵で作る' : 'AIで作る';
+  const makeLabel = busy ? 'AIが描いています…（30秒ほど）' : left === 0 ? '回数を使い切りました' : versions.length ? 'もう一度ちがう絵で作る' : 'AIで作る';
 
   return (
     <div className="as">
@@ -325,8 +326,9 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
       <div className="nm-acts">
         <button type="button" className="nm-ai-btn" onClick={generate} disabled={!canMake || (!bare && sub === 'chat' && !(chat.done || chat.edited))} style={{ gridColumn: '1 / -1' }}>
           {makeLabel}
-          {!busy && left != null && left > 0 && <small>{left >= 999 ? '回数の制限なし（運営者）' : `今日あと${left}回（直すときも1回に数えます）`}</small>}
+          {!busy && left != null && left > 0 && <small>{left >= 999 ? '回数の制限なし（運営者）' : `あと${left}回（直すときも1回に数えます）`}</small>}
         </button>
+        {left === 0 && !versions.length && <button type="button" className="prem-link" style={{ gridColumn: '1 / -1' }} onClick={() => window.dispatchEvent(new Event('tabibi:premium'))}>プレミアムなら月{PLAN.AI_MONTH}回使えます（見る）</button>}
       </div>
 
       {versions.length > 0 && (
@@ -381,7 +383,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
                 <button type="button" className="as-stop" onClick={() => { setFix(null); setArea(null); setStrokes([]); setFixLog((x) => x.slice(0, area ? -4 : -2)); }}>やめる</button>
               </>
             )}
-            {left === 0 && <p className="nm-hint">今日の回数を使い切ったので、直すのはまた明日できます。</p>}
+            {left === 0 && <p className="nm-hint">「AIで作る」の回数を使い切りました。<button type="button" className="linkbtn" onClick={() => window.dispatchEvent(new Event('tabibi:premium'))}>プレミアムを見る</button></p>}
           </div>
         </div>
       )}

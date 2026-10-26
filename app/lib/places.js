@@ -77,8 +77,8 @@ function mostCommonCountry(places) {
   return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
 }
 
-// 1件ずつ現地の言語で名前・住所を取る（検索結果に出てこなかったお店用）
-async function detailsIn(id, lang) {
+// 1件ずつ現地の言語で名前・住所を取る（検索結果に出てこなかったお店用。Place Details Pro）
+export async function detailsIn(id, lang) {
   try {
     const res = await gfetch(`https://places.googleapis.com/v1/places/${id}?languageCode=${encodeURIComponent(lang)}`, {
       headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': 'id,displayName,formattedAddress' },
@@ -138,13 +138,16 @@ export async function searchPage(textQuery, minRating, tokens, country, extra = 
     const local = await searchOnce(textQuery, minRating, tokens?.local, lang, country, extra).catch(() => ({ places: [] }));
     localNext = local.nextPageToken || null;
     for (const lp of local.places || []) localMap.set(lp.id, lp);
-    // 現地の言語の検索に出てこなかったお店だけ1件ずつ取る（1件ごとに料金がかかるので最大6件まで）
-    const missing = jaPlaces.filter((p) => !localMap.has(p.id)).slice(0, 6);
-    const got = await Promise.all(missing.map((p) => detailsIn(p.id, lang)));
-    got.forEach((lp) => { if (lp?.id) localMap.set(lp.id, lp); });
+    // 現地の言語の検索に出てこなかったお店は、ここでは取りに行かない（1件ごとに Place Details Pro の料金がかかる）。
+    // 「候補に追加」したお店だけ /api/localname で現地の表記を取る（docs/マネタイズ根拠.md）
   }
 
-  const places = jaPlaces.map((p) => shape(p, localMap.get(p.id), lang));
+  const places = jaPlaces.map((p) => {
+    const lp = localMap.get(p.id);
+    const out = shape(p, lp, lang);
+    if (lang !== 'ja' && !lp) out.needLocal = lang;
+    return out;
+  });
   const next = ja.nextPageToken ? { ja: ja.nextPageToken, local: localNext, lang } : null;
   return { places, next, lang };
 }
@@ -174,7 +177,7 @@ const hanDominant = (s) => count(s, /\p{Script=Han}/gu) > latin(s);
 
 // name・address = 現地の表記（Grab・Uber に貼る用）
 // altName・altAddress = 日本人が読める表記（文字列=表示 / 'translate'=Geminiで作る / ''=出さない）
-function alts(name, address, jaName, lang, jaKnown) {
+export function alts(name, address, jaName, lang, jaKnown) {
   let altName = '';
   if (lang !== 'ja' && !hasKana(name) && !hanDominant(name)) {
     altName = jaKnown && hasKana(jaName) && jaName !== name ? jaName : 'translate';

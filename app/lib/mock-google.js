@@ -70,7 +70,9 @@ function searchText(body, mask) {
   const lang = body.languageCode || 'ja';
   let list = SPOTS.filter((s) => inBox(s, body.locationRestriction));
   const words = q.split(/\s+/).filter(Boolean);
-  const hit = list.filter((s) => words.some((w) => Object.values(s[7]).some(([n, a]) => n.includes(w) || a.includes(w)) || s[4].includes(w)));
+  // その言語の名前・住所だけで当てる（本物も、日本語の名前は現地の言語の検索では当たらないことがある）
+  const namesIn = (s) => (s[7][lang] ? [s[7][lang]] : Object.values(s[7]));
+  const hit = list.filter((s) => words.some((w) => namesIn(s).some(([n, a]) => n.includes(w) || a.includes(w)) || s[4].includes(w)));
   if (hit.length) list = hit;
   if (/ホテル|hotel/i.test(q)) list = SPOTS.filter((s) => s[4] === 'ホテル');
   if (/なし|nothing/.test(q)) list = [];

@@ -59,6 +59,7 @@ export async function callAi(body) {
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
     if (r.status === 413) throw new Error('写真が大きすぎて送れませんでした。写真の枚数を減らしてもう一度試してください');
+    if (r.status === 429 && d.quota) { const { logEvent } = await import('../cloud'); logEvent('ai_quota_hit'); }
     throw new Error(/[\u3040-\u30ff\u4e00-\u9fff]/.test(d.error || '') ? d.error : 'AIで作れませんでした。もう一度試してください');
   }
   const b = await r.blob();
@@ -66,12 +67,17 @@ export async function callAi(body) {
   return b;
 }
 export async function aiLeft() {
+  const d = await aiPlan();
+  return d ? d.left : null;
+}
+// いまのプラン（無料／プレミアム）と「AIで作る」の残り回数。決めるのはサーバー（Supabase の entitlements）
+export async function aiPlan() {
   const t = await accessToken();
   if (!t) return null;
   try {
     const r = await fetch('/api/noteai', { headers: { Authorization: 'Bearer ' + t }, signal: AbortSignal.timeout(15000) });
     const d = await r.json();
-    return r.ok && typeof d.left === 'number' ? d.left : null;
+    return r.ok && typeof d.left === 'number' ? { left: d.left, plan: d.plan || 'free', limit: d.limit ?? null } : null;
   } catch { return null; }
 }
 

@@ -1,8 +1,9 @@
 'use client';
 // お土産の記録（旅のあとに、実際に買ったものを登録する）
-// 名前・買ったお店（リストのお店をえらぶ／自分で書く）・現地のお金での値段・写真・ひとこと・「買ってよかった」
+// 名前・買ったお店（リストのお店をえらぶ／自分で書く）・現地のお金での値段・写真・ひとこと・おすすめマーク（★。お店のおすすめマークと同じ呼び名にそろえた）
 import { useRef, useState } from 'react';
 import { CURRENCIES, currencyOf, money, totals } from './lib/money';
+import { logEvent } from './cloud';
 
 export const MAX_SOUVENIRS = 50; // 1つの旅に入れられる数
 const newId = () => 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -78,7 +79,7 @@ function Editor({ init, items, country, onSave, onCancel, onDelete }) {
         </select></label>
       </div>
       <label>ひとこと（共有リンク・eタビセツでも見えます）<textarea id="svmemo" rows={2} value={v.memo} maxLength={200} placeholder="例：会社のおみやげに。個包装で配りやすい" onChange={(e) => set({ memo: e.target.value })} /></label>
-      <label className="sv-good"><input type="checkbox" checked={!!v.good} onChange={(e) => set({ good: e.target.checked })} />買ってよかった</label>
+      <label className="sv-good"><input type="checkbox" checked={!!v.good} onChange={(e) => set({ good: e.target.checked })} />★ おすすめマーク</label>
       {err && <p className="err">{err}</p>}
       <div className="memo-acts">
         <button className="btn" type="submit" disabled={busy}>{init ? '保存' : '登録する'}</button>
@@ -102,8 +103,8 @@ export function SouvenirCard({ s, items, onEdit, onToggleGood }) {
         {s.memo && <p className="sv-memo">{s.memo}</p>}
         <div className="sv-acts">
           {onToggleGood ? (
-            <button type="button" className={'sv-goodbtn' + (s.good ? ' on' : '')} aria-pressed={!!s.good} onClick={onToggleGood}>{s.good ? '♥ 買ってよかった' : '♡ 買ってよかった'}</button>
-          ) : s.good ? <span className="sv-goodbtn on">♥ 買ってよかった</span> : null}
+            <button type="button" className={'sv-goodbtn' + (s.good ? ' on' : '')} aria-pressed={!!s.good} onClick={onToggleGood}>{s.good ? '★ おすすめ' : '☆ おすすめ'}</button>
+          ) : s.good ? <span className="sv-goodbtn on">★ おすすめ</span> : null}
           {onEdit && <button type="button" className="sv-editbtn" onClick={onEdit}>直す</button>}
         </div>
       </div>
@@ -125,7 +126,7 @@ export default function SouvenirPanel({ trip, items, list, country, onAdd, onUpd
       {list.length === 0 && mode !== 'new' && <p className="hint">旅で実際に買ったお土産を記録できます。お店・値段・写真・ひとことを残しておくと、次の旅や友だちへのおすすめに使えます（eタビセツ・eガイドブックにも入れられます）。</p>}
       {sum.length > 0 && <p className="sv-total">合計 {sum.join(' ＋ ')}</p>}
       {list.some((s) => s.good) && list.length > 1 && (
-        <div className="chips"><button type="button" aria-pressed={!onlyGood} onClick={() => setOnlyGood(false)}>すべて</button><button type="button" aria-pressed={onlyGood} onClick={() => setOnlyGood(true)}>♥ 買ってよかった</button></div>
+        <div className="chips"><button type="button" aria-pressed={!onlyGood} onClick={() => setOnlyGood(false)}>すべて</button><button type="button" aria-pressed={onlyGood} onClick={() => setOnlyGood(true)}>★ おすすめ</button></div>
       )}
       {mode === 'new' && (
         <Editor items={items} country={country} onCancel={() => setMode(null)}
@@ -136,7 +137,7 @@ export default function SouvenirPanel({ trip, items, list, country, onAdd, onUpd
           <Editor key={s.id} init={s} items={items} country={country} onCancel={() => setMode(null)}
             onSave={(v) => { onUpdate(s.id, v); setMode(null); }} onDelete={() => { onDelete(s.id); setMode(null); }} />
         ) : (
-          <SouvenirCard key={s.id} s={s} items={items} onEdit={() => setMode(s.id)} onToggleGood={() => onUpdate(s.id, { good: !s.good })} />
+          <SouvenirCard key={s.id} s={s} items={items} onEdit={() => setMode(s.id)} onToggleGood={() => { if (!s.good) logEvent('sv_mark'); onUpdate(s.id, { good: !s.good }); }} />
         )))}
       </div>
     </section>

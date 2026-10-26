@@ -11,6 +11,8 @@ import ChatFlow, { aiOptions } from './AiChat';
 import { addPhotos, listPhotos } from '../photos';
 import { ensurePhotos, savePage } from '../cloud';
 import { money } from '../lib/money';
+import { PLAN } from '../lib/plan';
+import { logEvent } from '../cloud';
 
 const MAX = 6;
 const keyOf = (p) => p.cloudId || 'L' + p.id;
@@ -26,9 +28,9 @@ export function defaultNote(trip, items, unsorted) {
 }
 
 // AIで作るときの雰囲気の見本（テンプレートの背景の絵）
-const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
+const AI_NOTE = `写真と文字をAIがまとめて、1枚のイラストに描きます（無料は合計${PLAN.AI_FREE_TOTAL}回・プレミアムは月${PLAN.AI_MONTH}回）`;
 
-export const MAX_SV = 4; // eタビセツに入れるお土産の数
+export const MAX_SV = 4; // eタビセツに入れるお土産の数（NoteCanvas の SouvenirBand が横4列の帯。note.css の .nt-sv-row）
 
 export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn, prompts = [], onPrompts, souvenirs = [] }) {
   const tripsWithDone = folders.filter((f) => items.some((i) => i.done && i.trip === f));
@@ -39,7 +41,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const [addBusy, setAddBusy] = useState(null);
   const [err, setErr] = useState('');
   const [out, setOut] = useState(null); // { url, blob, ext }
-  const [left, setLeft] = useState(null); // AIで作る：今日あと何回
+  const [left, setLeft] = useState(null); // AIで作る：あと何回（無料は合計、プレミアムは今月／この1年）
   const [boxW, setBoxW] = useState(320);
   const boxRef = useRef(null);
   const canvasRef = useRef(null);
@@ -128,7 +130,10 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const svList = (note.souvenirs || []).map((id) => tripSv.find((x) => x.id === id)).filter(Boolean).slice(0, MAX_SV);
   function toggleSv(id) {
     const cur = svList.map((x) => x.id);
-    save({ souvenirs: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(0, MAX_SV) });
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(0, MAX_SV);
+    // 4つで足りないか測る：上限まで入れて、まだ入れていないお土産が残っているとき
+    if (!cur.includes(id) && next.length === MAX_SV && tripSv.length > MAX_SV) logEvent('sv_cap_hit');
+    save({ souvenirs: next });
   }
 
   const canvasSpots = spots.map(({ s, it }) => ({
@@ -169,8 +174,8 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     setAddBusy(null);
   }
 
-  // AIで作る：今日あと何回使えるか
-  async function loadLeft() { const n = await aiLeft(); if (n != null) setLeft(n); }
+  // AIで作る：あと何回使えるか
+  async function loadLeft() { const n = await aiLeft(); if (n != null) setLeft(n); if (n === 0) logEvent('ai_quota_hit'); }
   useEffect(() => { if (mode === 'ai' && user) loadLeft(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [mode, user?.id]);
 
   // AIに渡す中身（写真と文字）
@@ -233,7 +238,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         renderTplThumbs={(onPick) => (
           <div className="nm-tpls">
             {TEMPLATES.map((t) => (
-              <button key={t.id} type="button" className="nm-tpl" onClick={() => onPick(t)}>
+              <button key={t.id} type="button" className="nm-tpl" onClick={() => { logEvent('tpl_pick', t.id); onPick(t); }}>
                 <div className="nm-mini">
                   <Scaled width={thumbW} size={size}>
                     <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} souvenirs={svList} />

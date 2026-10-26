@@ -329,7 +329,7 @@ export function SouvenirBand({ list, tpl }) {
           <figure key={s.id} className="nt-sv-it">
             <Ph src={safePhoto(s.photo)} className="nt-sv-ph" />
             <figcaption>
-              <b>{s.good ? '♥ ' : ''}{s.name}</b>
+              <b>{s.good ? '★ ' : ''}{s.name}</b>
               {money(s.price, s.currency) && <span>{money(s.price, s.currency)}</span>}
             </figcaption>
           </figure>
@@ -363,7 +363,7 @@ export function SouvenirPage({ list, tpl: tpl0 = 'lovely', font, size: sizeId = 
       <div className="svp-grid" style={{ '--c': c, '--r': r }}>
         {list.map((s) => (
           <figure key={s.id} className="svp-card">
-            {s.good && <span className="svp-good">買ってよかった</span>}
+            {s.good && <span className="svp-good">★ おすすめ</span>}
             <Ph src={safePhoto(s.photo)} />
             <b>{s.name}</b>
             <p className="svp-meta">{[money(s.price, s.currency), s.shop].filter(Boolean).join('・')}</p>

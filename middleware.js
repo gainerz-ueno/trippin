@@ -23,7 +23,7 @@ function tooMany(ip, max = 30, bucket = '') {
   return list.length > max;
 }
 const ipOf = (req) => req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-const LIMITED = ['/api/search', '/api/recommend', '/api/screenshot', '/api/details'];
+const LIMITED = ['/api/search', '/api/recommend', '/api/screenshot', '/api/details', '/api/localname'];
 
 export async function middleware(req) {
   const { pathname } = req.nextUrl;

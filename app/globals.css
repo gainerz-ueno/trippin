@@ -526,7 +526,7 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .sv-total{margin:0;font-weight:700;font-size:14px;background:var(--bg);border-radius:10px;padding:6px 10px}
 .sv-list{display:flex;flex-direction:column;gap:10px}
 .sv-card{display:flex;gap:12px;background:var(--bg);border-radius:14px;padding:10px;min-width:0;border:1.5px solid transparent}
-.sv-card.good{border-color:#FFB3C7}
+.sv-card.good{border-color:var(--star)}
 .sv-img{width:84px;height:84px;flex:none;border-radius:10px;object-fit:cover;background:var(--chip)}
 .sv-img0{display:grid;place-items:center;font-size:11px;color:var(--sub)}
 .sv-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
@@ -534,8 +534,8 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .sv-sub{margin:0;font-size:12.5px;color:var(--sub);overflow-wrap:anywhere}
 .sv-memo{margin:0;font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 .sv-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
-.sv-goodbtn{font:inherit;font-size:12px;font-weight:700;border:1.5px solid #FFB3C7;background:var(--card);color:#D9467A;border-radius:999px;padding:2px 10px;cursor:pointer}
-.sv-goodbtn.on{background:#FF5C8A;border-color:#FF5C8A;color:#fff}
+.sv-goodbtn{font:inherit;font-size:12px;font-weight:700;border:1.5px solid var(--star);background:var(--card);color:var(--ink);border-radius:999px;padding:2px 10px;cursor:pointer}
+.sv-goodbtn.on{background:var(--star);border-color:var(--star);color:#1E2633}
 .sv-editbtn{font:inherit;font-size:12px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:2px 12px;cursor:pointer}
 .sv-edit{display:flex;flex-direction:column;gap:10px;background:var(--copybg);border:1px solid var(--copyline);border-radius:14px;padding:12px}
 .sv-edit textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;resize:vertical}
@@ -559,3 +559,37 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .pill-link{text-decoration:none;color:var(--teal);font-weight:700;background:var(--teal-tint)}
 .src-edit{display:flex;flex-direction:column;gap:6px}
 @media (prefers-color-scheme: dark){.sns-card,.sns-bar{background:#3A2630}}
+
+/* プレミアム（予定）の案内 */
+.head-btns{display:flex;gap:6px;align-items:center}
+.login-btn.prem-btn{padding:0 12px;border-color:var(--star)}
+.login-btn.prem-btn i{color:var(--star);font-style:normal}
+.linkbtn{font:inherit;background:none;border:0;padding:0;color:var(--go);text-decoration:underline;cursor:pointer;font-weight:700}
+.prem-link{font:inherit;font-size:13px;font-weight:700;background:none;border:1px dashed var(--line);border-radius:10px;padding:9px 12px;color:var(--ink);cursor:pointer}
+.prem-back{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:60;display:flex;align-items:flex-end;justify-content:center}
+.prem{background:var(--card);color:var(--ink);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+.prem-head{display:flex;justify-content:space-between;align-items:center}
+.prem-head h2{margin:0;font-size:19px}
+.prem-head .x{font:inherit;font-size:22px;background:none;border:0;color:var(--sub);cursor:pointer;width:36px;height:36px}
+.prem-now{margin:0;font-size:13px;line-height:1.7}
+.prem-cols{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.prem-col{border:1px solid var(--line);border-radius:12px;padding:10px;min-width:0}
+.prem-col.on{border:2px solid var(--star)}
+.prem-col h3{margin:0 0 6px;font-size:15px}
+.prem-col ul{margin:0;padding-left:16px;font-size:12px;line-height:1.6}
+.prem-price{margin:0 0 6px;font-size:12px}
+.prem-price b{font-size:15px}
+.prem-btns{display:flex;flex-direction:column;gap:8px}
+.prem-ok{margin:0;font-weight:700;color:var(--go)}
+@media (max-width:380px){.prem-cols{grid-template-columns:1fr}}
+/* eガイドブック：無料／有料 */
+.gm-paid{display:flex;flex-direction:column;gap:8px}
+.nm-seg-row{display:flex;gap:8px;flex-wrap:wrap}
+/* 有料のeガイドブックを読む人向け */
+.gv-lock{border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
+.gv-lock p{margin:0;line-height:1.7}
+.gv-price{font-size:22px;font-weight:800}
+.apphead{gap:8px}
+.head-btns{flex:none}
+.head-btns .login-btn{white-space:nowrap;padding:0 10px;gap:4px}
+@media (max-width:400px){h1.logo img{height:26px}.head-btns .login-btn{font-size:12px;height:34px}}

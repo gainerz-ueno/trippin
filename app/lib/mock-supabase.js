@@ -8,6 +8,8 @@ const DB_KEY = 'tabibi.mockdb';
 const SES_KEY = 'tabibi.mocksession';
 const PK = { items: ['user_id', 'id'], settings: ['user_id'], photos: ['id'], shares: ['id'], note_pages: ['id'], guidebooks: ['id'], souvenirs: ['user_id', 'id'], trip_plans: ['user_id', 'trip'] };
 const files = new Map(); // storage（このページを開いている間だけ）
+// 記録してよい出来事の名前（本物は supabase/migrations/20261027_premium.sql の log_event と同じ一覧）
+export const EVENTS = new Set(['search', 'add_place', 'localname', 'ai_recommend', 'ai_quota_hit', 'prem_sheet', 'prem_interest', 'guide_paid_set', 'guide_locked_view', 'guide_buy_interest', 'tpl_pick', 'share_create', 'souvenir_add', 'sv_cap_hit', 'sv_mark']);
 
 const load = () => { try { return JSON.parse(localStorage.getItem(DB_KEY) || '{}'); } catch { return {}; } };
 const store = (db) => { try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch {} };
@@ -92,8 +94,10 @@ export function mockClient() {
       async getSession() { return { data: { session: session() } }; },
       onAuthStateChange(fn) { listeners.add(fn); return { data: { subscription: { unsubscribe: () => listeners.delete(fn) } } }; },
       async signInWithOAuth() {
-        const name = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mockuser')) || 'mock-user';
-        setSession({ access_token: 'mock-token', user: { id: name } });
+        // ?mockuser=premium… で開くとプレミアム（月払い）、premiumyear… で年払いとして動く（回数の数え方は /api/noteai のにせ物）
+        const raw = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mockuser')) || '';
+        const name = raw.replace(/[^\w-]/g, '').slice(0, 40) || 'mock-user';
+        setSession({ access_token: 'mock-token:' + name, user: { id: name } });
         return { data: {}, error: null };
       },
       async signOut() { setSession(null); return { error: null }; },
@@ -117,11 +121,29 @@ export function mockClient() {
         return { data: { plan, souvenirs }, error: null };
       }
       if (fn === 'guidebook_view') {
+        // 本物（supabase/migrations/20261027_premium.sql）と同じ：有料のeガイドブックは、無料で見せるページまでしか返さない（作った本人は全部）
         const g = (db.guidebooks || []).find((x) => x.id === args.gid && x.published);
         if (!g) return { data: null, error: null };
         const pages = db.note_pages || [];
         const pathOf = (id) => pages.find((p) => p.id === id && p.user_id === g.user_id)?.path || null;
-        return { data: { title: g.title, author: g.author, description: g.description, cover: pathOf(g.cover_id), pages: (g.page_ids || []).map(pathOf).filter(Boolean) }, error: null };
+        const all = (g.page_ids || []).map(pathOf).filter(Boolean);
+        const price = g.price || 0;
+        const owner = uidNow() === g.user_id;
+        const show = price > 0 && !owner ? all.slice(0, g.free_pages || 0) : all;
+        return { data: { title: g.title, author: g.author, description: g.description, price, free_pages: g.free_pages || 0, total_pages: all.length, locked: show.length < all.length, cover: pathOf(g.cover_id), pages: show }, error: null };
+      }
+      if (fn === 'log_event') {
+        // 本物と同じ：決まった名前だけ。ログインしている人は1日1回まで数える
+        if (!EVENTS.has(args.ev)) return { data: null, error: null };
+        const uid = uidNow();
+        const day = new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10);
+        const detail = String(args.detail || '').slice(0, 40);
+        const ev = db.events || [];
+        if (!uid || !ev.some((e) => e.user_id === uid && e.name === args.ev && e.detail === detail && e.day === day)) {
+          ev.push({ user_id: uid, name: args.ev, detail, day });
+          db.events = ev; store(db);
+        }
+        return { data: null, error: null };
       }
       return err('unknown rpc');
     },

@@ -11,10 +11,11 @@ const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
 import { api, jaError, mapsLink } from './lib/api';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
-import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
+import { logEvent, supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
 import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
 import { distanceKm } from './lib/geo';
+const PremiumSheet = dynamic(() => import('./Premium'), { ssr: false });
 
 const KEY = 'trippin.v1';
 
@@ -22,11 +23,12 @@ const COUNTRY_LIST = [
   ['TW', '台湾'], ['KR', '韓国'], ['HK', '香港'], ['CN', '中国'], ['VN', 'ベトナム'],
   ['TH', 'タイ'], ['SG', 'シンガポール'], ['MY', 'マレーシア'], ['PH', 'フィリピン'], ['JP', '日本'],
 ];
-// 基本カテゴリー（色は地図のピンにも使う）
+// 基本カテゴリー（本人が決めた12個。色は地図のピンにも使う）
+// 「マッサージ」は本人の一覧にないので基本から外した。前に「マッサージ」で登録したお店は、自分で作ったカテゴリーとして残る
 const BASE_CATS = [
   ['観光', '#2F7D6B'], ['朝市', '#C9822B'], ['夜市', '#5B4BA8'], ['朝食', '#E0A526'], ['昼食', '#D9692E'],
   ['夕食', '#B8432F'], ['夜食', '#3F4F86'], ['おやつ', '#D45C8C'], ['カフェ', '#8A5A3C'], ['酒場', '#8E2F4F'],
-  ['買物', '#2E7FB8'], ['美容', '#C2569E'], ['マッサージ', '#4E9A5B'],
+  ['買物', '#2E7FB8'], ['美容', '#C2569E'],
 ];
 const CUSTOM_COLOR = '#6B7A8C';
 const CATS_KEY = 'trippin.cats';
@@ -133,7 +135,7 @@ function SharePanel({ folder, user }) {
       ) : (
         <>
           <p className="hint">リンクを作ると、そのリンクを知っている人が「{folder}」のお店を見られます（見るだけ。メモは見えません）。</p>
-          <button type="button" className="btn" disabled={busy} onClick={() => run(async () => setId(await createShare(folder)))}>共有リンクを作る</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => run(async () => { setId(await createShare(folder)); logEvent('share_create'); })}>共有リンクを作る</button>
         </>
       )}
       {err && <p className="err">{err}</p>}
@@ -457,6 +459,20 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
       setBusy(false);
     }
   }
+  // 検索で現地の表記が取れなかったホテルは、えらんだときだけ取る（Grab・Uberで帰るとき用。1件ごとに料金がかかるので検索のときには取らない）
+  async function pick(h) {
+    let x = h;
+    if (h.needLocal) {
+      setBusy(true);
+      logEvent('localname');
+      try {
+        const d = await api('/api/localname', { method: 'POST', body: { id: h.placeId, lang: h.needLocal, jaName: h.name }, timeout: 20000 });
+        if (d?.name) x = { ...h, name: d.name, address: d.address || h.address, altName: d.altName || '', altAddress: d.altAddress || '' };
+      } catch {}
+      setBusy(false);
+    }
+    onPick({ placeId: x.placeId, name: x.name, altName: x.altName, address: x.address, altAddress: x.altAddress, lat: x.lat, lng: x.lng, mapsUrl: x.mapsUrl, country: x.country || country });
+  }
   return (
     <div className="picker">
       <div className="picker-head">
@@ -484,7 +500,7 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
         <ul className="hotel-list">
           {list.map((h) => (
             <li key={h.placeId}>
-              <button type="button" onClick={() => onPick({ placeId: h.placeId, name: h.name, altName: h.altName, address: h.address, altAddress: h.altAddress, lat: h.lat, lng: h.lng, mapsUrl: h.mapsUrl, country: h.country || country })}>
+              <button type="button" disabled={busy} onClick={() => pick(h)}>
                 <b>{h.name}</b>
                 {h.altName && <span>{h.altName}</span>}
                 <span className="addr">{h.address}</span>
@@ -612,6 +628,7 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
         fromHere: here && it.lat != null ? `${distanceKm(here, it).toFixed(1)}km` : '',
         fromHotel: fromHotel(hotel, it),
       }));
+      logEvent('ai_recommend');
       const d = await api('/api/recommend', { method: 'POST', body: { question, here, hotel, items: payload.slice(0, 60), localTime: localTimeLabel(offset), trip, walk, car }, timeout: 60000, fallback: 'AIに聞けませんでした' });
       setRes({ answer: d.answer || '', picks: Array.isArray(d.picks) ? d.picks : [] });
     } catch (e) {
@@ -794,6 +811,12 @@ export default function Home() {
   const [photoVer, setPhotoVer] = useState(0);
   const [notes, setNotes] = useState({}); // フォルダごとのeタビセツ
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
+  const [premOpen, setPremOpen] = useState(false); // プレミアムの案内
+  useEffect(() => {
+    const open = () => setPremOpen(true);
+    window.addEventListener('tabibi:premium', open);
+    return () => window.removeEventListener('tabibi:premium', open);
+  }, []);
   const [shelfKey, setShelfKey] = useState(0); // わたしのeタビセツを読み直す合図
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
@@ -872,7 +895,7 @@ export default function Home() {
     catch { setNotice('このスマホの保存の場所がいっぱいで、お土産を保存できませんでした。写真を外すか、ログインしてクラウドに保存してください'); }
   }, [souvenirs, loaded]);
   const savePlan = useCallback((t, p) => setPlans((prev) => ({ ...prev, [t]: { ...p, updatedAt: Date.now() } })), []);
-  const addSouvenir = (sv) => setSouvenirs((prev) => [...prev, { ...sv, addedAt: Date.now(), updatedAt: Date.now() }]);
+  const addSouvenir = (sv) => { logEvent('souvenir_add'); setSouvenirs((prev) => [...prev, { ...sv, addedAt: Date.now(), updatedAt: Date.now() }]); };
   const updateSouvenir = (id, patch) => setSouvenirs((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)));
   const removeSouvenir = (id) => setSouvenirs((prev) => prev.filter((x) => x.id !== id));
   function createFolder(n) {
@@ -1053,6 +1076,7 @@ export default function Home() {
     searching.current = true;
     setBusy(true); setMoreBusy(more); setError('');
     try {
+      logEvent('search', more ? 'more' : q.country ? 'country' : 'nocountry');
       const data = await api('/api/search', { method: 'POST', body: { ...q, pageToken: more ? nextToken : null }, timeout: 35000, fallback: '検索に失敗しました。もう一度試してください' });
       lastQuery.current = q;
       setResults((prev) => (more ? prev.concat(data.places) : data.places));
@@ -1145,8 +1169,17 @@ export default function Home() {
     // さがす画面から入れたお店は「未分類」へ。フォルダ分けは候補タブで自分でする
     const folder = tripName || UNSORTED;
     if (!tripName) setTrip(UNSORTED);
-    setItems((prev) => [{ ...p, id: p.placeId, category, trip: folder, srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
+    const { needLocal, ...place } = p;
+    setItems((prev) => [{ ...place, id: p.placeId, category, trip: folder, srcUrl: srcUrl.trim(), done: false, rec: false, addedAt: Date.now() }, ...prev]);
     setPickFor(null);
+    logEvent('add_place');
+    // 検索で現地の表記が取れなかったお店は、追加したときだけ取る（1件ごとに料金がかかるので、検索のときには取らない）
+    if (needLocal) {
+      logEvent('localname');
+      api('/api/localname', { method: 'POST', body: { id: p.placeId, lang: needLocal, jaName: p.name }, timeout: 20000 })
+        .then((d) => { if (d?.name) update(p.placeId, { name: d.name, address: d.address || p.address, altName: d.altName || '', altAddress: d.altAddress || '' }); })
+        .catch(() => {});
+    }
     if (!tripName && shotFile.current) {
       const f = shotFile.current;
       addPhotos(p.placeId, [f], 'memo').then(() => setPhotoVer((v) => v + 1)).catch(() => {});
@@ -1154,6 +1187,13 @@ export default function Home() {
   }
   const closePick = useCallback(() => setPickFor(null), []);
   const addCustomCat = (n) => setCustomCats((prev) => (prev.includes(n) ? prev : [...prev, n]));
+  // 基本から外したカテゴリー（例：前の「マッサージ」）で登録したお店は、自分で作ったカテゴリーとして残す
+  useEffect(() => {
+    if (!loaded) return;
+    const base = new Set(BASE_CATS.map(([n]) => n));
+    const lost = [...new Set(items.map((i) => i.category).filter((c) => c && !base.has(c) && !customCats.includes(c)))];
+    if (lost.length) setCustomCats((prev) => [...prev, ...lost.filter((c) => !prev.includes(c))]);
+  }, [items, customCats, loaded]);
   function renameCat(from, to) {
     setCustomCats((prev) => prev.map((c) => (c === from ? to : c)).filter((c, i, a) => a.indexOf(c) === i));
     setItems((prev) => prev.map((i) => (i.category === from ? { ...i, category: to, updatedAt: Date.now() } : i)));
@@ -1352,10 +1392,14 @@ export default function Home() {
     <main className="wrap">
       <header className="apphead">
         <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
-        {user
-          ? <button type="button" className="login-btn" onClick={() => signOut()}><IcUser size={16} />ログアウト</button>
-          : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}
+        <span className="head-btns">
+          <button type="button" className="login-btn prem-btn" onClick={() => setPremOpen(true)}><i aria-hidden="true">★</i>プレミアム</button>
+          {user
+            ? <button type="button" className="login-btn" onClick={() => signOut()}><IcUser size={16} />ログアウト</button>
+            : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}
+        </span>
       </header>
+      {premOpen && <PremiumSheet user={user} onSignIn={() => signIn()} onClose={() => setPremOpen(false)} />}
 
       {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
       {notice && <p className="err notice" role="alert" onClick={() => setNotice('')}>{notice}</p>}
