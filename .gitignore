@@ -5,3 +5,8 @@ node_modules
 .env
 .env*
 *.pem
+
+# Cloudflare 用に組み立てたもの・手元の確認用
+.open-next
+.wrangler
+.dev.vars*

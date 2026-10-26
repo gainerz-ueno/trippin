@@ -1,0 +1,28 @@
+# main に入れると、Cloudflare に自動で公開する。
+# ・Next.js のアプリを Cloudflare 用に組み立ててから公開する（@opennextjs/cloudflare）
+# ・「AIで作る」の絵を描く部分のコンテナ（noteai-container/）も、ここで組み立てて一緒に公開する
+# 必要なもの：GitHub の「Settings → Secrets and variables → Actions」に CLOUDFLARE_API_TOKEN
+name: Cloudflare に公開
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: 公開
+        run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: b0dd4dece6edaa89f57a69ea1c7e5f38

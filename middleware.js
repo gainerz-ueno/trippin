@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-// サイト全体にパスワードをかける（Vercel の環境変数 SITE_PASSWORD）
+// サイト全体にパスワードをかける（Cloudflare のシークレット SITE_PASSWORD）
 // ・正しいパスワードを入れたら、そのスマホに1年間ログインの印（クッキー）を残す
 // ・検索やAIの仕組み（/api）もログインしていないと使えない＝他人に勝手に使われない
 const COOKIE = 'trippin_auth';
@@ -37,7 +37,7 @@ export async function middleware(req) {
 
   const pw = process.env.SITE_PASSWORD;
   if (!pw) {
-    return new NextResponse('パスワードがまだ設定されていません（Vercel の SITE_PASSWORD）', {
+    return new NextResponse('パスワードがまだ設定されていません（Cloudflare の SITE_PASSWORD）', {
       status: 503,
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });

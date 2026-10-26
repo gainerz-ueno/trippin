@@ -1,0 +1,32 @@
+// Cloudflare Workers の設定（Vercel から移したもの）
+// 秘密の鍵（SITE_PASSWORD・GEMINI_API_KEY・GOOGLE_MAPS_API_KEY・GOOGLE_MAPS_BROWSER_KEY）はここに書かず、Cloudflare の「シークレット」に入れる。
+// GitHub の main に入れると、.github/workflows/deploy.yml がこの設定のとおりに公開する。
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "trippin",
+  "account_id": "b0dd4dece6edaa89f57a69ea1c7e5f38",
+  "main": "cloudflare/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "observability": { "enabled": true },
+  // 画像・アイコン・画面の部品などのファイル
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  // 「AIで作る」の絵を描く部分（sharp を使う）だけを動かすコンテナ
+  "containers": [
+    {
+      "class_name": "NoteAi",
+      "image": "./noteai-container/Dockerfile",
+      "image_build_context": ".",
+      // 1GB メモリ・1/4 vCPU（費用を抑える。遅いと感じたら standard-1 に上げる）
+      "instance_type": "basic",
+      "max_instances": 2
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "NOTEAI", "class_name": "NoteAi" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NoteAi"] }]
+}

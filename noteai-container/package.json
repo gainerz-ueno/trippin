@@ -1,0 +1,9 @@
+{
+  "name": "trippin-noteai",
+  "private": true,
+  "type": "module",
+  "description": "「AIで作る」eタビセツの絵を描く部分を、Cloudflare のコンテナで動かすためのもの",
+  "dependencies": {
+    "sharp": "0.35.5"
+  }
+}
