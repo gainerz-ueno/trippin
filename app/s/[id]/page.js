@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import MapView from '../../MapView';
 import { fetchShared } from '../../cloud';
-import { safeUrl } from '../../lib/safeurl';
+import { mapsLink } from '../../lib/api';
 
 const BASE_CATS = {
   観光: '#2F7D6B', 朝市: '#C9822B', 夜市: '#5B4BA8', 朝食: '#E0A526', 昼食: '#D9692E', 夕食: '#B8432F', 夜食: '#3F4F86',
@@ -45,7 +45,7 @@ function CopyBtn({ text }) {
     }
     setDone(true); setTimeout(() => setDone(false), 1500);
   }
-  return <button type="button" className={'copy' + (done ? ' ok' : '')} onClick={copy}>{done ? 'コピーしました' : 'コピー'}</button>;
+  return <button type="button" className={'copy' + (done ? ' ok' : '')} onClick={copy} aria-label="コピー">{done ? 'コピーしました' : 'コピー'}</button>;
 }
 
 export default function SharedFolder() {
@@ -91,7 +91,7 @@ export default function SharedFolder() {
                     {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
                     <span className="no" style={{ '--c': catColor(it.category) }}>{i + 1}</span>
                     <div className="side-acts">
-                      {safeUrl(it.mapsUrl) && <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>}
+                      <a href={mapsLink(it)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
                     </div>
                   </div>
                   <div className="body">
@@ -99,6 +99,7 @@ export default function SharedFolder() {
                       <div className="line"><p className="name">{it.name}</p><CopyBtn text={it.name} /></div>
                       {it.altName && <p className="alt">{it.altName}</p>}
                       {it.address && <div className="line addr-line"><p className="addr">{it.address}</p><CopyBtn text={it.address} /></div>}
+                      {it.altAddress && <p className="addr alt-addr">{it.altAddress}</p>}
                     </div>
                     <span className="meta">
                       {it.rating != null && <span className="rate"><b>★</b> {Number(it.rating).toFixed(1)} <span className="addr">（{(it.reviews || 0).toLocaleString()}件）</span></span>}

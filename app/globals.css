@@ -457,3 +457,6 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .shelf-bar i{background:var(--teal)}
 .nm-open.guide{background:var(--teal)}
 @media (prefers-color-scheme: dark){.ai-open{background:var(--card);border:1.5px solid var(--line)}}
+/* 宿泊先（いまの宿泊先をコピーできるように）／写真が保存できなかったときのお知らせ */
+.hotel-now{display:flex;flex-direction:column;gap:6px}
+.notice{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:10px 12px;cursor:pointer}

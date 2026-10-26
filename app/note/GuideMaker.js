@@ -2,6 +2,7 @@
 // 自分のeガイドブック：保存したeタビセツを選んで並べ、表紙（テンプレート／AI）をつけて1冊にする
 import { useEffect, useRef, useState } from 'react';
 import './note.css';
+import { jaError } from '../lib/api';
 import CoverCanvas from './CoverCanvas';
 import { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
 import { FONTS, loadFont, fontOf } from './fonts';
@@ -116,7 +117,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       await deletePage(p);
       setG((x) => ({ ...x, page_ids: x.page_ids.filter((i) => i !== p.id), cover_id: x.cover_id === p.id ? null : x.cover_id }));
       await reload();
-    } catch (e) { setErr(e.message || '削除できませんでした'); }
+    } catch (e) { setErr(jaError(e, '削除できませんでした')); }
   }
 
   async function makeCover() {
@@ -131,7 +132,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       const row = await savePage({ blob, kind: 'cover', trip: folder, title: coverText.title });
       setG((x) => ({ ...x, cover_id: row.id }));
       await reload();
-    } catch (e) { setErr(e.message || '表紙を作れませんでした'); }
+    } catch (e) { setErr(jaError(e, '表紙を作れませんでした')); }
     setBusy('');
     if (cv.mode === 'ai') aiLeft().then((n) => n != null && setLeft(n));
   }
@@ -145,7 +146,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       setG((x) => ({ ...x, id: row.id }));
       setMsg(row.id);
       await reload();
-    } catch (e) { setErr(e.message || '保存できませんでした'); }
+    } catch (e) { setErr(jaError(e, '保存できませんでした')); }
     setBusy('');
   }
   function edit(x) {
@@ -155,7 +156,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
   }
   async function remove(id) {
     setConfirmDel(null);
-    try { await deleteGuide(id); if (g.id === id) setG(blank(g.author)); await reload(); } catch (e) { setErr(e.message || '削除できませんでした'); }
+    try { await deleteGuide(id); if (g.id === id) setG(blank(g.author)); await reload(); } catch (e) { setErr(jaError(e, '削除できませんでした')); }
   }
   const link = (id) => `${window.location.origin}/g/${id}`;
   async function copy(id) { try { await navigator.clipboard.writeText(link(id)); setMsg(id); } catch {} }

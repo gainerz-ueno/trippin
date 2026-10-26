@@ -2,6 +2,7 @@
 // 「AIで作る」：おまかせ／好みを選ぶ／チャットでプロンプトを作る → できたらチャットで直す（版を残して戻せる）
 import { useEffect, useRef, useState } from 'react';
 import { toB64, callAi } from './util';
+import { jaError } from '../lib/api';
 
 // ---- 好みを選ぶ ----
 export const PREF_GROUPS = [
@@ -190,7 +191,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
       setFixLog([{ who: 'bot', text: 'できたよ！直したいところはある？' }]);
       setFix(null); setStrokes([]); setArea(null);
       setTimeout(() => document.getElementById('as-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-    } catch (e) { setErr(e.message || 'AIで作れませんでした'); }
+    } catch (e) { setErr(jaError(e, 'AIで作れませんでした')); }
     setBusy(false); refreshLeft();
   }
 
@@ -210,7 +211,7 @@ export default function AiStudio({ note, save, buildBody, user, onSignIn, left, 
       setFixLog((l) => [...l, { who: 'bot', text: `${blob.fixJa ? `「${blob.fixJa}」で直したよ！` : '直したよ！'}（${versions.length + 1}枚目）ほかに直したいところはある？` }]);
       setTimeout(() => document.getElementById('as-result')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
     } catch (e) {
-      setFixLog((l) => [...l, { who: 'bot', text: e.message || 'うまく直せなかった…もう一度ためしてね' }]);
+      setFixLog((l) => [...l, { who: 'bot', text: jaError(e, 'うまく直せなかった…もう一度ためしてね') }]);
     }
     setBusy(false); refreshLeft();
   }

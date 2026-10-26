@@ -4,10 +4,15 @@ import { createClient } from '@supabase/supabase-js';
 import { photoHooks, listPhotos, listAllPhotos, setCloudId, putFromCloud } from './photos';
 
 import { SUPABASE_URL, SUPABASE_KEY } from './lib/supabase-public';
+import { mockClient } from './lib/mock-supabase';
 const BUCKET = 'photos';
+// テスト用モード（本物のSupabaseを使わない）。本番のビルドでは付けない
+// まちがって本番で付けても動かないよう、自分のパソコン（localhost）で開いたときだけ
+export const MOCK = process.env.NEXT_PUBLIC_TABIBI_MOCK === '1' && typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
 
 let client = null;
 export function supa() {
+  if (!client && MOCK) client = mockClient();
   if (!client) {
     client = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -37,7 +42,7 @@ const stamp = (it) => it?.updatedAt || it?.addedAt || 0;
 
 // ---- お店 ----
 export async function pullItems() {
-  const { data, error } = await supa().from('items').select('id,data');
+  const { data, error } = await supa().from('items').select('id,data').eq('user_id', uid);
   if (error) throw error;
   return (data || []).map((r) => r.data);
 }
@@ -51,13 +56,13 @@ export async function upsertItems(list) {
 }
 export async function deleteItems(ids) {
   if (!uid || !ids.length) return;
-  const { error } = await supa().from('items').delete().in('id', ids);
+  const { error } = await supa().from('items').delete().eq('user_id', uid).in('id', ids);
   if (error) throw error;
 }
 
 // ---- 設定（フォルダ・宿泊先・自分で作ったカテゴリー） ----
 export async function pullSettings() {
-  const { data, error } = await supa().from('settings').select('data').maybeSingle();
+  const { data, error } = await supa().from('settings').select('data').eq('user_id', uid).maybeSingle();
   if (error) throw error;
   return data?.data || null;
 }
@@ -70,7 +75,7 @@ export async function pushSettings(data) {
 // ---- 写真 ----
 let photoRows = new Map(); // itemId -> [{id, kind, path, created_at}]
 export async function pullPhotoRows() {
-  const { data, error } = await supa().from('photos').select('id,item_id,kind,path,created_at');
+  const { data, error } = await supa().from('photos').select('id,item_id,kind,path,created_at').eq('user_id', uid);
   if (error) throw error;
   photoRows = new Map();
   for (const r of data || []) {
@@ -97,7 +102,7 @@ async function deleteCloudPhoto(rec) {
   const row = rows.find((r) => r.id === rec.cloudId);
   const path = row?.path || `${uid}/${encodeURIComponent(rec.itemId)}/${rec.cloudId}.jpg`;
   await supa().storage.from(BUCKET).remove([path]);
-  await supa().from('photos').delete().eq('id', rec.cloudId);
+  await supa().from('photos').delete().eq('user_id', uid).eq('id', rec.cloudId);
   photoRows.set(rec.itemId, rows.filter((r) => r.id !== rec.cloudId));
 }
 
@@ -158,7 +163,7 @@ const shareId = () => {
 };
 export async function getShare(folder) {
   if (!uid) return null;
-  const { data, error } = await supa().from('shares').select('id').eq('folder', folder).maybeSingle();
+  const { data, error } = await supa().from('shares').select('id').eq('user_id', uid).eq('folder', folder).maybeSingle();
   if (error) throw error;
   return data?.id || null;
 }
@@ -171,11 +176,12 @@ export async function createShare(folder) {
 }
 export async function deleteShare(folder) {
   if (!uid) return;
-  await supa().from('shares').delete().eq('folder', folder);
+  const { error } = await supa().from('shares').delete().eq('user_id', uid).eq('folder', folder);
+  if (error) throw error;
 }
 export async function renameShare(from, to) {
   if (!uid) return;
-  await supa().from('shares').update({ folder: to }).eq('folder', from);
+  await supa().from('shares').update({ folder: to }).eq('user_id', uid).eq('folder', from);
 }
 export async function fetchShared(id) {
   const { data, error } = await supa().rpc('shared_folder', { share_id: id });
@@ -212,13 +218,14 @@ export async function savePage({ blob, kind = 'note', trip = '', title = '' }) {
 }
 export async function listPages() {
   if (!uid) return [];
-  const { data, error } = await supa().from('note_pages').select('id,kind,trip,title,path,w,h,created_at').order('created_at', { ascending: false });
+  const { data, error } = await supa().from('note_pages').select('id,kind,trip,title,path,w,h,created_at').eq('user_id', uid).order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
 export async function deletePage(p) {
   if (!uid) return;
-  await supa().from('note_pages').delete().eq('id', p.id);
+  const { error } = await supa().from('note_pages').delete().eq('user_id', uid).eq('id', p.id);
+  if (error) throw error;
   await supa().storage.from(GUIDE).remove([p.path]);
 }
 // 画像を見るための一時的なURL（1時間）
@@ -231,7 +238,7 @@ export async function guideUrls(paths) {
 }
 export async function listGuides() {
   if (!uid) return [];
-  const { data, error } = await supa().from('guidebooks').select('*').order('updated_at', { ascending: false });
+  const { data, error } = await supa().from('guidebooks').select('*').eq('user_id', uid).order('updated_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
@@ -249,7 +256,7 @@ export async function saveGuide(g) {
 }
 export async function deleteGuide(id) {
   if (!uid) return;
-  const { error } = await supa().from('guidebooks').delete().eq('id', id);
+  const { error } = await supa().from('guidebooks').delete().eq('user_id', uid).eq('id', id);
   if (error) throw error;
 }
 export async function fetchGuide(id) {

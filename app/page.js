@@ -9,6 +9,7 @@ const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
 const GuideMaker = dynamic(() => import('./note/GuideMaker'), { ssr: false });
 const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
+import { api, jaError, mapsLink } from './lib/api';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare } from './cloud';
 
@@ -117,7 +118,7 @@ function SharePanel({ folder, user }) {
   if (!user) return <p className="hint">共有するには、右上の「Googleでログイン」からログインしてください。</p>;
   if (id === undefined) return <p className="hint">読み込み中…</p>;
   const url = id ? `${window.location.origin}/s/${id}` : '';
-  async function run(fn) { setBusy(true); setErr(''); try { await fn(); } catch (e) { setErr(e.message || 'うまくいきませんでした'); } setBusy(false); }
+  async function run(fn) { setBusy(true); setErr(''); try { await fn(); } catch (e) { setErr(jaError(e, '共有の設定を変えられませんでした。もう一度試してください')); } setBusy(false); }
   return (
     <div className="share-panel">
       {id ? (
@@ -304,15 +305,13 @@ function DetailPanel({ id }) {
   useEffect(() => {
     if (detailCache.has(id)) return;
     let alive = true;
-    fetch(`/api/details?id=${encodeURIComponent(id)}`)
-      .then((r) => r.json())
+    api(`/api/details?id=${encodeURIComponent(id)}`, { fallback: '詳細を取得できませんでした' })
       .then((x) => {
         if (!alive) return;
-        if (x.error) { setErr(x.error); return; }
         detailCache.set(id, x);
         setD(x);
       })
-      .catch(() => alive && setErr('詳細を取得できませんでした'));
+      .catch((e) => alive && setErr(e.message));
     return () => { alive = false; };
   }, [id]);
 
@@ -406,6 +405,7 @@ function distanceKm(a, b) {
 function fromHotel(h, it) {
   if (!h || h.lat == null || it.lat == null) return '';
   const km = distanceKm(h, it);
+  if (km > 50) return ''; // 別の街・別の国のお店（「車で6947分」のような意味のない数字を出さない）
   const road = km * 1.3;
   const dist = km < 1 ? `${Math.round(km * 1000 / 10) * 10}m` : `${km.toFixed(1)}km`;
   if (road <= 3) return `ホテルから約${dist}・徒歩約${Math.max(1, Math.round((road / 4.5) * 60))}分`;
@@ -414,7 +414,7 @@ function fromHotel(h, it) {
 
 // 泊まるホテルをGoogleマップから選ぶ
 function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
-  const [country, setCountry] = useState(country0 || 'TW');
+  const [country, setCountry] = useState(country0 || '');
   const [q, setQ] = useState('');
   const [list, setList] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -424,17 +424,12 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
     if (!q.trim()) return;
     setBusy(true); setErr('');
     try {
-      const res = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: q.trim(), country, jaOnly: true }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || '検索に失敗しました');
+      // Grab・Uberでホテルに帰るときに貼れるよう、現地の表記（と日本語）も取る
+      const d = await api('/api/search', { method: 'POST', body: { keyword: q.trim(), country }, timeout: 30000, fallback: '検索に失敗しました' });
       setList(d.places.slice(0, 8));
       if (!d.places.length) setErr('見つかりませんでした。ホテル名を変えて試してください。');
     } catch (e2) {
-      setErr(e2.message);
+      setErr(jaError(e2, '検索に失敗しました'));
     } finally {
       setBusy(false);
     }
@@ -445,8 +440,15 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
         <b>今回の宿泊先（ホテル）を登録</b>
         <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
       </div>
-      <label htmlFor="hotelct">国
+      {current && (
+        <div className="hotel-now">
+          <p className="hint">いまの宿泊先（Grab・Uberで帰るときは、店名か住所をコピーして貼れます）</p>
+          <NameBlock p={current} />
+        </div>
+      )}
+      <label htmlFor="hotelct">国（えらばなくても探せます）
         <select id="hotelct" value={country} onChange={(e) => setCountry(e.target.value)}>
+          <option value="">指定なし</option>
           {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </label>
@@ -459,10 +461,11 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
         <ul className="hotel-list">
           {list.map((h) => (
             <li key={h.placeId}>
-              <button type="button" onClick={() => onPick({ placeId: h.placeId, name: h.name, altName: h.altName, address: h.address, lat: h.lat, lng: h.lng, mapsUrl: h.mapsUrl, country })}>
+              <button type="button" onClick={() => onPick({ placeId: h.placeId, name: h.name, altName: h.altName, address: h.address, altAddress: h.altAddress, lat: h.lat, lng: h.lng, mapsUrl: h.mapsUrl, country: h.country || country })}>
                 <b>{h.name}</b>
                 {h.altName && <span>{h.altName}</span>}
                 <span className="addr">{h.address}</span>
+                {h.altAddress && <span className="addr">{h.altAddress}</span>}
               </button>
             </li>
           ))}
@@ -524,7 +527,7 @@ function PhotoStrip({ itemId, ver, kind }) {
             {confirmDel ? (
               <>
                 <span>この写真を削除しますか？</span>
-                <button type="button" className="btn" onClick={async () => { await deletePhoto(big.id); setBig(null); setPhotos((ps) => ps.filter((x) => x.id !== big.id)); }}>削除する</button>
+                <button type="button" className="btn" onClick={async () => { try { await deletePhoto(big.id); } catch {} setBig(null); setPhotos((ps) => ps.filter((x) => x.id !== big.id)); }}>削除する</button>
                 <button type="button" className="btn ghost" onClick={() => setConfirmDel(false)}>やめる</button>
               </>
             ) : (
@@ -586,14 +589,8 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
         fromHere: here && it.lat != null ? `${distanceKm(here, it).toFixed(1)}km` : '',
         fromHotel: fromHotel(hotel, it),
       }));
-      const r = await fetch('/api/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, here, hotel, items: payload, localTime: localTimeLabel(offset), trip, walk, car }),
-      });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || 'AIに聞けませんでした');
-      setRes(d);
+      const d = await api('/api/recommend', { method: 'POST', body: { question, here, hotel, items: payload.slice(0, 60), localTime: localTimeLabel(offset), trip, walk, car }, timeout: 60000, fallback: 'AIに聞けませんでした' });
+      setRes({ answer: d.answer || '', picks: Array.isArray(d.picks) ? d.picks : [] });
     } catch (e) {
       setErr(e.message);
     } finally {
@@ -643,20 +640,22 @@ function AiPanel({ items, hotel, trip, customCats, onAddCustom, onAdd, savedIds,
                   <p className="ai-reason">{pk.reason}</p>
                   <div className="acts">
                     <button type="button" onClick={() => onShow(it.id)}>リストで見る</button>
-                    <a href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
+                    <a href={mapsLink(it)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
                     <NaverLinks place={it} route={false} />
                   </div>
                 </div>
               );
             }
             const pl = pk.place;
+            if (!pl) return null;
             return (
               <div className="ai-pick" key={i}>
                 <p className="ai-pick-name"><span className="ai-tag near">近く</span>{pl.altName || pl.name}</p>
-                <p className="ai-sub">{pl.name}{pl.rating != null ? `　★${pl.rating.toFixed(1)}（${pl.reviews.toLocaleString()}件）` : ''}</p>
+                <NameBlock p={pl} />
+                <p className="ai-sub">{pl.rating != null ? `★${pl.rating.toFixed(1)}（${(pl.reviews || 0).toLocaleString()}件）` : ''}</p>
                 <p className="ai-reason">{pk.reason}</p>
                 <div className="acts side-acts-inline">
-                  <a href={safeUrl(pl.mapsUrl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
+                  <a href={mapsLink(pl)} target="_blank" rel="noopener noreferrer">Googleマップ</a>
                   <NaverLinks place={pl} route={false} />
                   {savedIds.has(pl.placeId)
                     ? <button type="button" disabled>追加済み</button>
@@ -770,10 +769,12 @@ export default function Home() {
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
   const [photoBusy, setPhotoBusy] = useState(null);
+  const [notice, setNotice] = useState('');
   async function onPhotos(itemId, files, kind) {
     if (!files?.length) return;
-    setPhotoBusy(itemId);
-    try { await addPhotos(itemId, Array.from(files), kind); } catch {}
+    setPhotoBusy(itemId); setNotice('');
+    try { await addPhotos(itemId, Array.from(files), kind); }
+    catch { setNotice('写真を保存できませんでした。スマホの空き容量を確かめるか、ほかの写真で試してください（シークレットモードでは保存できません）'); }
     setPhotoBusy(null);
     setPhotoVer((v) => v + 1);
   }
@@ -932,23 +933,18 @@ export default function Home() {
     try { localStorage.setItem(KEY, JSON.stringify(items)); } catch {}
   }, [items, loaded]);
 
+  const searching = useRef(false); // 2回押しで同じ検索を2回しない（検索は1回ごとに料金がかかる）
   async function runSearch(more = false, override = null) {
-    if (busy) return;
+    if (busy || searching.current) return;
     // 宿泊先の近い順にさがす：国は宿泊先の国、場所は使わない（宿泊先のまわりを探す）
     const near = useNear ? { lat: hotel.lat, lng: hotel.lng } : null;
     const base = useNear ? { area: '', country: hotel.country || country } : { area, country };
     const q = more ? lastQuery.current : { keyword, ...base, minRating: Number(minRating), minReviews: Number(minReviews), near, ...(override || {}) };
     if (!more && !String(q.keyword).trim() && !String(q.area).trim()) { setError('キーワードか場所を入力してください'); return; }
-    if (!more && !q.country) { setError('国を選んでください'); return; }
+    searching.current = true;
     setBusy(true); setMoreBusy(more); setError('');
     try {
-      const res = await fetch('/api/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...q, pageToken: more ? nextToken : null }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '検索に失敗しました');
+      const data = await api('/api/search', { method: 'POST', body: { ...q, pageToken: more ? nextToken : null }, timeout: 35000, fallback: '検索に失敗しました。もう一度試してください' });
       lastQuery.current = q;
       setResults((prev) => (more ? prev.concat(data.places) : data.places));
       setNextToken(data.nextPageToken);
@@ -957,6 +953,7 @@ export default function Home() {
     } catch (e) {
       setError(e.message);
     } finally {
+      searching.current = false;
       setBusy(false); setMoreBusy(false);
     }
   }
@@ -990,18 +987,12 @@ export default function Home() {
     setShotBusy(true); setShotShops([]); setShotMsg(''); setError('');
     try {
       const image = await shrink(file);
-      const res = await fetch('/api/screenshot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image, mimeType: 'image/jpeg' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '読み取りに失敗しました');
-      if (!data.shops.length) { setShotMsg('お店の名前を読み取れませんでした。店名が写っているスクショで試すか、キーワードに入れて探してください。'); return; }
+      const data = await api('/api/screenshot', { method: 'POST', body: { image, mimeType: 'image/jpeg' }, timeout: 40000, fallback: '読み取りに失敗しました' });
+      if (!Array.isArray(data.shops) || !data.shops.length) { setShotMsg('お店の名前を読み取れませんでした。店名が写っているスクショで試すか、キーワードに入れて探してください。'); return; }
       setShotShops(data.shops);
       if (data.shops.length === 1) searchShop(data.shops[0]);
     } catch (e) {
-      setShotMsg(e.message);
+      setShotMsg(jaError(e, '読み取りに失敗しました'));
     } finally {
       setShotBusy(false);
       if (shotInput.current) shotInput.current.value = '';
@@ -1050,17 +1041,17 @@ export default function Home() {
   }
   // 候補に入れたお店の営業時間を、入れたときに1回だけ取っておく（取り直しはしない）
   const hoursBusy = useRef(false);
+  const hoursTried = useRef(new Set()); // 取れなかったお店を何度も取りに行かない（1回ごとに料金がかかる）
   useEffect(() => {
     if (!loaded || hoursBusy.current) return;
-    const need = items.filter((i) => i.placeId && !i.hoursInfo);
+    const need = items.filter((i) => i.placeId && !i.hoursInfo && !hoursTried.current.has(i.id));
     if (!need.length) return;
     hoursBusy.current = true;
     (async () => {
       for (const it of need) {
+        hoursTried.current.add(it.id);
         try {
-          const r = await fetch(`/api/details?id=${encodeURIComponent(it.placeId)}&lite=1`);
-          const d = await r.json();
-          if (d.error) continue;
+          const d = await api(`/api/details?id=${encodeURIComponent(it.placeId)}&lite=1`, { timeout: 15000 });
           const hoursInfo = { hours: d.hours || [], periods: d.periods || [], offset: d.offset || 0, at: Date.now() };
           setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, hoursInfo } : x)));
         } catch {}
@@ -1076,9 +1067,8 @@ export default function Home() {
     if (!it.placeId || photoTried.current.has(it.id)) return;
     photoTried.current.add(it.id);
     try {
-      const r = await fetch(`/api/photoname?id=${encodeURIComponent(it.placeId)}`);
-      const d = await r.json();
-      if (r.ok && d.photo !== undefined && d.photo !== it.photo) update(it.id, { photo: d.photo });
+      const d = await api(`/api/photoname?id=${encodeURIComponent(it.placeId)}`, { timeout: 10000 });
+      if (d.photo !== undefined && d.photo !== it.photo) update(it.id, { photo: d.photo });
     } catch {}
   }
   function remove(id) { setItems((prev) => prev.filter((i) => i.id !== id)); setConfirmId(null); deletePhotosOf(id).catch(() => {}); }
@@ -1161,7 +1151,7 @@ export default function Home() {
           {it.done
             ? <button type="button" className="act" onClick={() => update(it.id, { done: false, rec: false })}>候補に戻す</button>
             : <button type="button" className="act primary go" onClick={() => update(it.id, { done: true })}><IcCheck size={16} />行った</button>}
-          <a className="act" href={safeUrl(it.mapsUrl)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
+          <a className="act" href={mapsLink(it)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
           <button type="button" className="act" onClick={() => setMemoFor(memoFor === it.id ? null : it.id)}><IcPen size={16} />メモ</button>
           <span className="dd-wrap">
             <button type="button" className="act icon" aria-label="そのほかの操作" aria-expanded={moreFor === it.id} onClick={() => setMoreFor(moreFor === it.id ? null : it.id)}><IcMore size={18} /></button>
@@ -1230,6 +1220,7 @@ export default function Home() {
       </header>
 
       {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
+      {notice && <p className="err notice" role="alert" onClick={() => setNotice('')}>{notice}</p>}
       <div className="ctxrow">
         {tab === 'search' && (
         <label className="ctx-chip trip">
@@ -1284,7 +1275,7 @@ export default function Home() {
             <div className="row">
               <label htmlFor="ct">国
                 <select id="ct" value={useNear ? hotel.country || country : country} disabled={useNear} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
-                  {!country && <option value="" disabled>国を選ぶ</option>}
+                  <option value="">指定なし</option>
                   {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </label>
@@ -1330,7 +1321,7 @@ export default function Home() {
               )}
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
-            <p className="hint">国を選ぶと、その国の中だけを探します。</p>
+            <p className="hint">国はえらばなくても探せます（例：キーワード「魯肉飯」＋場所「台北」）。えらぶと、その国の中だけを探します。</p>
           </form>
 
           <div className="list" ref={resultsTop} style={{ scrollMarginTop: '72px' }}>
@@ -1377,7 +1368,7 @@ export default function Home() {
                         )}
                       </span>
                     )}
-                  <a className="act" href={safeUrl(p.mapsUrl)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
+                  <a className="act" href={mapsLink(p)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
                   <NaverLinks place={p} route={false} />
                 </div>
                 <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>

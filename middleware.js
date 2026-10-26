@@ -31,6 +31,13 @@ export async function middleware(req) {
   // 共有リンク（/s/...）は、パスワードなしで誰でも見られる。見るのに使う地図の鍵とお店の写真も同じ
   if (pathname.startsWith('/s/') || pathname.startsWith('/g/') || pathname === '/api/mapkey') return NextResponse.next();
   if (pathname === '/api/photo') {
+    // 写真は1枚ごとに料金がかかるので、Tabibi の画面から開いたときだけ（ほかのサイトに貼られて使われないように）
+    const site = req.headers.get('sec-fetch-site');
+    const ref = req.headers.get('referer');
+    let refHost = '';
+    try { refHost = ref ? new URL(ref).host : ''; } catch {}
+    const own = site ? site === 'same-origin' || site === 'none' : !ref || refHost === req.nextUrl.host;
+    if (!own) return new NextResponse('forbidden', { status: 403 });
     if (tooMany(ipOf(req), 200, 'photo:')) return new NextResponse('too many', { status: 429 });
     return NextResponse.next();
   }

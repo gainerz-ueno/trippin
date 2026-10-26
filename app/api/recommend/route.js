@@ -1,27 +1,31 @@
 // AIおすすめ：今いる場所・現地の時間・ホテル・候補のお店をふまえて提案する（Gemini）
 import { searchPage, fillTranslations, localize } from '../../lib/places';
 import { str, num, latLng, bad } from '../../lib/validate';
+import { gfetch, friendly, MOCK } from '../../lib/gfetch';
+
+export const maxDuration = 60;
+const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
 
 const MODEL = 'gemini-3.8-flash';
 
 async function gemini(prompt) {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
+  const res = await gfetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GKEY() },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
     }),
     cache: 'no-store',
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || 'AIに聞けませんでした');
+  }, 20000);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { console.error('[tabibi] gemini', res.status, data?.error?.message); throw new Error('AIに聞けませんでした。少し待ってからもう一度試してください'); }
   const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') || '{}';
   return JSON.parse(text);
 }
 
 export async function POST(req) {
-  if (!process.env.GEMINI_API_KEY) return Response.json({ error: 'AIの設定がされていません' }, { status: 500 });
+  if (!GKEY()) return Response.json({ error: 'AIの設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
   try {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') return bad('入力が正しくありません');
@@ -136,10 +140,10 @@ export async function POST(req) {
       const loc = await fillTranslations(await localize(near.map((pk) => pk.place), nearbyLang));
       near.forEach((pk, i) => { pk.place = loc[i]; });
     }
-    const picks = picked;
+    const picks = picked.map((pk) => ({ ...pk, reason: String(pk.reason || '').slice(0, 200) }));
 
-    return Response.json({ answer: out.answer || '', picks });
+    return Response.json({ answer: String(out.answer || '').slice(0, 600), picks });
   } catch (e) {
-    return Response.json({ error: e.message || 'AIに聞けませんでした' }, { status: 500 });
+    return Response.json({ error: friendly(e, 'AIに聞けませんでした。少し待ってからもう一度試してください') }, { status: 502 });
   }
 }

@@ -2,7 +2,8 @@
 // ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
 import sharp from 'sharp';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
-// 【一時的】動作確認用（確認が終わったら消す）
+import { gfetch, MOCK } from '../../lib/gfetch';
+const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -92,12 +93,26 @@ function img(b64, max = 2_000_000) {
 }
 
 async function rpc(fn, token, body = {}) {
+  // テスト用モード：回数の数え方だけ、にせ物で動かす（1日3回）
+  if (MOCK) return mockRpc(fn, token);
+  // つながらないときは「回数を確認できませんでした」として扱う（落ちないように）
   return fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     body: JSON.stringify(body),
     cache: 'no-store',
-  });
+    signal: AbortSignal.timeout(10000),
+  }).catch(() => new Response('{}', { status: 503 }));
+}
+const mockUses = new Map();
+function mockRpc(fn, token) {
+  const ok = (v) => new Response(JSON.stringify(v), { status: 200, headers: { 'content-type': 'application/json' } });
+  if (token !== 'mock-token') return new Response('{}', { status: 401 });
+  const n = mockUses.get(token) || 0;
+  if (fn === 'ai_credits_left') return ok(Math.max(0, 3 - n));
+  if (fn === 'use_ai_credit') { if (n >= 3) return ok(null); mockUses.set(token, n + 1); return ok('t' + (n + 1)); }
+  if (fn === 'refund_ai_credit') { mockUses.set(token, Math.max(0, n - 1)); return ok(true); }
+  return new Response('{}', { status: 404 });
 }
 const bearer = (req) => (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').slice(0, 4000);
 
@@ -105,8 +120,9 @@ const bearer = (req) => (req.headers.get('authorization') || '').replace(/^Beare
 // 運営者のアカウントは回数の制限なし（動作確認のため）。ログインしているアカウントをSupabaseで確かめる
 const UNLIMITED = new Set(['be07854d-c007-4404-85cd-fddc9867e5ff']);
 async function isUnlimited(token) {
+  if (MOCK) return false;
   try {
-    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    const r = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` }, cache: 'no-store', signal: AbortSignal.timeout(8000) });
     if (!r.ok) return false;
     const u = await r.json();
     return UNLIMITED.has(u?.id);
@@ -289,9 +305,9 @@ function areaPrompt(d) {
 const TEXT_MODEL = 'gemini-2.5-flash';
 async function understand(instruction, markedB64) {
   try {
-    const r = await fetch(`${GEMINI}/${TEXT_MODEL}:generateContent`, {
+    const r = await gfetch(`${GEMINI}/${TEXT_MODEL}:generateContent`, {
       method: 'POST',
-      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY, 'content-type': 'application/json' },
+      headers: { 'x-goog-api-key': GKEY(), 'content-type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [
           { text: [
@@ -308,7 +324,7 @@ async function understand(instruction, markedB64) {
         ] }],
         generationConfig: { temperature: 0.2, maxOutputTokens: 300, thinkingConfig: { thinkingBudget: 0 } },
       }),
-    });
+    }, 20000);
     const d = await r.json();
     const t = (d.candidates?.[0]?.content?.parts || []).map((x) => x.text || '').join('');
     const en = (t.match(/EN:\s*(.+)/) || [])[1]?.trim();
@@ -442,6 +458,7 @@ export async function POST(req) {
 
 // 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
 async function run(req, job) {
+  if (!GKEY()) return json({ error: '「AIで作る」の設定がまだ終わっていません（運営者の設定待ち）' }, 500);
   const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
@@ -471,12 +488,12 @@ function imgHeaders(o) {
 
 async function gen(parts, aspect, rawOut) {
   try {
-    const r = await fetch(`${GEMINI}/${MODEL}:generateContent`, {
+    const r = await gfetch(`${GEMINI}/${MODEL}:generateContent`, {
       method: 'POST',
-      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY, 'content-type': 'application/json' },
+      headers: { 'x-goog-api-key': GKEY(), 'content-type': 'application/json' },
       body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect, imageSize: '2K' } } }),
-    });
-    const d = await r.json();
+    }, 100000);
+    const d = await r.json().catch(() => ({}));
     const part = d.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
     if (!part) return { ok: false, error: d.error?.message || d.candidates?.[0]?.finishReason || 'no image' };
     if (rawOut) return { ok: true, raw: Buffer.from(part.inlineData.data, 'base64') };

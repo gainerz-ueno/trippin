@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "dev:mock": "NEXT_PUBLIC_TABIBI_MOCK=1 TABIBI_MOCK=1 SITE_PASSWORD=test next dev"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.3",

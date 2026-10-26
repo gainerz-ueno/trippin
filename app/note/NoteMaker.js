@@ -2,6 +2,7 @@
 // 「行った」のお店・スポットから、eタビセツ（画像）を作る
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './note.css';
+import { jaError } from '../lib/api';
 import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
 import { FONTS, loadFont } from './fonts';
 import { Scaled, toB64, renderNode, aiLeft, downloadBlob, shareBlob } from './util';
@@ -112,7 +113,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       const added = (await listPhotos(pid)).map(keyOf).filter((k) => !before.has(k));
       save({ people: [...peopleKeys, ...added].slice(-3) });
       onPhotosAdded?.();
-    } catch (e) { setErr(e.message || '写真を追加できませんでした'); }
+    } catch (e) { setErr(jaError(e, '写真を追加できませんでした')); }
     setPeopleBusy(false);
   }
   // メインの写真：えらんでいなければ1枚目の写真（「なし」をえらんだら null）
@@ -153,7 +154,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       const added = after.filter((k) => !before.has(k));
       patchSpot(s.id, { photos: [...cur, ...added].slice(0, 2) });
       onPhotosAdded?.();
-    } catch (e) { setErr(e.message || '写真を追加できませんでした'); }
+    } catch (e) { setErr(jaError(e, '写真を追加できませんでした')); }
     setAddBusy(null);
   }
 
@@ -183,7 +184,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       const blob = await renderNode(canvasRef.current, sizeOf(note.size), note.font);
       setOut({ url: URL.createObjectURL(blob), blob, ext: 'png' });
       setTimeout(() => document.getElementById('nm-out')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-    } catch (e) { setErr(e.message || '画像を作れませんでした'); }
+    } catch (e) { setErr(jaError(e, '画像を作れませんでした')); }
     setBusy(false);
   }
   const fileName = `tabibi-${(note.title || 'note').replace(/[\\/:*?"<>|\s]+/g, '_')}.${out?.ext || 'png'}`;
@@ -195,7 +196,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     if (!out) return;
     setSaved('saving');
     try { await savePage({ blob: out.blob, kind: 'note', trip, title: note.title }); setSaved('done'); }
-    catch (e) { setSaved(''); setErr(e.message || '保存できませんでした'); }
+    catch (e) { setSaved(''); setErr(jaError(e, '保存できませんでした')); }
   }
   useEffect(() => { setSaved(''); }, [out]);
   useEffect(() => () => { if (out) URL.revokeObjectURL(out.url); }, [out]);

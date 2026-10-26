@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { safeUrl } from './lib/safeurl';
+import { jaError } from './lib/api';
 
 // Google マップの読み込み（1回だけ）
 let loader = null;
@@ -8,16 +9,18 @@ function loadMaps() {
   if (typeof window === 'undefined') return Promise.reject();
   if (window.google?.maps) return Promise.resolve(window.google.maps);
   if (loader) return loader;
-  loader = fetch('/api/mapkey')
+  loader = fetch('/api/mapkey', { signal: AbortSignal.timeout(10000) })
     .then((r) => r.json())
     .then(({ key }) => {
-      if (!key) throw new Error('地図の鍵が設定されていません');
+      if (!key) throw new Error('地図はまだ使えません（地図の設定が終わっていません）。リストで見てください');
       return new Promise((resolve, reject) => {
-        window.__trippinMapsReady = () => resolve(window.google.maps);
+        // 電波が悪くて読み込みが終わらないときは、20秒であきらめて案内を出す（白いまま固まらないように）
+        const t = setTimeout(() => reject(new Error('地図を読み込めませんでした。電波のよいところで開き直してください')), 20000);
+        window.__trippinMapsReady = () => { clearTimeout(t); resolve(window.google.maps); };
         const s = document.createElement('script');
         s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&language=ja&callback=__trippinMapsReady&loading=async`;
         s.async = true;
-        s.onerror = () => reject(new Error('地図を読み込めませんでした'));
+        s.onerror = () => { clearTimeout(t); s.remove(); reject(new Error('地図を読み込めませんでした。電波のよいところで開き直してください')); };
         document.head.appendChild(s);
       });
     })
@@ -56,7 +59,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
         info.current = new maps.InfoWindow();
         setReady(true);
       })
-      .catch((e) => alive && setErr(e?.message || '地図を読み込めませんでした'));
+      .catch((e) => alive && setErr(jaError(e, '地図を読み込めませんでした。電波のよいところで開き直してください')));
     return () => { alive = false; };
   }, []);
 
