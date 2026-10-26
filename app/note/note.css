@@ -457,3 +457,41 @@
 .ac-tastes{grid-template-columns:repeat(2,1fr)}
 .ac-tastes .ac-taste-img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:8px;display:block;background:#eee}
 .ac-tastes small{font-size:11px;opacity:.7;margin-top:-3px}
+
+/* ===== お土産の帯（eタビセツの下のほう） ===== */
+.nt > .nt-sv{order:1}
+.nt > .nt-foot{order:2}
+.nt-sv{flex:none;height:220px;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.88);border:4px solid var(--line2,#eee);border-radius:24px;padding:10px 16px 12px;position:relative;z-index:1}
+.nt.story .nt-sv{height:284px}
+.nt-sv-h{display:flex;align-items:center;gap:8px;font-size:28px;font-weight:700;color:var(--acc-dark,#333);flex:none}
+.nt-sv-h img{width:44px;height:44px;object-fit:contain}
+.nt-sv-row{flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.nt-sv.n1 .nt-sv-row,.nt-sv.n2 .nt-sv-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+.nt-sv.n3 .nt-sv-row{grid-template-columns:repeat(3,minmax(0,1fr))}
+.nt-sv-it{min-width:0;min-height:0;display:flex;gap:10px;align-items:stretch}
+.nt .ph.nt-sv-ph{width:auto;height:100%;aspect-ratio:1;flex:none;border-radius:14px;border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.nt-sv.n3 .nt-sv-it,.nt-sv.n4 .nt-sv-it{flex-direction:column;gap:4px}
+.nt-sv.n3 .nt .ph.nt-sv-ph,.nt-sv.n3 .ph.nt-sv-ph,.nt-sv.n4 .ph.nt-sv-ph{width:100%;height:auto;flex:1 1 0;min-height:0;aspect-ratio:auto}
+.nt-sv-it figcaption{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:2px;line-height:1.2}
+.nt-sv-it b{font-size:24px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
+.nt-sv-it span{font-size:21px;color:var(--acc-dark,#555);font-weight:700}
+.nt-sv.n3 .nt-sv-it b,.nt-sv.n4 .nt-sv-it b{font-size:21px;-webkit-line-clamp:1;white-space:nowrap;text-overflow:ellipsis;display:block}
+.nt-sv.n3 .nt-sv-it span,.nt-sv.n4 .nt-sv-it span{font-size:19px}
+/* お土産だけの1枚（eガイドブックのページ） */
+.nt.svp{gap:24px}
+.svp-head{flex:none;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px}
+.svp-kicker{font-size:24px;letter-spacing:.4em;padding-left:.4em;color:var(--acc-dark);font-weight:700}
+.svp-grid{flex:1;min-height:0;display:grid;grid-template-columns:repeat(var(--c),minmax(0,1fr));grid-template-rows:repeat(var(--r),minmax(0,1fr));gap:22px}
+.svp-card{min-width:0;min-height:0;display:flex;flex-direction:column;gap:8px;background:rgba(255,255,255,.92);border-radius:24px;padding:14px;box-shadow:0 3px 10px rgba(0,0,0,.12);position:relative}
+.svp-card .ph{flex:1 1 0;min-height:0;height:0;border-radius:16px}
+.svp-card b{font-size:30px;line-height:1.2;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere;flex:none}
+.svp-card .svp-meta{font-size:22px;color:var(--acc-dark);font-weight:700;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.svp-card .svp-memo{font-size:21px;line-height:1.35;flex:none;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.svp-good{position:absolute;top:-10px;right:-6px;background:#FF5C8A;color:#fff;font-size:22px;font-weight:700;padding:6px 16px;border-radius:999px;transform:rotate(6deg);box-shadow:0 2px 6px rgba(0,0,0,.2)}
+.svp-total{flex:none;text-align:center;font-size:30px;font-weight:700;color:var(--acc-dark)}
+/* お土産の選び方（作る画面） */
+.nm-svs{display:flex;flex-wrap:wrap;gap:8px}
+.nm-svs button{font:inherit;font-size:13px;display:flex;align-items:center;gap:6px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:4px 10px 4px 4px;cursor:pointer;position:relative}
+.nm-svs button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.nm-svs img,.nm-svs .ph0{width:36px;height:36px;border-radius:8px;object-fit:cover;background:var(--chip)}
+.nm-svs i{font-style:normal;font-size:11px;font-weight:700;background:var(--accent);color:#fff;border-radius:999px;min-width:18px;height:18px;display:grid;place-items:center}

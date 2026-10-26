@@ -6,7 +6,7 @@
 
 const DB_KEY = 'tabibi.mockdb';
 const SES_KEY = 'tabibi.mocksession';
-const PK = { items: ['user_id', 'id'], settings: ['user_id'], photos: ['id'], shares: ['id'], note_pages: ['id'], guidebooks: ['id'] };
+const PK = { items: ['user_id', 'id'], settings: ['user_id'], photos: ['id'], shares: ['id'], note_pages: ['id'], guidebooks: ['id'], souvenirs: ['user_id', 'id'], trip_plans: ['user_id', 'trip'] };
 const files = new Map(); // storage（このページを開いている間だけ）
 
 const load = () => { try { return JSON.parse(localStorage.getItem(DB_KEY) || '{}'); } catch { return {}; } };
@@ -108,6 +108,13 @@ export function mockClient() {
         const items = (db.items || []).filter((r) => r.user_id === sh.user_id && r.data?.trip === sh.folder)
           .map(({ data: { memo, srcUrl, ...rest } }) => rest);
         return { data: { folder: sh.folder, items }, error: null };
+      }
+      if (fn === 'shared_extras') {
+        const sh = (db.shares || []).find((s) => s.id === args.share_id);
+        if (!sh) return { data: null, error: null };
+        const plan = (db.trip_plans || []).find((r) => r.user_id === sh.user_id && r.trip === sh.folder)?.data || null;
+        const souvenirs = (db.souvenirs || []).filter((r) => r.user_id === sh.user_id && r.trip === sh.folder).map((r) => r.data);
+        return { data: { plan, souvenirs }, error: null };
       }
       if (fn === 'guidebook_view') {
         const g = (db.guidebooks || []).find((x) => x.id === args.gid && x.published);

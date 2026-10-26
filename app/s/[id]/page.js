@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import MapView from '../../MapView';
-import { fetchShared } from '../../cloud';
+import { fetchShared, fetchSharedExtras } from '../../cloud';
+import PlanView, { dayStops, dayLabel } from '../../PlanView';
+import { SouvenirCard } from '../../Souvenirs';
+import { totals } from '../../lib/money';
 import { mapsLink } from '../../lib/api';
 
 const BASE_CATS = {
@@ -53,14 +56,23 @@ export default function SharedFolder() {
   const [data, setData] = useState(undefined);
   const [tab, setTab] = useState('cand');
   const [view, setView] = useState('list');
+  const [extra, setExtra] = useState(null); // { plan, souvenirs }
+  const [mapDay, setMapDay] = useState(null);
   useEffect(() => {
-    (/^[A-Za-z0-9]{10}$/.test(params.id || '') ? fetchShared(params.id) : Promise.resolve(null)).then((d) => setData(d || null)).catch(() => setData(null));
+    const okId = /^[A-Za-z0-9]{10}$/.test(params.id || '');
+    (okId ? fetchShared(params.id) : Promise.resolve(null)).then((d) => setData(d || null)).catch(() => setData(null));
+    // 回る順番・お土産（まだ準備できていないときは出さないだけ）
+    if (okId) fetchSharedExtras(params.id).then((x) => setExtra(x || null)).catch(() => setExtra(null));
   }, [params.id]);
   const items = data?.items || [];
   const cand = items.filter((i) => !i.done);
   const done = items.filter((i) => i.done).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
   const shown = tab === 'cand' ? cand : done;
-  const mapItems = useMemo(() => shown, [tab, data]); // eslint-disable-line react-hooks/exhaustive-deps
+  const days = extra?.plan?.days || [];
+  const souvenirs = Array.isArray(extra?.souvenirs) ? extra.souvenirs : [];
+  const dayObj = days.find((d) => d.id === mapDay) || null;
+  const mapList = dayObj ? dayStops(dayObj, items) : shown;
+  const mapItems = useMemo(() => mapList, [tab, data, dayObj]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <main className="wrap">
@@ -77,12 +89,30 @@ export default function SharedFolder() {
             <button role="tab" aria-selected={tab === 'cand'} onClick={() => setTab('cand')}>候補 <span className="count">{cand.length}</span></button>
             <button role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>行った <span className="count">{done.length}</span></button>
           </div>
-          <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
+          <div className={'viewtoggle' + (days.length || souvenirs.length ? ' four' : '')} role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
             <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
+            {days.length > 0 && <button role="tab" aria-selected={view === 'plan'} onClick={() => setView('plan')}>回る順番</button>}
+            {souvenirs.length > 0 && <button role="tab" aria-selected={view === 'souvenir'} onClick={() => setView('souvenir')}>お土産<span className="count">{souvenirs.length}</span></button>}
           </div>
-          {view === 'map' && shown.length > 0 && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} hotels={[]} />}
-          <div className="list">
+          {view === 'map' && days.length > 0 && (
+            <div className="chips map-days">
+              <button aria-pressed={!dayObj} onClick={() => setMapDay(null)}>{tab === 'cand' ? '候補' : '行った'}すべて</button>
+              {days.map((d, i) => <button key={d.id} aria-pressed={dayObj?.id === d.id} onClick={() => setMapDay(d.id)}>{dayLabel(d, i)}の順番</button>)}
+            </div>
+          )}
+          {view === 'map' && mapList.length > 0 && <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} hotels={[]} route={!!dayObj} />}
+          {view === 'plan' && <PlanView plan={extra.plan} items={items} hotel={null} colorOf={catColor} readOnly onChange={() => {}} onShowMap={(id) => { setMapDay(id); setView('map'); }} />}
+          {view === 'souvenir' && (
+            <section className="sv panel">
+              <div className="sv-head"><h2>買ったお土産<small>{souvenirs.length}こ</small></h2></div>
+              {totals(souvenirs).length > 0 && <p className="sv-total">合計 {totals(souvenirs).join(' ＋ ')}</p>}
+              <div className="sv-list">
+                {[...souvenirs].sort((a, b) => (b.good ? 1 : 0) - (a.good ? 1 : 0)).map((sv) => <SouvenirCard key={sv.id} s={sv} items={items} />)}
+              </div>
+            </section>
+          )}
+          {(view === 'list' || (view === 'map' && !dayObj)) && <div className="list">
             {shown.length === 0 && <div className="empty">{tab === 'cand' ? 'まだお店がありません。' : 'まだ行ったお店はありません。'}</div>}
             {shown.map((it, i) => (
               <article key={it.id} className={'item' + (it.done ? ' done' : '')}>
@@ -122,7 +152,7 @@ export default function SharedFolder() {
                 )}
               </article>
             ))}
-          </div>
+          </div>}
         </>
       )}
     </main>

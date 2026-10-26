@@ -10,6 +10,7 @@ import AiStudio from './AiStudio';
 import ChatFlow, { aiOptions } from './AiChat';
 import { addPhotos, listPhotos } from '../photos';
 import { ensurePhotos, savePage } from '../cloud';
+import { money } from '../lib/money';
 
 const MAX = 6;
 const keyOf = (p) => p.cloudId || 'L' + p.id;
@@ -27,7 +28,9 @@ export function defaultNote(trip, items, unsorted) {
 // AIで作るときの雰囲気の見本（テンプレートの背景の絵）
 const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
 
-export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn, prompts = [], onPrompts }) {
+export const MAX_SV = 4; // eタビセツに入れるお土産の数
+
+export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn, prompts = [], onPrompts, souvenirs = [] }) {
   const tripsWithDone = folders.filter((f) => items.some((i) => i.done && i.trip === f));
   const [trip, setTrip] = useState(tripsWithDone.includes(trip0) ? trip0 : tripsWithDone[0] || trip0);
   const note = notes[trip] || defaultNote(trip, items, unsorted);
@@ -120,6 +123,14 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const coverUrl = note.cover === null ? null : (note.cover ? allPhotos.find((p) => p.key === note.cover)?.url : null) || allPhotos[0]?.url || null;
   const coverKey = note.cover === null ? null : (note.cover && allPhotos.some((p) => p.key === note.cover) ? note.cover : allPhotos[0]?.key);
 
+  // お土産：この旅のお土産からえらんだもの（えらんでいなければ入れない）
+  const tripSv = souvenirs.filter((x) => x.trip === trip);
+  const svList = (note.souvenirs || []).map((id) => tripSv.find((x) => x.id === id)).filter(Boolean).slice(0, MAX_SV);
+  function toggleSv(id) {
+    const cur = svList.map((x) => x.id);
+    save({ souvenirs: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(0, MAX_SV) });
+  }
+
   const canvasSpots = spots.map(({ s, it }) => ({
     it, text: (s.text ?? (it.review || it.memo || '')).trim(), urls: photoKeys(s).map((k) => urlOf(it.id, k)).filter(Boolean),
   }));
@@ -167,6 +178,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     return {
       tpl: note.tpl, taste: note.aiTaste, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
       ...aiOptions(note),
+      souvenirs: svList.map((x) => ({ name: x.name, price: money(x.price, x.currency), good: !!x.good })),
       cover: await toB64(coverUrl),
       people: await Promise.all(peopleUrls.map((u) => toB64(u, 768))),
       spots: await Promise.all(canvasSpots.map(async (sp) => ({
@@ -217,13 +229,14 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         toggleSpot={toggleSpot} togglePhoto={togglePhoto} photoKeys={photoKeys} addMore={addMore} addBusy={addBusy}
         allPhotos={allPhotos} coverKey={coverKey} peoplePool={peoplePool} peopleKeys={peopleKeys} togglePeople={togglePeople}
         addPeople={addPeople} peopleBusy={peopleBusy} prompts={prompts} onPrompts={onPrompts} max={MAX}
+        tripSv={tripSv} svList={svList} toggleSv={toggleSv} maxSv={MAX_SV}
         renderTplThumbs={(onPick) => (
           <div className="nm-tpls">
             {TEMPLATES.map((t) => (
               <button key={t.id} type="button" className="nm-tpl" onClick={() => onPick(t)}>
                 <div className="nm-mini">
                   <Scaled width={thumbW} size={size}>
-                    <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} />
+                    <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} souvenirs={svList} />
                   </Scaled>
                 </div>
                 <span>{t.label}</span>
@@ -235,7 +248,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           <>
             <div className="nm-preview" style={{ width: boxW - 8 }}>
               <Scaled width={boxW - 8} size={size}>
-                <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} />
+                <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} souvenirs={svList} />
               </Scaled>
             </div>
             {err && <p className="nm-err">{err}</p>}

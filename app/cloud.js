@@ -264,3 +264,49 @@ export async function fetchGuide(id) {
   if (error) throw error;
   return data; // { title, author, description, price, cover, pages } または null
 }
+
+// ---- お土産（旅のあとに、買ったものを記録） ----
+// 1つ＝1行。写真は小さくしてデータの中に入れる（共有リンク・eガイドブックでもそのまま見せられるように）
+export async function pullSouvenirs() {
+  const { data, error } = await supa().from('souvenirs').select('id,data').eq('user_id', uid);
+  if (error) throw error;
+  return (data || []).map((r) => r.data);
+}
+export async function upsertSouvenirs(list) {
+  if (!uid || !list.length) return;
+  for (let i = 0; i < list.length; i += 50) {
+    const rows = list.slice(i, i + 50).map((s) => ({ user_id: uid, id: s.id, trip: String(s.trip || '').slice(0, 60), data: s, updated_at: now() }));
+    const { error } = await supa().from('souvenirs').upsert(rows);
+    if (error) throw error;
+  }
+}
+export async function deleteSouvenirs(ids) {
+  if (!uid || !ids.length) return;
+  const { error } = await supa().from('souvenirs').delete().eq('user_id', uid).in('id', ids);
+  if (error) throw error;
+}
+
+// ---- 1日の回る順番（旅程）：旅（フォルダ）ごとに1行 ----
+export async function pullPlans() {
+  const { data, error } = await supa().from('trip_plans').select('trip,data').eq('user_id', uid);
+  if (error) throw error;
+  return (data || []).map((r) => ({ ...r.data, id: r.trip }));
+}
+export async function upsertPlans(list) {
+  if (!uid || !list.length) return;
+  const rows = list.map(({ id, ...p }) => ({ user_id: uid, trip: String(id).slice(0, 60), data: p, updated_at: now() }));
+  const { error } = await supa().from('trip_plans').upsert(rows);
+  if (error) throw error;
+}
+export async function deletePlans(trips) {
+  if (!uid || !trips.length) return;
+  const { error } = await supa().from('trip_plans').delete().eq('user_id', uid).in('trip', trips);
+  if (error) throw error;
+}
+
+// 共有リンクで見せる旅程・お土産（共有しているフォルダの分だけ）
+export async function fetchSharedExtras(id) {
+  const { data, error } = await supa().rpc('shared_extras', { share_id: id });
+  if (error) throw error;
+  return data; // { plan, souvenirs } または null
+}

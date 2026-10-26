@@ -64,7 +64,7 @@ function Free({ ph, init = '', onSend, max = 120, multi }) {
 export default function ChatFlow(props) {
   const { note, save, user, onSignIn, trips, trip, setTrip, doneHere, spots, photoMap, toggleSpot, togglePhoto, photoKeys, addMore, addBusy,
     allPhotos, coverKey, peoplePool, peopleKeys, togglePeople, addPeople, peopleBusy, prompts, onPrompts, max,
-    renderTplThumbs, tplFinal, aiFinal } = props;
+    renderTplThumbs, tplFinal, aiFinal, tripSv = [], svList = [], toggleSv, maxSv = 4 } = props;
   const [mode, setMode] = useState(null); // 'tpl' / 'ai'（毎回ここから始める）
   const [A, setA] = useState({}); // このチャットでの答え（id -> {t, k}）
   const [editAt, setEditAt] = useState(null);
@@ -141,6 +141,29 @@ export default function ChatFlow(props) {
         </>
       ),
     });
+    if (tripSv.length) {
+      Q.push({
+        id: 'sv', bot: `買ったお土産も入れる？（${maxSv}つまで。下のほうに並ぶよ）`,
+        ui: () => (
+          <>
+            <div className="nm-svs">
+              {tripSv.map((x) => {
+                const n = svList.findIndex((y) => y.id === x.id);
+                return (
+                  <button key={x.id} type="button" aria-pressed={n >= 0} disabled={n < 0 && svList.length >= maxSv} onClick={() => toggleSv(x.id)}>
+                    {x.photo ? <img src={x.photo} alt="" /> : <span className="ph0" />}{x.good ? '♥ ' : ''}{x.name}{n >= 0 && <i>{n + 1}</i>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="as-chips">
+              <button type="button" className="as-ok" disabled={!svList.length} onClick={() => answer('sv', svList.map((x) => x.name).join('・'))}>これで決定（{svList.length}こ）</button>
+              <button type="button" onClick={() => answer('sv', '入れない', { souvenirs: [] })}>入れない</button>
+            </div>
+          </>
+        ),
+      });
+    }
     if (ai) {
       Q.push({
         id: 'tpl', bot: '雰囲気はどれにする？',

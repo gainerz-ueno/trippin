@@ -11,7 +11,10 @@ const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
 import { api, jaError, mapsLink } from './lib/api';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
-import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare } from './cloud';
+import { supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
+import PlanView, { dayStops, dayLabel } from './PlanView';
+import SouvenirPanel from './Souvenirs';
+import { distanceKm } from './lib/geo';
 
 const KEY = 'trippin.v1';
 
@@ -243,6 +246,32 @@ function sourceLabel(u) {
   return 'Web';
 }
 
+// SNSの投稿URL（YouTube・インスタだけ受け付ける。中身は読みに行かない）
+function snsUrlOk(u) {
+  const t = safeUrl(String(u || '').trim());
+  if (!t) return '';
+  try {
+    const h = new URL(t).hostname.replace(/^www\.|^m\./, '');
+    return /^(youtube\.com|youtu\.be|instagram\.com)$/.test(h) && t.startsWith('https://') ? t : '';
+  } catch { return ''; }
+}
+
+// 見つけた投稿のURLをあとから付ける・変える
+function SrcEditor({ initial, onSave, onCancel }) {
+  const [v, setV] = useState(initial || '');
+  const [err, setErr] = useState('');
+  return (
+    <form className="memo-edit" onSubmit={(e) => { e.preventDefault(); if (!v.trim()) { onSave(''); return; } const u = snsUrlOk(v); if (!u) { setErr('YouTube か Instagram の投稿のURL（https://〜）を貼ってください'); return; } onSave(u); }}>
+      <input id="srcurl" autoFocus inputMode="url" value={v} onChange={(e) => setV(e.target.value)} placeholder="https://www.instagram.com/p/…" />
+      {err && <p className="err">{err}</p>}
+      <div className="memo-acts">
+        <button type="submit" className="btn">保存</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>やめる</button>
+      </div>
+    </form>
+  );
+}
+
 function photoSrc(name) {
   return name ? `/api/photo?name=${encodeURIComponent(name)}` : null;
 }
@@ -396,12 +425,6 @@ function todayHours(h) {
 }
 
 // ホテルからの距離（直線距離から、歩き・車のだいたいの時間を出す）
-function distanceKm(a, b) {
-  const R = 6371, rad = (d) => (d * Math.PI) / 180;
-  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
-  const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(x));
-}
 function fromHotel(h, it) {
   if (!h || h.lat == null || it.lat == null) return '';
   const km = distanceKm(h, it);
@@ -715,7 +738,12 @@ export default function Home() {
   const [nearHotel, setNearHotel] = useState(true); // 宿泊先の近い順にさがす
   const [here, setHere] = useState(null);
   const [hereMsg, setHereMsg] = useState('');
-  const srcUrl = '';
+  // SNSの投稿URL（YouTube・インスタ）：この投稿で見つけたお店として登録する（投稿の中身は読みに行かない）
+  const [snsUrl, setSnsUrl] = useState(''); // 検索結果から追加するお店に付けるURL
+  const [snsOpen, setSnsOpen] = useState(false);
+  const [snsIn, setSnsIn] = useState({ url: '', name: '', area: '' });
+  const [snsErr, setSnsErr] = useState('');
+  const srcUrl = snsUrl;
   const [shotBusy, setShotBusy] = useState(false);
   const [shotShops, setShotShops] = useState([]);
   const [shotMsg, setShotMsg] = useState('');
@@ -759,6 +787,7 @@ export default function Home() {
   const [memoFor, setMemoFor] = useState(null);
   const [moreFor, setMoreFor] = useState(null); // 「…」メニューを開いているお店
   const [reviewFor, setReviewFor] = useState(null);
+  const [srcFor, setSrcFor] = useState(null); // 見つけた投稿のURLを直しているお店
   const [hotel, setHotel] = useState(null); // 今回の宿泊先（1つ。すべての画面の軸）
   const useNear = !!(hotel && nearHotel && hotel.lat != null);
   const [hotelEdit, setHotelEdit] = useState(false);
@@ -768,6 +797,10 @@ export default function Home() {
   const [shelfKey, setShelfKey] = useState(0); // わたしのeタビセツを読み直す合図
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
+  const [souvenirs, setSouvenirs] = useState([]); // お土産（旅ごと。trip でフォルダに分ける）
+  const [plans, setPlans] = useState({}); // 1日の回る順番（フォルダ名 -> { days: [{id,date,title,stops:[itemId]}], updatedAt }）
+  const [mapDay, setMapDay] = useState(null); // 地図で見ている日（null＝リスト全部）
+  const [planDay, setPlanDay] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(null);
   const [notice, setNotice] = useState('');
   async function onPhotos(itemId, files, kind) {
@@ -800,6 +833,8 @@ export default function Home() {
     } catch {}
     try { const n = localStorage.getItem('trippin.notes'); if (n) setNotes(JSON.parse(n) || {}); } catch {}
     try { const pr = JSON.parse(localStorage.getItem('trippin.prompts') || '[]'); if (Array.isArray(pr)) setPrompts(pr); } catch {}
+    try { const sv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]'); if (Array.isArray(sv)) setSouvenirs(sv); } catch {}
+    try { const pl = JSON.parse(localStorage.getItem('trippin.plans') || '{}'); if (pl && typeof pl === 'object') setPlans(pl); } catch {}
     try { const c = localStorage.getItem('trippin.country'); if (c && COUNTRY_LIST.some(([k]) => k === c)) setCountry(c); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
@@ -827,6 +862,19 @@ export default function Home() {
     if (!loaded) return;
     try { localStorage.setItem('trippin.folders', JSON.stringify(folders)); localStorage.setItem('trippin.folder', trip); } catch {}
   }, [folders, trip, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem('trippin.plans', JSON.stringify(plans)); } catch {}
+  }, [plans, loaded]);
+  useEffect(() => {
+    if (!loaded) return;
+    try { localStorage.setItem('trippin.souvenirs', JSON.stringify(souvenirs)); }
+    catch { setNotice('このスマホの保存の場所がいっぱいで、お土産を保存できませんでした。写真を外すか、ログインしてクラウドに保存してください'); }
+  }, [souvenirs, loaded]);
+  const savePlan = useCallback((t, p) => setPlans((prev) => ({ ...prev, [t]: { ...p, updatedAt: Date.now() } })), []);
+  const addSouvenir = (sv) => setSouvenirs((prev) => [...prev, { ...sv, addedAt: Date.now(), updatedAt: Date.now() }]);
+  const updateSouvenir = (id, patch) => setSouvenirs((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)));
+  const removeSouvenir = (id) => setSouvenirs((prev) => prev.filter((x) => x.id !== id));
   function createFolder(n) {
     if (n === UNSORTED) { setTrip(UNSORTED); return; }
     setFolders((prev) => (prev.includes(n) ? prev : [...prev, n]));
@@ -838,6 +886,8 @@ export default function Home() {
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
     setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to, updatedAt: Date.now() } : i)));
     setNotes((prev) => { if (!prev[from]) return prev; const { [from]: n, ...rest } = prev; return { ...rest, [to]: n }; });
+    setPlans((prev) => { if (!prev[from]) return prev; const { [from]: p, ...rest } = prev; return { ...rest, [to]: { ...p, updatedAt: Date.now() } }; });
+    setSouvenirs((prev) => prev.map((x) => (x.trip === from ? { ...x, trip: to, updatedAt: Date.now() } : x)));
     setTrip(to);
   }
   function deleteFolder(name) {
@@ -848,6 +898,8 @@ export default function Home() {
     const rest = allFolders.filter((f) => f !== name);
     setFolders(rest);
     setNotes((prev) => { const { [name]: _, ...rest2 } = prev; return rest2; });
+    setPlans((prev) => { const { [name]: _, ...rest3 } = prev; return rest3; });
+    setSouvenirs((prev) => prev.filter((x) => x.trip !== name));
     setTrip(UNSORTED);
   }
   // ---- ログインとクラウド保存 ----
@@ -855,6 +907,31 @@ export default function Home() {
   const [syncMsg, setSyncMsg] = useState('');
   const synced = useRef(false);       // はじめのそろえが終わったか
   const pushed = useRef(new Map());   // クラウドに送った内容（変わったものだけ送るため）
+  // お土産・回る順番（お店とは別の表。表がまだなくても、お店のそろえは止めない）
+  const extraSynced = useRef(false);
+  const pushedSv = useRef(new Map());
+  const pushedPl = useRef(new Map());
+  async function syncExtras(uidNow, alive) {
+    const svKey = 'trippin.synced.sv.' + uidNow, plKey = 'trippin.synced.pl.' + uidNow;
+    const known = (k) => { try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch { return new Set(); } };
+    const [cloudSv, cloudPl] = await Promise.all([pullSouvenirs(), pullPlans()]);
+    if (!alive()) return;
+    const localSv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]');
+    const localPlObj = JSON.parse(localStorage.getItem('trippin.plans') || '{}');
+    const localPl = Object.entries(localPlObj).map(([id, v]) => ({ ...v, id }));
+    const sv = mergeItems(localSv, cloudSv, known(svKey));
+    const pl = mergeItems(localPl, cloudPl, known(plKey));
+    await upsertSouvenirs(sv.toUpload);
+    await upsertPlans(pl.toUpload);
+    const svList = sv.merged.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    const plObj = Object.fromEntries(pl.merged.map(({ id, ...v }) => [id, v]));
+    pushedSv.current = new Map(svList.map((x) => [x.id, JSON.stringify(x)]));
+    pushedPl.current = new Map(Object.entries(plObj).map(([k, v]) => [k, JSON.stringify(v)]));
+    setSouvenirs(svList);
+    setPlans(plObj);
+    try { localStorage.setItem(svKey, JSON.stringify(svList.map((x) => x.id))); localStorage.setItem(plKey, JSON.stringify(Object.keys(plObj))); } catch {}
+    extraSynced.current = true;
+  }
   useEffect(() => {
     const sb = supa();
     sb.auth.getSession().then(({ data }) => setUser(data.session?.user || null));
@@ -863,7 +940,7 @@ export default function Home() {
   }, []);
   const settingsData = () => ({ folders, hotel, customCats, notes, prompts });
   useEffect(() => {
-    if (!loaded || !user) { setCloudUser(null); synced.current = false; return; }
+    if (!loaded || !user) { setCloudUser(null); synced.current = false; extraSynced.current = false; return; }
     let alive = true;
     setCloudUser(user.id);
     (async () => {
@@ -898,6 +975,7 @@ export default function Home() {
         synced.current = true;
         setSyncMsg('');
         uploadMissingPhotos(new Set(merged.map((it) => it.id))).then(() => setPhotoVer((v) => v + 1));
+        syncExtras(user.id, () => alive).catch(() => setSyncMsg('お土産・回る順番はこのスマホにだけ保存しています（クラウドの準備中）。'));
       } catch (e) {
         setSyncMsg('クラウドとそろえられませんでした。電波のよいところで開き直してください。');
       }
@@ -921,6 +999,37 @@ export default function Home() {
     }, 1000);
     return () => clearTimeout(t);
   }, [items, user]);
+  // お土産・回る順番も、変わったものだけクラウドへ送る
+  useEffect(() => {
+    if (!user || !extraSynced.current) return;
+    const t = setTimeout(async () => {
+      const cur = new Map(souvenirs.map((x) => [x.id, JSON.stringify(x)]));
+      const changed = souvenirs.filter((x) => pushedSv.current.get(x.id) !== cur.get(x.id));
+      const gone = [...pushedSv.current.keys()].filter((id) => !cur.has(id));
+      try {
+        await upsertSouvenirs(changed);
+        await deleteSouvenirs(gone);
+        pushedSv.current = cur;
+        try { localStorage.setItem('trippin.synced.sv.' + user.id, JSON.stringify(souvenirs.map((x) => x.id))); } catch {}
+      } catch { setNotice('お土産をクラウドに保存できませんでした（このスマホには残っています）。電波のよいところで開き直してください'); }
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [souvenirs, user]);
+  useEffect(() => {
+    if (!user || !extraSynced.current) return;
+    const t = setTimeout(async () => {
+      const cur = new Map(Object.entries(plans).map(([k, v]) => [k, JSON.stringify(v)]));
+      const changed = Object.entries(plans).filter(([k]) => pushedPl.current.get(k) !== cur.get(k)).map(([id, v]) => ({ ...v, id }));
+      const gone = [...pushedPl.current.keys()].filter((k) => !cur.has(k));
+      try {
+        await upsertPlans(changed);
+        await deletePlans(gone);
+        pushedPl.current = cur;
+        try { localStorage.setItem('trippin.synced.pl.' + user.id, JSON.stringify(Object.keys(plans))); } catch {}
+      } catch {}
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [plans, user]);
   useEffect(() => {
     if (!user || !synced.current) return;
     const t = setTimeout(() => { pushSettings(settingsData()).catch(() => {}); }, 1000);
@@ -981,9 +1090,25 @@ export default function Home() {
     runSearch(false, { keyword: sh.name, area: sh.city, country: c });
   }
 
+  // SNSの投稿URL＋店名 → いつもの検索でお店をさがす（Googleへの検索は1回だけ。投稿のページは読みに行かない）
+  function snsSearch(e) {
+    e.preventDefault();
+    const u = snsUrlOk(snsIn.url);
+    const name = snsIn.name.trim();
+    if (!u) { setSnsErr('YouTube か Instagram の投稿のURL（https://〜）を貼ってください'); return; }
+    if (!name) { setSnsErr('投稿に出てきたお店の名前を入れてください'); return; }
+    setSnsErr('');
+    shotFile.current = null; setShotShops([]);
+    setSnsUrl(u);
+    setKeyword(name); setArea(snsIn.area.trim());
+    // 街を入れたときはその街で、入れないときはいつもどおり（宿泊先の近く）でさがす
+    runSearch(false, { keyword: name, area: snsIn.area.trim() || (useNear ? '' : area), ...(snsIn.area.trim() ? { near: null, country: '' } : {}) });
+  }
+
   async function readShot(file) {
     if (!file) return;
     shotFile.current = file;
+    setSnsUrl('');
     setShotBusy(true); setShotShops([]); setShotMsg(''); setError('');
     try {
       const image = await shrink(file);
@@ -1097,9 +1222,17 @@ export default function Home() {
   const done = inTrip.filter((i) => i.done).sort((a, b) => (b.rec ? 1 : 0) - (a.rec ? 1 : 0));
   const shown = tab === 'cand' ? cand : done;
   const mapHotels = useMemo(() => [hotel].filter(Boolean), [hotel]);
-  const mapKey = shown.map((i) => `${i.id}:${i.category}:${i.done}:${i.rec}`).join('|');
+  // 回る順番：このフォルダのお店（候補も行ったも）から作る
+  const folderItems = items.filter((i) => i.trip === trip);
+  const plan = plans[trip] || null;
+  const planDays = plan?.days || [];
+  const mapDayObj = planDays.find((d) => d.id === mapDay) || null;
+  const mapList = mapDayObj ? dayStops(mapDayObj, folderItems) : shown;
+  const mapKey = (mapDayObj ? 'd:' : '') + mapList.map((i) => `${i.id}:${i.category}:${i.done}:${i.rec}`).join('|');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const mapItems = useMemo(() => shown, [mapKey]);
+  const mapItems = useMemo(() => mapList, [mapKey]);
+  const tripSouvenirs = souvenirs.filter((x) => x.trip === trip);
+  function showDayOnMap(id) { setMapDay(id); setView('map'); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
   function ListCard({ it, no }) {
     const src = sourceLabel(it.srcUrl);
@@ -1142,7 +1275,7 @@ export default function Home() {
                   </div>
                 )}
               </span>
-              {src && <span className="pill">{src}で発見</span>}
+              {src && safeUrl(it.srcUrl) && <a className="pill pill-link" href={safeUrl(it.srcUrl)} target="_blank" rel="noopener noreferrer">見つけた投稿（{src}）</a>}
               {it.done && it.rec && <span className="pill" style={{ color: 'var(--star)' }}>おすすめ</span>}
             </span>
           </div>
@@ -1164,7 +1297,8 @@ export default function Home() {
                       <input type="file" accept="image/*" multiple hidden onChange={(e) => { onPhotos(it.id, e.target.files, it.done ? 'visit' : 'memo'); e.target.value = ''; setMoreFor(null); }} />
                     </label>
                   </li>
-                  {safeUrl(it.srcUrl) && <li><a className="dd-item" href={safeUrl(it.srcUrl)} target="_blank" rel="noopener noreferrer">元の投稿を見る</a></li>}
+                  {safeUrl(it.srcUrl) && <li><a className="dd-item" href={safeUrl(it.srcUrl)} target="_blank" rel="noopener noreferrer">見つけた投稿を見る</a></li>}
+                  <li><button type="button" className="dd-item" onClick={() => { setSrcFor(it.id); setMoreFor(null); }}>{it.srcUrl ? '見つけた投稿のURLを変える' : '見つけた投稿のURLを付ける'}</button></li>
                   <li><button type="button" className="dd-item del" onClick={() => { setConfirmId(it.id); setMoreFor(null); }}>削除</button></li>
                 </ul>
               </div>
@@ -1178,6 +1312,10 @@ export default function Home() {
             <button className="del-yes" onClick={() => remove(it.id)}>削除する</button>
             <button onClick={() => setConfirmId(null)}>やめる</button>
           </div>
+        )}
+        {srcFor === it.id && (
+          <div className="src-edit"><p className="hint">このお店を見つけたYouTube・インスタの投稿のURL（空にすると外します）</p>
+            <SrcEditor initial={it.srcUrl} onSave={(u) => { update(it.id, { srcUrl: u }); setSrcFor(null); }} onCancel={() => setSrcFor(null)} /></div>
         )}
         {memoFor === it.id ? (
           <MemoEditor initial={it.memo} onSave={(v) => { update(it.id, { memo: v }); setMemoFor(null); }} onCancel={() => setMemoFor(null)} />
@@ -1252,7 +1390,7 @@ export default function Home() {
 
       {tab === 'search' && (
         <>
-          <form className="panel" onSubmit={(e) => { e.preventDefault(); shotFile.current = null; setShotShops([]); runSearch(false); }}>
+          <form className="panel" onSubmit={(e) => { e.preventDefault(); shotFile.current = null; setShotShops([]); setSnsUrl(''); runSearch(false); }}>
             <div className="search-head">
               <p>Googleマップのお店・名所から</p>
               <h2>どこに行く？</h2>
@@ -1267,7 +1405,7 @@ export default function Home() {
             </label>
             <div className="catsearch" aria-label="カテゴリーからさがす">
               {CAT_SEARCH.map((c) => (
-                <button type="button" key={c.id} disabled={busy} onClick={() => { setKeyword(c.q); shotFile.current = null; setShotShops([]); runSearch(false, { keyword: c.q }); }}>
+                <button type="button" key={c.id} disabled={busy} onClick={() => { setKeyword(c.q); shotFile.current = null; setShotShops([]); setSnsUrl(''); runSearch(false, { keyword: c.q }); }}>
                   <CatIcon id={c.id} size={44} />{c.label}
                 </button>
               ))}
@@ -1321,6 +1459,30 @@ export default function Home() {
               )}
               {shotMsg && <p className="err">{shotMsg}</p>}
             </div>
+            <div className="sns">
+              <button type="button" className="shot-card sns-card" aria-expanded={snsOpen} onClick={() => setSnsOpen((v) => !v)}>
+                <CatIcon id="shot" size={44} />
+                <span><b>SNSの投稿から登録</b><small>YouTube・インスタのURLと店名で、お店をさがして「見つけた投稿」として保存</small></span>
+              </button>
+              {snsOpen && (
+                <div className="sns-form">
+                  <label htmlFor="snsurl">投稿のURL（YouTube・Instagram）
+                    <input id="snsurl" inputMode="url" value={snsIn.url} onChange={(e) => setSnsIn({ ...snsIn, url: e.target.value })} placeholder="https://www.instagram.com/p/…" />
+                  </label>
+                  <div className="row">
+                    <label htmlFor="snsname">お店の名前
+                      <input id="snsname" value={snsIn.name} maxLength={60} onChange={(e) => setSnsIn({ ...snsIn, name: e.target.value })} placeholder="例：阜杭豆漿" />
+                    </label>
+                    <label htmlFor="snsarea">街（わかれば）
+                      <input id="snsarea" value={snsIn.area} maxLength={40} onChange={(e) => setSnsIn({ ...snsIn, area: e.target.value })} placeholder="例：台北" />
+                    </label>
+                  </div>
+                  <button type="button" className="btn" disabled={busy} onClick={snsSearch}>{busy && snsUrl ? 'さがしています…' : 'このお店をさがす'}</button>
+                  {snsErr && <p className="err">{snsErr}</p>}
+                  <p className="hint">投稿の中身は読みに行きません。見つかったお店で「候補に追加」を押すと、この投稿へのリンクがお店に付きます（あとから「見つけた投稿」で開けます）。</p>
+                </div>
+              )}
+            </div>
             <p className="hint">国はえらばなくても探せます（例：キーワード「魯肉飯」＋場所「台北」）。えらぶと、その国の中だけを探します。</p>
           </form>
 
@@ -1338,6 +1500,12 @@ export default function Home() {
               </div>
             )}
             {hereMsg && <p className="hint">{hereMsg}</p>}
+            {snsUrl && searched && (
+              <div className="sns-bar">
+                <span><b>{sourceLabel(snsUrl)}の投稿</b>で見つけたお店をえらんでください。「候補に追加」でこの投稿へのリンクが付きます。</span>
+                <button type="button" className="fb-edit" onClick={() => setSnsUrl('')}>投稿を外す</button>
+              </div>
+            )}
             {searched && !sorted.length && (nextToken
               ? <div className="empty">ここまでに条件に合うお店はありませんでした。<br />「もっと見る」で続きを探せます。</div>
               : <div className="empty">条件に合うお店が見つかりませんでした。<br />評価やレビューの条件をゆるめてみてください。</div>)}
@@ -1358,7 +1526,9 @@ export default function Home() {
                 </div>
                 <div className="actrow">
                   {savedIds.has(p.placeId)
-                    ? <button type="button" className="act added" disabled>追加済み（{items.find((i) => i.placeId === p.placeId)?.trip}）</button>
+                    ? (snsUrl && items.find((i) => i.placeId === p.placeId)?.srcUrl !== snsUrl
+                      ? <button type="button" className="act primary" onClick={() => { const it = items.find((i) => i.placeId === p.placeId); update(it.id, { srcUrl: snsUrl }); }}>追加済みのお店にこの投稿を付ける</button>
+                      : <button type="button" className="act added" disabled>追加済み（{items.find((i) => i.placeId === p.placeId)?.trip}）{snsUrl && items.find((i) => i.placeId === p.placeId)?.srcUrl === snsUrl ? '・投稿つき' : ''}</button>)
                     : (
                       <span className="dd-wrap grow">
                         <button type="button" className="act primary add" aria-expanded={pickFor === 's:' + p.placeId} onClick={() => setPickFor(pickFor === 's:' + p.placeId ? null : 's:' + p.placeId)}>候補に追加 ▾</button>
@@ -1413,16 +1583,33 @@ export default function Home() {
               onMakeNote={() => setNoteOpen('note')} onMakeGuide={() => setNoteOpen('guide')} />
           )}
           {tab === 'done' && noteOpen === 'guide' && (
-            <GuideMaker items={items} folders={allFolders} trip={trip} user={user} onSignIn={() => signIn()} onClose={() => { setNoteOpen(false); setShelfKey((k) => k + 1); }} unsorted={UNSORTED} />
+            <GuideMaker items={items} folders={allFolders} trip={trip} user={user} onSignIn={() => signIn()} onClose={() => { setNoteOpen(false); setShelfKey((k) => k + 1); }} unsorted={UNSORTED} souvenirs={souvenirs} />
           )}
           {tab === 'done' && noteOpen === 'note' && (
             <NoteMaker items={items} folders={allFolders} trip={trip} notes={notes} onSave={saveNote} unsorted={UNSORTED}
-              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => { setNoteOpen(false); setShelfKey((k) => k + 1); }} user={user} onSignIn={() => signIn()} prompts={prompts} onPrompts={setPrompts} />
+              photoVer={photoVer} onPhotosAdded={() => setPhotoVer((v) => v + 1)} onClose={() => { setNoteOpen(false); setShelfKey((k) => k + 1); }} user={user} onSignIn={() => signIn()} prompts={prompts} onPrompts={setPrompts} souvenirs={souvenirs} />
           )}
-          <div className="viewtoggle" role="tablist" aria-label="表示の切り替え">
+          <div className="viewtoggle four" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
             <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
+            <button role="tab" aria-selected={view === 'plan'} onClick={() => setView('plan')}>回る順番</button>
+            <button role="tab" aria-selected={view === 'souvenir'} onClick={() => setView('souvenir')}>お土産{tripSouvenirs.length ? <span className="count">{tripSouvenirs.length}</span> : null}</button>
           </div>
+          {view === 'map' && planDays.length > 0 && (
+            <div className="chips map-days" aria-label="地図に出すもの">
+              <button aria-pressed={!mapDayObj} onClick={() => setMapDay(null)}>{tab === 'cand' ? '候補' : '行った'}すべて</button>
+              {planDays.map((d, i) => <button key={d.id} aria-pressed={mapDayObj?.id === d.id} onClick={() => setMapDay(d.id)}>{dayLabel(d, i)}の順番</button>)}
+            </div>
+          )}
+          {view === 'map' && mapDayObj && <p className="hint">番号は「{dayLabel(mapDayObj, planDays.indexOf(mapDayObj))}」に回る順番です{hotel ? '（H＝宿泊先から出発して戻る）' : ''}。</p>}
+          {view === 'plan' && (
+            <PlanView key={trip} plan={plan} items={folderItems} hotel={hotel} colorOf={catColor} initialDay={planDay}
+              onChange={(p) => savePlan(trip, p)} onShowMap={(id) => { setPlanDay(id); showDayOnMap(id); }} />
+          )}
+          {view === 'souvenir' && (
+            <SouvenirPanel trip={trip} items={folderItems} list={tripSouvenirs} country={hotel?.country || country}
+              onAdd={addSouvenir} onUpdate={updateSouvenir} onDelete={removeSouvenir} />
+          )}
           {editCats && (
             <div className="panel">
               <h2>自分で作ったカテゴリー</h2>
@@ -1430,20 +1617,20 @@ export default function Home() {
             </div>
           )}
           {mapUsed && (
-            <div hidden={view !== 'map' || (shown.length === 0 && mapHotels.length === 0)}>
-              <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} hotels={mapHotels} visible={view === 'map'} />
+            <div hidden={view !== 'map' || (mapList.length === 0 && mapHotels.length === 0)}>
+              <MapView items={mapItems} colorOf={catColor} photoSrc={photoSrc} hotels={mapHotels} visible={view === 'map'} route={!!mapDayObj} />
             </div>
           )}
-          <div className="list">
+          {(view === 'list' || (view === 'map' && !mapDayObj)) && <div className="list">
             {shown.map((it, i) => ListCard({ it, no: i + 1 }))}
-            {loaded && (tab === 'cand' ? cand : done).length === 0 && (
+            {loaded && !mapDayObj && (tab === 'cand' ? cand : done).length === 0 && (
               <div className="empty">
                 {tab === 'cand'
                   ? (candTotal > 0 ? <>「{trip}」にはまだ候補がありません。</> : <>まだ候補がありません。<br />「さがす」からお店を見つけて追加してください。</>)
                   : (doneTotal > 0 ? <>「{trip}」にはまだ行ったお店がありません。</> : <>まだ行ったお店はありません。<br />候補のお店で「行った」を押すとここに移ります。</>)}
               </div>
             )}
-          </div>
+          </div>}
         </>
       )}
     </main>

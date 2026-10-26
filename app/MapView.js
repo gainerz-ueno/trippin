@@ -34,11 +34,12 @@ function loadMaps() {
 const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // 候補・行ったのお店を、カテゴリーの色のピンで地図に並べる
-export default function MapView({ items, colorOf, photoSrc, hotels = [], visible = true }) {
+export default function MapView({ items, colorOf, photoSrc, hotels = [], visible = true, route = false }) {
   const box = useRef(null);
   const map = useRef(null);
   const markers = useRef([]);
   const info = useRef(null);
+  const line = useRef(null); // 回る順番の線（地図の部品だけで描く。道案内の料金はかからない）
   const [err, setErr] = useState('');
   const [ready, setReady] = useState(false);
 
@@ -68,6 +69,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
     const maps = window.google.maps;
     markers.current.forEach((m) => m.setMap(null));
     markers.current = [];
+    if (line.current) { line.current.setMap(null); line.current = null; }
     const pts = items.filter((i) => i.lat != null && i.lng != null);
     const hs = hotels.filter((h) => h && h.lat != null && h.lng != null);
     if (!pts.length && !hs.length) return;
@@ -129,6 +131,15 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
       });
       markers.current.push(m);
     });
+    if (route && pts.length) {
+      const h = hs[0];
+      const path = [h, ...pts, h].filter(Boolean).map((p) => ({ lat: p.lat, lng: p.lng }));
+      line.current = new maps.Polyline({
+        path, map: map.current, geodesic: true, strokeOpacity: 0, zIndex: 1,
+        icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.9, strokeColor: '#E5483B', strokeWeight: 3, scale: 3 }, offset: '0', repeat: '14px' },
+          { icon: { path: maps.SymbolPath.FORWARD_CLOSED_ARROW, strokeColor: '#E5483B', fillColor: '#E5483B', fillOpacity: 1, scale: 2.5 }, offset: '50%', repeat: '120px' }],
+      });
+    }
     const all = [...pts, ...hs];
     if (all.length === 1) {
       map.current.setCenter({ lat: all[0].lat, lng: all[0].lng });
@@ -136,7 +147,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
     } else {
       map.current.fitBounds(bounds, 40);
     }
-  }, [ready, items, colorOf, photoSrc, hotels, visible]);
+  }, [ready, items, colorOf, photoSrc, hotels, visible, route]);
 
   if (err) return <div className="empty">{err}</div>;
   return (

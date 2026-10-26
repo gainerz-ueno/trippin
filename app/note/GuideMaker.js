@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import './note.css';
 import { jaError } from '../lib/api';
 import CoverCanvas from './CoverCanvas';
-import { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
+import { TEMPLATES, SIZES, sizeOf, SouvenirPage } from './NoteCanvas';
+import { totals } from '../lib/money';
+import { shopName } from '../Souvenirs';
 import { FONTS, loadFont, fontOf } from './fonts';
 import { Scaled, toB64, renderNode, callAi, aiLeft } from './util';
 import { listPhotos } from '../photos';
@@ -13,7 +15,7 @@ import { ensurePhotos, listPages, deletePage, guideUrls, listGuides, saveGuide, 
 const keyOf = (p) => p.cloudId || 'L' + p.id;
 const blank = (author = '') => ({ id: null, title: '', author, description: '', page_ids: [], cover_id: null, published: true });
 
-export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn, onClose, unsorted }) {
+export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn, onClose, unsorted, souvenirs = [] }) {
   const [pages, setPages] = useState(null); // 保存したeタビセツ・表紙
   const [urls, setUrls] = useState({});
   const [guides, setGuides] = useState([]);
@@ -29,6 +31,9 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
   const [boxW, setBoxW] = useState(320);
   const boxRef = useRef(null);
   const coverRef = useRef(null);
+  const svRef = useRef(null);
+  const [svFolder, setSvFolder] = useState(trip0);
+  const [svSel, setSvSel] = useState(null); // えらんだお土産のID（null＝「買ってよかった」を先に6つ）
   const photoUrls = useRef([]);
 
   const foldersWithDone = folders.filter((f) => items.some((i) => i.done && i.trip === f));
@@ -137,6 +142,25 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
     if (cv.mode === 'ai') aiLeft().then((n) => n != null && setLeft(n));
   }
 
+  // お土産のページを作って、eタビセツと同じように保存→このeガイドブックのページに足す
+  const svFolders = [...new Set(souvenirs.map((x) => x.trip))];
+  const svTrip = svFolders.includes(svFolder) ? svFolder : svFolders[0];
+  const svAll = souvenirs.filter((x) => x.trip === svTrip).sort((a, b) => (b.good ? 1 : 0) - (a.good ? 1 : 0));
+  const svPick = (svSel ? svSel.map((id) => svAll.find((x) => x.id === id)).filter(Boolean) : svAll).slice(0, 6)
+    .map((x) => ({ ...x, shop: shopName(x, items) }));
+  const svPlace = svTrip === unsorted ? '' : svTrip;
+  async function makeSvPage() {
+    setBusy('sv'); setErr('');
+    try {
+      if (!svPick.length) throw new Error('お土産を1つ以上えらんでください');
+      const blob = await renderNode(svRef.current, size, cv.font);
+      const row = await savePage({ blob, kind: 'note', trip: svTrip, title: svPlace ? `${svPlace}のお土産` : 'お土産' });
+      setG((x) => ({ ...x, page_ids: [...x.page_ids, row.id] }));
+      await reload();
+    } catch (e) { setErr(jaError(e, 'お土産のページを作れませんでした')); }
+    setBusy('');
+  }
+
   async function save() {
     setBusy('save'); setErr(''); setMsg('');
     try {
@@ -234,6 +258,36 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
             </span>
           ))}
         </div>
+      )}
+
+      <p className="nm-step">お土産のページ<small>旅で買ったお土産を1ページにして足せます</small></p>
+      {svFolders.length === 0 ? (
+        <p className="nm-hint">まだお土産がありません。候補・行ったの画面の「お土産」から登録すると、ここでページにできます。</p>
+      ) : (
+        <>
+          {svFolders.length > 1 && (
+            <div className="nm-row">{svFolders.map((f) => <button key={f} type="button" className="nm-seg" aria-pressed={svTrip === f} onClick={() => { setSvFolder(f); setSvSel(null); }}>{f}</button>)}</div>
+          )}
+          <div className="nm-svs">
+            {svAll.map((x) => {
+              const on = svPick.some((y) => y.id === x.id);
+              return (
+                <button key={x.id} type="button" aria-pressed={on} onClick={() => {
+                  const cur = svPick.map((y) => y.id);
+                  setSvSel(on ? cur.filter((id) => id !== x.id) : [...cur, x.id].slice(0, 6));
+                }}>{x.photo ? <img src={x.photo} alt="" /> : <span className="ph0" />}{x.good ? '♥ ' : ''}{x.name}</button>
+              );
+            })}
+          </div>
+          <div className="nm-preview" style={{ width: boxW }}>
+            <Scaled width={boxW} size={size}>
+              <SouvenirPage list={svPick} tpl={cv.tpl} font={cv.font} size={cv.size} place={svPlace} total={totals(svPick).join(' ＋ ')} nodeRef={svRef} />
+            </Scaled>
+          </div>
+          <div className="nm-acts">
+            <button type="button" onClick={makeSvPage} disabled={!!busy || !svPick.length} style={{ gridColumn: '1 / -1' }}>{busy === 'sv' ? 'お土産のページを作っています…' : 'お土産のページを作って足す'}</button>
+          </div>
+        </>
       )}
 
       <p className="nm-step">③ 表紙</p>

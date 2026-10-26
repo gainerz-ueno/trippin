@@ -2,6 +2,8 @@
 // eタビセツ（旅の取扱説明書）の見た目。幅1080pxで作って、そのまま画像にする
 // テンプレートごとに並べ方から別のデザイン。背景の絵・ステッカーは public/note/ に用意してある
 import { fontOf } from './fonts';
+import { money } from '../lib/money';
+import { safePhoto } from '../Souvenirs';
 
 export const TEMPLATES = [
   { id: 'lovely', label: 'ラブリー', font: 'hachimaru' },
@@ -316,9 +318,68 @@ function Collage({ note, tpl, spots, coverUrl, info, best }) {
   );
 }
 
+// お土産（下に横並びの帯で入れる。4つまで）
+export function SouvenirBand({ list, tpl }) {
+  if (!list?.length) return null;
+  return (
+    <section className={'nt-sv n' + list.length}>
+      <p className="nt-sv-h"><img src={st(tpl, 'shop')} alt="" /><span>買ったお土産</span></p>
+      <div className="nt-sv-row">
+        {list.map((s) => (
+          <figure key={s.id} className="nt-sv-it">
+            <Ph src={safePhoto(s.photo)} className="nt-sv-ph" />
+            <figcaption>
+              <b>{s.good ? '♥ ' : ''}{s.name}</b>
+              {money(s.price, s.currency) && <span>{money(s.price, s.currency)}</span>}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// eガイドブック用：お土産だけの1ページ（6つまで）
+export function SouvenirPage({ list, tpl: tpl0 = 'lovely', font, size: sizeId = 'post', title, place, total, nodeRef }) {
+  const size = sizeOf(sizeId);
+  const tpl = PAD[tpl0] ? tpl0 : 'lovely';
+  const f = fontOf(font);
+  const [pt, pr, pb, pl] = PAD[tpl][size.id];
+  const n = Math.max(1, list.length);
+  const c = n <= 1 ? 1 : n <= 4 ? 2 : 3;
+  const r = Math.ceil(n / c);
+  const t = title || (place ? `${place}のお土産` : '買ったお土産');
+  const tl = [...t].length;
+  return (
+    <div ref={nodeRef} className={`nt svp ${tpl} ${size.id}`} style={{
+      width: size.w, height: size.h, padding: `${pt}px ${pr}px ${pb}px ${pl}px`,
+      backgroundImage: `url(/note/${tpl}-${size.id}.jpg)`,
+      fontFamily: `"${f.family}", "Zen Maru Gothic", sans-serif`, '--tfs': (tl <= 8 ? 80 : tl <= 12 ? 64 : 52) + 'px',
+    }}>
+      <header className="svp-head">
+        <p className="svp-kicker">SOUVENIR</p>
+        <Title note={{ title: t }} tpl={tpl} />
+      </header>
+      <div className="svp-grid" style={{ '--c': c, '--r': r }}>
+        {list.map((s) => (
+          <figure key={s.id} className="svp-card">
+            {s.good && <span className="svp-good">買ってよかった</span>}
+            <Ph src={safePhoto(s.photo)} />
+            <b>{s.name}</b>
+            <p className="svp-meta">{[money(s.price, s.currency), s.shop].filter(Boolean).join('・')}</p>
+            {s.memo && <p className="svp-memo">{s.memo}</p>}
+          </figure>
+        ))}
+      </div>
+      {total && <p className="svp-total">合計 {total}</p>}
+      <footer className="nt-foot"><img className="nt-logo" src="/logo.png" alt="Tabibi" /></footer>
+    </div>
+  );
+}
+
 const LAYOUTS = { lovely: Lovely, water: Water, sky: Sky, vintage: Vintage, notebook: Notebook, collage: Collage };
 
-export default function NoteCanvas({ note, spots, coverUrl, nodeRef, place }) {
+export default function NoteCanvas({ note, spots, coverUrl, nodeRef, place, souvenirs = [] }) {
   const size = sizeOf(note.size);
   const story = size.id === 'story';
   const tpl = LAYOUTS[note.tpl] ? note.tpl : 'lovely';
@@ -338,7 +399,8 @@ export default function NoteCanvas({ note, spots, coverUrl, nodeRef, place }) {
       backgroundImage: `url(/note/${tpl}-${size.id}.jpg)`,
       fontFamily: `"${f.family}", "Zen Maru Gothic", sans-serif`, '--tfs': tfs + 'px',
     }}>
-      <L note={note} tpl={tpl} spots={spots} coverUrl={coverUrl} info={info} best={best} story={story} H={size.h} />
+      <L note={note} tpl={tpl} spots={spots} coverUrl={coverUrl} info={info} best={best} story={story} H={size.h - (souvenirs.length ? (story ? 300 : 236) : 0)} />
+      <SouvenirBand list={souvenirs} tpl={tpl} />
     </div>
   );
 }

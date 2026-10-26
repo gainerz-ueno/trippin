@@ -139,6 +139,12 @@ export async function GET(req) {
   return json({ left: await r.json() });
 }
 
+// 買ったお土産（文字だけ。写真は送らない＝AIに渡す量を増やさない）
+function svLine(d, bullet = '- ') {
+  if (!d.souvenirs?.length) return '';
+  return `${bullet}「買ったお土産」 small panel with exactly ${d.souvenirs.length} items, each a tiny hand-drawn illustration of the item with its name${d.souvenirs.some((x) => x.price) ? ' and price' : ''}: ${d.souvenirs.map((x) => `「${x.name}」${x.price ? `「${x.price}」` : ''}${x.good ? ' (mark with a small heart)' : ''}`).join(' / ')}`;
+}
+
 function peopleLine(d) {
   if (!d.people.length || d.peopleStyle === 'none') return '';
   return `- 「わたしたち」 corner (small, about 15% of the page, near a side or bottom - NOT the center): the travelers from the "us" reference photos, shown ${PEOPLE[d.peopleStyle] || PEOPLE.cutout}. Show exactly the people in those photos (${d.people.length} photo${d.people.length > 1 ? 's' : ''}), each person once - do NOT add any other person who is not in those photos.`;
@@ -162,6 +168,7 @@ function torisetsuPrompt(d, t, info, spots, counts, best, photoRule) {
     n > 1 ? `  * 「BEST 3」 ranking with crowns and big numbers: ${best}` : '',
     `  * 「旅のバランス」 hexagon radar chart, axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し with these exact numbers written at each axis: ${counts}`,
     peopleLine(d) ? '  ' + peopleLine(d).replace(/^- /, '* ') : '',
+    svLine(d, '  * '),
     d.words ? `  * a speech bubble near the main visual saying 「${d.words}」` : '',
     `- Bottom: a closing band${d.words ? '' : ' with a short English phrase like "Good Trip!"'}.`,
     '- Fill small gaps with tiny hand-drawn decorations of this trip (its foods, drinks, sights) and travel doodles (airplane, map pin, camera, stars, hearts) - no empty holes, but never cover text.',
@@ -186,6 +193,7 @@ function magazinePrompt(d, t, info, spots, counts, best, photoRule) {
     `- A strip of exactly ${n} small square-cornered photos (one per place, each once) numbered ①②③..., with a tiny caption for each number (place name + short note):\n${spots}`,
     `- A small, simple, elegant hexagon chart 「旅のバランス」 with axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し and these exact numbers: ${counts}.`,
     peopleLine(d),
+    svLine(d),
     d.words ? `- A short quote in the magazine style: 「${d.words}」` : '',
     '- One small round badge with 「保存版」.',
     '- Use at most 2 typefaces and 2-3 text colors. Very few decorations (no cute stickers). Plenty of rhythm between big and small type.',
@@ -218,6 +226,7 @@ function buildPrompt(d) {
       `- Places visited (exactly ${n}, each once):\n${spots}`,
       n > 1 ? `- Ranking: ${best}` : '',
       `- Trip balance radar values: ${counts}`,
+      svLine(d),
       d.words ? `- One-line comment: 「${d.words}」` : '',
       photoRule,
       'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible. Do not invent other Japanese sentences. Never write words like "PHOTO", "reference" or any photo numbers. No logos, no brand names, no watermarks, no QR codes, no app UI. Nothing sexual, violent or hateful.',
@@ -246,6 +255,7 @@ function buildPrompt(d) {
     `  * 「行った場所」: exactly ${n} small framed photo cards, one for each place below and each place only once, with the place name and its short hand-written note:\n${spots}`,
     n > 1 ? `  * 「BEST 3」 ranking with gold crowns: ${best}` : '',
     `  * 「旅のバランス」 hexagon radar chart with axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し (relative values: ${counts})`,
+    svLine(d, '  * '),
     d.words ? `  * 「ひとこと」 speech bubble saying 「${d.words}」` : '',
     '  * cute hand-drawn icons of things from this trip (the foods, drinks, shops and sights above), plus travel doodles: airplane, suitcase, map pin, camera, stars, hearts, crowns.',
     photoRule,
@@ -439,6 +449,8 @@ export async function POST(req) {
       name: s(p?.name, 40), cat: s(p?.cat, 20), text: s(p?.text, 200),
       imgs: (Array.isArray(p?.imgs) ? p.imgs : [p?.img]).slice(0, 2).map((x) => img(x)).filter(Boolean),
     })).filter((p) => p.name),
+    souvenirs: (Array.isArray(body.souvenirs) ? body.souvenirs : []).slice(0, 4)
+      .map((x) => ({ name: s(x?.name, 40), price: s(x?.price, 20), good: x?.good === true })).filter((x) => x.name),
   };
   // 写真はAIに渡せる枚数に上限があるので、メイン→わたしたち→各お店の1枚目→2枚目の順に14枚まで
   let room = 14 - (d.cover ? 1 : 0) - (d.peopleStyle === 'none' ? 0 : d.people.length);
