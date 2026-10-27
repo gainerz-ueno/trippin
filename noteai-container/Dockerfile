@@ -8,6 +8,6 @@ COPY noteai-container/package.json noteai-container/package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY noteai-container/server.mjs ./server.mjs
 COPY app/api/noteai/draw.js app/api/noteai/credits.js ./app/api/noteai/
-COPY app/lib/supabase-public.js ./app/lib/supabase-public.js
+COPY app/lib/supabase-public.js app/lib/plan.js app/lib/gfetch.js app/lib/mock-google.js ./app/lib/
 EXPOSE 8080
 CMD ["node", "server.mjs"]

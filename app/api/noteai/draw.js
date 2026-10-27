@@ -1,10 +1,13 @@
 // 「AIで作る」eタビセツ：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
 // ※ 絵の切り貼り・縮小に sharp を使うため、この部分は Cloudflare の「コンテナ」（noteai-container/）の中で動かす。
 //   route.js は、届いた注文をそのままコンテナへ回すだけ。中身を直すときは、このファイルを直す。
-// ・Googleでログインしている人だけ。1人1日3回まで（回数はSupabaseで数える。失敗したら回数を戻す）
+// ・Googleでログインしている人だけ。回数は無料／プレミアムで決まる（app/lib/plan.js。数えるのはSupabaseの ai_quota_use。失敗したら回数を戻す）
+// ・コンテナの中では Node の決まりで、読み込むファイル名に .js まで書く
 import sharp from 'sharp';
+import { PLAN } from '../../lib/plan.js';
 import { json, rpc, bearer, isUnlimited } from './credits.js';
-// 【一時的】動作確認用（確認が終わったら消す）
+import { gfetch, MOCK } from '../../lib/gfetch.js';
+const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
 
 const MODEL = 'gemini-3-pro-image';
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -90,6 +93,12 @@ function img(b64, max = 2_000_000) {
 }
 
 
+// 買ったお土産（文字だけ。写真は送らない＝AIに渡す量を増やさない）
+function svLine(d, bullet = '- ') {
+  if (!d.souvenirs?.length) return '';
+  return `${bullet}「買ったお土産」 small panel with exactly ${d.souvenirs.length} items, each a tiny hand-drawn illustration of the item with its name${d.souvenirs.some((x) => x.price) ? ' and price' : ''}: ${d.souvenirs.map((x) => `「${x.name}」${x.price ? `「${x.price}」` : ''}${x.good ? ' (mark with a small star ★)' : ''}`).join(' / ')}`;
+}
+
 function peopleLine(d) {
   if (!d.people.length || d.peopleStyle === 'none') return '';
   return `- 「わたしたち」 corner (small, about 15% of the page, near a side or bottom - NOT the center): the travelers from the "us" reference photos, shown ${PEOPLE[d.peopleStyle] || PEOPLE.cutout}. Show exactly the people in those photos (${d.people.length} photo${d.people.length > 1 ? 's' : ''}), each person once - do NOT add any other person who is not in those photos.`;
@@ -113,6 +122,7 @@ function torisetsuPrompt(d, t, info, spots, counts, best, photoRule) {
     n > 1 ? `  * 「BEST 3」 ranking with crowns and big numbers: ${best}` : '',
     `  * 「旅のバランス」 hexagon radar chart, axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し with these exact numbers written at each axis: ${counts}`,
     peopleLine(d) ? '  ' + peopleLine(d).replace(/^- /, '* ') : '',
+    svLine(d, '  * '),
     d.words ? `  * a speech bubble near the main visual saying 「${d.words}」` : '',
     `- Bottom: a closing band${d.words ? '' : ' with a short English phrase like "Good Trip!"'}.`,
     '- Fill small gaps with tiny hand-drawn decorations of this trip (its foods, drinks, sights) and travel doodles (airplane, map pin, camera, stars, hearts) - no empty holes, but never cover text.',
@@ -137,6 +147,7 @@ function magazinePrompt(d, t, info, spots, counts, best, photoRule) {
     `- A strip of exactly ${n} small square-cornered photos (one per place, each once) numbered ①②③..., with a tiny caption for each number (place name + short note):\n${spots}`,
     `- A small, simple, elegant hexagon chart 「旅のバランス」 with axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し and these exact numbers: ${counts}.`,
     peopleLine(d),
+    svLine(d),
     d.words ? `- A short quote in the magazine style: 「${d.words}」` : '',
     '- One small round badge with 「保存版」.',
     '- Use at most 2 typefaces and 2-3 text colors. Very few decorations (no cute stickers). Plenty of rhythm between big and small type.',
@@ -169,6 +180,7 @@ function buildPrompt(d) {
       `- Places visited (exactly ${n}, each once):\n${spots}`,
       n > 1 ? `- Ranking: ${best}` : '',
       `- Trip balance radar values: ${counts}`,
+      svLine(d),
       d.words ? `- One-line comment: 「${d.words}」` : '',
       photoRule,
       'Text rules: write every Japanese text exactly as given inside 「」 (without the brackets), with correct characters, clearly legible. Do not invent other Japanese sentences. Never write words like "PHOTO", "reference" or any photo numbers. No logos, no brand names, no watermarks, no QR codes, no app UI. Nothing sexual, violent or hateful.',
@@ -197,6 +209,7 @@ function buildPrompt(d) {
     `  * 「行った場所」: exactly ${n} small framed photo cards, one for each place below and each place only once, with the place name and its short hand-written note:\n${spots}`,
     n > 1 ? `  * 「BEST 3」 ranking with gold crowns: ${best}` : '',
     `  * 「旅のバランス」 hexagon radar chart with axes グルメ, カフェ, 観光, 買物, 夜あそび, 癒し (relative values: ${counts})`,
+    svLine(d, '  * '),
     d.words ? `  * 「ひとこと」 speech bubble saying 「${d.words}」` : '',
     '  * cute hand-drawn icons of things from this trip (the foods, drinks, shops and sights above), plus travel doodles: airplane, suitcase, map pin, camera, stars, hearts, crowns.',
     photoRule,
@@ -256,9 +269,9 @@ function areaPrompt(d) {
 const TEXT_MODEL = 'gemini-2.5-flash';
 async function understand(instruction, markedB64) {
   try {
-    const r = await fetch(`${GEMINI}/${TEXT_MODEL}:generateContent`, {
+    const r = await gfetch(`${GEMINI}/${TEXT_MODEL}:generateContent`, {
       method: 'POST',
-      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY, 'content-type': 'application/json' },
+      headers: { 'x-goog-api-key': GKEY(), 'content-type': 'application/json' },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [
           { text: [
@@ -275,7 +288,7 @@ async function understand(instruction, markedB64) {
         ] }],
         generationConfig: { temperature: 0.2, maxOutputTokens: 300, thinkingConfig: { thinkingBudget: 0 } },
       }),
-    });
+    }, 20000);
     const d = await r.json();
     const t = (d.candidates?.[0]?.content?.parts || []).map((x) => x.text || '').join('');
     const en = (t.match(/EN:\s*(.+)/) || [])[1]?.trim();
@@ -390,6 +403,8 @@ export async function POST(req) {
       name: s(p?.name, 40), cat: s(p?.cat, 20), text: s(p?.text, 200),
       imgs: (Array.isArray(p?.imgs) ? p.imgs : [p?.img]).slice(0, 2).map((x) => img(x)).filter(Boolean),
     })).filter((p) => p.name),
+    souvenirs: (Array.isArray(body.souvenirs) ? body.souvenirs : []).slice(0, 4)
+      .map((x) => ({ name: s(x?.name, 40), price: s(x?.price, 20), good: x?.good === true })).filter((x) => x.name),
   };
   // 写真はAIに渡せる枚数に上限があるので、メイン→わたしたち→各お店の1枚目→2枚目の順に14枚まで
   let room = 14 - (d.cover ? 1 : 0) - (d.peopleStyle === 'none' ? 0 : d.people.length);
@@ -407,8 +422,9 @@ export async function POST(req) {
   return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
 }
 
-// 回数を1つ使って絵を描く（1人1日3回まで。うまく描けなかったら回数を戻す）
+// 回数を1つ使って絵を描く（回数は app/lib/plan.js。うまく描けなかったら回数を戻す）
 async function run(req, job) {
+  if (!GKEY()) return json({ error: '「AIで作る」の設定がまだ終わっていません（運営者の設定待ち）' }, 500);
   const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
@@ -417,15 +433,15 @@ async function run(req, job) {
     if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
     return new Response(o.jpg, { headers: imgHeaders(o) });
   }
-  const r = await rpc('use_ai_credit', token);
+  const r = await rpc('ai_quota_use', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);
   const ticket = await r.json();
-  if (!ticket) return json({ error: '「AIで作る」は1日3回までです（直すときも1回に数えます）。また明日使ってください' }, 429);
+  if (!ticket) return json({ error: `「AIで作る」の回数を使い切りました（無料は合計${PLAN.AI_FREE_TOTAL}回、プレミアムは月${PLAN.AI_MONTH}回・年払いは年${PLAN.AI_YEAR}回。直すときも1回に数えます）`, quota: true }, 429);
 
   const out = await make();
   if (!out.ok) {
-    await rpc('refund_ai_credit', token, { ticket }).catch(() => {});
+    await rpc('ai_quota_refund', token, { ticket }).catch(() => {});
     return json({ error: 'AIがうまく描けませんでした。もう一度試してください（回数は減っていません）' }, 502);
   }
   return new Response(out.jpg, { headers: imgHeaders(out) });
@@ -438,12 +454,14 @@ function imgHeaders(o) {
 
 async function gen(parts, aspect, rawOut) {
   try {
-    const r = await fetch(`${GEMINI}/${MODEL}:generateContent`, {
+    const r = await gfetch(`${GEMINI}/${MODEL}:generateContent`, {
       method: 'POST',
-      headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY, 'content-type': 'application/json' },
+      headers: { 'x-goog-api-key': GKEY(), 'content-type': 'application/json' },
       body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect, imageSize: '2K' } } }),
-    });
-    const d = await r.json();
+    }, 100000);
+    const d = await r.json().catch(() => ({}));
+    // 1回あたりの本当の量を測る（docs/マネタイズ根拠.md「わからないこと」：文字の入力トークン）。Cloudflare のコンテナのログで見る
+    if (d.usageMetadata) console.log('[tabibi] noteai usage', JSON.stringify({ in: d.usageMetadata.promptTokenCount, out: d.usageMetadata.candidatesTokenCount, imgs: parts.filter((p) => p.inlineData).length }));
     const part = d.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
     if (!part) return { ok: false, error: d.error?.message || d.candidates?.[0]?.finishReason || 'no image' };
     if (rawOut) return { ok: true, raw: Buffer.from(part.inlineData.data, 'base64') };

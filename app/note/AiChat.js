@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, SIZES } from './NoteCanvas';
 import { TASTES } from './tastes';
 import { FONTS } from './fonts';
+import { PLAN } from '../lib/plan';
+import { logEvent } from '../cloud';
 
 const TYPES = ['トリセツ風ポスター', '旅の雑誌の1ページ', '絵日記', '映画のポスター風'];
 const PICKS = [
@@ -64,7 +66,7 @@ function Free({ ph, init = '', onSend, max = 120, multi }) {
 export default function ChatFlow(props) {
   const { note, save, user, onSignIn, trips, trip, setTrip, doneHere, spots, photoMap, toggleSpot, togglePhoto, photoKeys, addMore, addBusy,
     allPhotos, coverKey, peoplePool, peopleKeys, togglePeople, addPeople, peopleBusy, prompts, onPrompts, max,
-    renderTplThumbs, tplFinal, aiFinal } = props;
+    renderTplThumbs, tplFinal, aiFinal, tripSv = [], svList = [], toggleSv, maxSv = 4 } = props;
   const [mode, setMode] = useState(null); // 'tpl' / 'ai'（毎回ここから始める）
   const [A, setA] = useState({}); // このチャットでの答え（id -> {t, k}）
   const [editAt, setEditAt] = useState(null);
@@ -107,7 +109,7 @@ export default function ChatFlow(props) {
     ui: () => (
       <div className="ac-modes">
         <button type="button" onClick={() => { setMode('tpl'); save({ mode: 'tpl' }); answer('mode', 'テンプレートで作る'); }}><b>テンプレートで作る</b><small>すぐできる・何枚でも</small></button>
-        <button type="button" onClick={() => { setMode('ai'); save({ mode: 'ai' }); answer('mode', 'AIで作る'); }}><b>AIで作る</b><small>写真と文字をAIがイラストに仕上げる（1日3回まで）</small></button>
+        <button type="button" onClick={() => { setMode('ai'); save({ mode: 'ai' }); answer('mode', 'AIで作る'); }}><b>AIで作る</b><small>写真と文字をAIがイラストに仕上げる（無料は合計{PLAN.AI_FREE_TOTAL}回・プレミアムは月{PLAN.AI_MONTH}回）</small></button>
       </div>
     ),
   });
@@ -141,13 +143,36 @@ export default function ChatFlow(props) {
         </>
       ),
     });
+    if (tripSv.length) {
+      Q.push({
+        id: 'sv', bot: `買ったお土産も入れる？（${maxSv}つまで。下のほうに並ぶよ）`,
+        ui: () => (
+          <>
+            <div className="nm-svs">
+              {tripSv.map((x) => {
+                const n = svList.findIndex((y) => y.id === x.id);
+                return (
+                  <button key={x.id} type="button" aria-pressed={n >= 0} disabled={n < 0 && svList.length >= maxSv} onClick={() => toggleSv(x.id)}>
+                    {x.photo ? <img src={x.photo} alt="" /> : <span className="ph0" />}{x.good ? '★ ' : ''}{x.name}{n >= 0 && <i>{n + 1}</i>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="as-chips">
+              <button type="button" className="as-ok" disabled={!svList.length} onClick={() => answer('sv', svList.map((x) => x.name).join('・'))}>これで決定（{svList.length}こ）</button>
+              <button type="button" onClick={() => answer('sv', '入れない', { souvenirs: [] })}>入れない</button>
+            </div>
+          </>
+        ),
+      });
+    }
     if (ai) {
       Q.push({
         id: 'tpl', bot: '雰囲気はどれにする？',
         ui: () => (
           <div className="ac-tpls ac-tastes">
             {TASTES.map((t) => (
-              <button key={t.id} type="button" onClick={() => answer('tpl', t.label, { tpl: t.tpl, font: t.font, aiTaste: t.id })}>
+              <button key={t.id} type="button" onClick={() => { logEvent('tpl_pick', 'ai:' + t.id); answer('tpl', t.label, { tpl: t.tpl, font: t.font, aiTaste: t.id }); }}>
                 <img className="ac-taste-img" src={`/note/taste-${t.id}.jpg`} alt="" loading="lazy" />
                 <b>{t.label}</b><small>{t.sub}</small>
               </button>

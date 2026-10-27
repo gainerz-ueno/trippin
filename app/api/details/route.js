@@ -1,4 +1,7 @@
 // お店の詳細（Google Places API (New) Place Details）
+import { KEY } from '../../lib/places';
+import { gfetch, friendly } from '../../lib/gfetch';
+
 const FIELDS = [
   'id',
   'photos',
@@ -35,14 +38,19 @@ export async function GET(req) {
   const u = new URL(req.url);
   const id = u.searchParams.get('id') || '';
   const lite = u.searchParams.get('lite') === '1';
-  if (id.length > 300 || !/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'bad request' }, { status: 400 });
+  if (id.length > 300 || !/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'お店の指定が正しくありません' }, { status: 400 });
+  if (!KEY()) return Response.json({ error: '詳細の設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
+
   try {
-    const res = await fetch(`https://places.googleapis.com/v1/places/${id}?languageCode=ja`, {
-      headers: { 'X-Goog-Api-Key': process.env.GOOGLE_MAPS_API_KEY, 'X-Goog-FieldMask': lite ? LITE : FIELDS },
+    const res = await gfetch(`https://places.googleapis.com/v1/places/${id}?languageCode=ja`, {
+      headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': lite ? LITE : FIELDS },
       cache: 'no-store',
-    });
-    const p = await res.json();
-    if (!res.ok) throw new Error(p?.error?.message || '詳細を取得できませんでした');
+    }, 10000);
+    const p = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error('[tabibi] details', res.status, p?.error?.message);
+      throw new Error(res.status === 404 ? 'このお店の情報がGoogleマップで見つかりませんでした（閉店した可能性があります）' : '詳細を取得できませんでした。少し待ってからもう一度開いてください');
+    }
 
     // お店の現地時間での今日の曜日（Googleの曜日一覧は月曜始まり）
     const offset = p.utcOffsetMinutes ?? 0;
@@ -80,6 +88,6 @@ export async function GET(req) {
       mapsUrl: p.googleMapsUri || '',
     });
   } catch (e) {
-    return Response.json({ error: e.message }, { status: 500 });
+    return Response.json({ error: friendly(e, '詳細を取得できませんでした') }, { status: 502 });
   }
 }

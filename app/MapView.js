@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { safeUrl } from './lib/safeurl';
+import { jaError } from './lib/api';
 
 // Google マップの読み込み（1回だけ）
 let loader = null;
@@ -8,16 +9,18 @@ function loadMaps() {
   if (typeof window === 'undefined') return Promise.reject();
   if (window.google?.maps) return Promise.resolve(window.google.maps);
   if (loader) return loader;
-  loader = fetch('/api/mapkey')
+  loader = fetch('/api/mapkey', { signal: AbortSignal.timeout(10000) })
     .then((r) => r.json())
     .then(({ key }) => {
-      if (!key) throw new Error('地図の鍵が設定されていません');
+      if (!key) throw new Error('地図はまだ使えません（地図の設定が終わっていません）。リストで見てください');
       return new Promise((resolve, reject) => {
-        window.__trippinMapsReady = () => resolve(window.google.maps);
+        // 電波が悪くて読み込みが終わらないときは、20秒であきらめて案内を出す（白いまま固まらないように）
+        const t = setTimeout(() => reject(new Error('地図を読み込めませんでした。電波のよいところで開き直してください')), 20000);
+        window.__trippinMapsReady = () => { clearTimeout(t); resolve(window.google.maps); };
         const s = document.createElement('script');
         s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&language=ja&callback=__trippinMapsReady&loading=async`;
         s.async = true;
-        s.onerror = () => reject(new Error('地図を読み込めませんでした'));
+        s.onerror = () => { clearTimeout(t); s.remove(); reject(new Error('地図を読み込めませんでした。電波のよいところで開き直してください')); };
         document.head.appendChild(s);
       });
     })
@@ -31,11 +34,12 @@ function loadMaps() {
 const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // 候補・行ったのお店を、カテゴリーの色のピンで地図に並べる
-export default function MapView({ items, colorOf, photoSrc, hotels = [], visible = true }) {
+export default function MapView({ items, colorOf, photoSrc, hotels = [], visible = true, route = false }) {
   const box = useRef(null);
   const map = useRef(null);
   const markers = useRef([]);
   const info = useRef(null);
+  const line = useRef(null); // 回る順番の線（地図の部品だけで描く。道案内の料金はかからない）
   const [err, setErr] = useState('');
   const [ready, setReady] = useState(false);
 
@@ -56,7 +60,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
         info.current = new maps.InfoWindow();
         setReady(true);
       })
-      .catch((e) => alive && setErr(e?.message || '地図を読み込めませんでした'));
+      .catch((e) => alive && setErr(jaError(e, '地図を読み込めませんでした。電波のよいところで開き直してください')));
     return () => { alive = false; };
   }, []);
 
@@ -65,6 +69,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
     const maps = window.google.maps;
     markers.current.forEach((m) => m.setMap(null));
     markers.current = [];
+    if (line.current) { line.current.setMap(null); line.current = null; }
     const pts = items.filter((i) => i.lat != null && i.lng != null);
     const hs = hotels.filter((h) => h && h.lat != null && h.lng != null);
     if (!pts.length && !hs.length) return;
@@ -126,6 +131,15 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
       });
       markers.current.push(m);
     });
+    if (route && pts.length) {
+      const h = hs[0];
+      const path = [h, ...pts, h].filter(Boolean).map((p) => ({ lat: p.lat, lng: p.lng }));
+      line.current = new maps.Polyline({
+        path, map: map.current, geodesic: true, strokeOpacity: 0, zIndex: 1,
+        icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.9, strokeColor: '#E5483B', strokeWeight: 3, scale: 3 }, offset: '0', repeat: '14px' },
+          { icon: { path: maps.SymbolPath.FORWARD_CLOSED_ARROW, strokeColor: '#E5483B', fillColor: '#E5483B', fillOpacity: 1, scale: 2.5 }, offset: '50%', repeat: '120px' }],
+      });
+    }
     const all = [...pts, ...hs];
     if (all.length === 1) {
       map.current.setCenter({ lat: all[0].lat, lng: all[0].lng });
@@ -133,7 +147,7 @@ export default function MapView({ items, colorOf, photoSrc, hotels = [], visible
     } else {
       map.current.fitBounds(bounds, 40);
     }
-  }, [ready, items, colorOf, photoSrc, hotels, visible]);
+  }, [ready, items, colorOf, photoSrc, hotels, visible, route]);
 
   if (err) return <div className="empty">{err}</div>;
   return (

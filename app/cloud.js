@@ -4,10 +4,16 @@ import { createClient } from '@supabase/supabase-js';
 import { photoHooks, listPhotos, listAllPhotos, setCloudId, putFromCloud } from './photos';
 
 import { SUPABASE_URL, SUPABASE_KEY } from './lib/supabase-public';
+import { mockClient } from './lib/mock-supabase';
+import { PLAN, validGuidePrice } from './lib/plan';
 const BUCKET = 'photos';
+// テスト用モード（本物のSupabaseを使わない）。本番のビルドでは付けない
+// まちがって本番で付けても動かないよう、自分のパソコン（localhost）で開いたときだけ
+export const MOCK = process.env.NEXT_PUBLIC_TABIBI_MOCK === '1' && typeof window !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
 
 let client = null;
 export function supa() {
+  if (!client && MOCK) client = mockClient();
   if (!client) {
     client = createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
@@ -37,7 +43,7 @@ const stamp = (it) => it?.updatedAt || it?.addedAt || 0;
 
 // ---- お店 ----
 export async function pullItems() {
-  const { data, error } = await supa().from('items').select('id,data');
+  const { data, error } = await supa().from('items').select('id,data').eq('user_id', uid);
   if (error) throw error;
   return (data || []).map((r) => r.data);
 }
@@ -51,13 +57,13 @@ export async function upsertItems(list) {
 }
 export async function deleteItems(ids) {
   if (!uid || !ids.length) return;
-  const { error } = await supa().from('items').delete().in('id', ids);
+  const { error } = await supa().from('items').delete().eq('user_id', uid).in('id', ids);
   if (error) throw error;
 }
 
 // ---- 設定（フォルダ・宿泊先・自分で作ったカテゴリー） ----
 export async function pullSettings() {
-  const { data, error } = await supa().from('settings').select('data').maybeSingle();
+  const { data, error } = await supa().from('settings').select('data').eq('user_id', uid).maybeSingle();
   if (error) throw error;
   return data?.data || null;
 }
@@ -70,7 +76,7 @@ export async function pushSettings(data) {
 // ---- 写真 ----
 let photoRows = new Map(); // itemId -> [{id, kind, path, created_at}]
 export async function pullPhotoRows() {
-  const { data, error } = await supa().from('photos').select('id,item_id,kind,path,created_at');
+  const { data, error } = await supa().from('photos').select('id,item_id,kind,path,created_at').eq('user_id', uid);
   if (error) throw error;
   photoRows = new Map();
   for (const r of data || []) {
@@ -97,7 +103,7 @@ async function deleteCloudPhoto(rec) {
   const row = rows.find((r) => r.id === rec.cloudId);
   const path = row?.path || `${uid}/${encodeURIComponent(rec.itemId)}/${rec.cloudId}.jpg`;
   await supa().storage.from(BUCKET).remove([path]);
-  await supa().from('photos').delete().eq('id', rec.cloudId);
+  await supa().from('photos').delete().eq('user_id', uid).eq('id', rec.cloudId);
   photoRows.set(rec.itemId, rows.filter((r) => r.id !== rec.cloudId));
 }
 
@@ -158,7 +164,7 @@ const shareId = () => {
 };
 export async function getShare(folder) {
   if (!uid) return null;
-  const { data, error } = await supa().from('shares').select('id').eq('folder', folder).maybeSingle();
+  const { data, error } = await supa().from('shares').select('id').eq('user_id', uid).eq('folder', folder).maybeSingle();
   if (error) throw error;
   return data?.id || null;
 }
@@ -171,11 +177,12 @@ export async function createShare(folder) {
 }
 export async function deleteShare(folder) {
   if (!uid) return;
-  await supa().from('shares').delete().eq('folder', folder);
+  const { error } = await supa().from('shares').delete().eq('user_id', uid).eq('folder', folder);
+  if (error) throw error;
 }
 export async function renameShare(from, to) {
   if (!uid) return;
-  await supa().from('shares').update({ folder: to }).eq('folder', from);
+  await supa().from('shares').update({ folder: to }).eq('user_id', uid).eq('folder', from);
 }
 export async function fetchShared(id) {
   const { data, error } = await supa().rpc('shared_folder', { share_id: id });
@@ -212,13 +219,14 @@ export async function savePage({ blob, kind = 'note', trip = '', title = '' }) {
 }
 export async function listPages() {
   if (!uid) return [];
-  const { data, error } = await supa().from('note_pages').select('id,kind,trip,title,path,w,h,created_at').order('created_at', { ascending: false });
+  const { data, error } = await supa().from('note_pages').select('id,kind,trip,title,path,w,h,created_at').eq('user_id', uid).order('created_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
 export async function deletePage(p) {
   if (!uid) return;
-  await supa().from('note_pages').delete().eq('id', p.id);
+  const { error } = await supa().from('note_pages').delete().eq('user_id', uid).eq('id', p.id);
+  if (error) throw error;
   await supa().storage.from(GUIDE).remove([p.path]);
 }
 // 画像を見るための一時的なURL（1時間）
@@ -231,7 +239,7 @@ export async function guideUrls(paths) {
 }
 export async function listGuides() {
   if (!uid) return [];
-  const { data, error } = await supa().from('guidebooks').select('*').order('updated_at', { ascending: false });
+  const { data, error } = await supa().from('guidebooks').select('*').eq('user_id', uid).order('updated_at', { ascending: false });
   if (error) throw error;
   return data || [];
 }
@@ -240,20 +248,80 @@ export async function saveGuide(g) {
   const row = {
     id: g.id || shareId(), user_id: uid, title: String(g.title || '').slice(0, 60) || '旅のeガイドブック',
     author: String(g.author || '').slice(0, 30), description: String(g.description || '').slice(0, 300),
-    cover_id: g.cover_id || null, page_ids: (g.page_ids || []).slice(0, 60), published: !!g.published,
+    cover_id: g.cover_id || null, page_ids: (g.page_ids || []).slice(0, PLAN.GUIDE_MAX_PAGES), published: !!g.published,
+    // 無料で見せる／有料（作り手が値段を決める。0＝無料）。有料のときは、はじめの free_pages ページだけ無料で見せる
+    price: validGuidePrice(Number(g.price)) ? Number(g.price) : 0,
+    free_pages: Math.max(0, Math.min(PLAN.GUIDE_MAX_PAGES, Math.floor(Number(g.free_pages) || 0))),
     updated_at: new Date().toISOString(),
   };
-  const { error } = await supa().from('guidebooks').upsert(row);
-  if (error) throw error;
+  let { error } = await supa().from('guidebooks').upsert(row);
+  // SQL（20261027_premium.sql）を流す前の本番：値段の列がまだないので、無料のときは値段なしで保存し直す
+  if (error && /price|free_pages/.test(error.message || '') && !row.price) {
+    const { price, free_pages, ...old } = row;
+    ({ error } = await supa().from('guidebooks').upsert(old));
+  }
+  if (error) throw new Error(row.price ? '有料の設定を保存できませんでした（運営者のデータベースの準備待ち）。いったん無料で保存してください' : '保存できませんでした。もう一度試してください');
   return row;
 }
 export async function deleteGuide(id) {
   if (!uid) return;
-  const { error } = await supa().from('guidebooks').delete().eq('id', id);
+  const { error } = await supa().from('guidebooks').delete().eq('user_id', uid).eq('id', id);
   if (error) throw error;
 }
 export async function fetchGuide(id) {
   const { data, error } = await supa().rpc('guidebook_view', { gid: id });
   if (error) throw error;
-  return data; // { title, author, description, price, cover, pages } または null
+  return data; // { title, author, description, price, free_pages, total_pages, locked, cover, pages } または null
+}
+
+// ---- わからないことを測るための記録（決まった名前だけ。ログインしている人は1日1回まで数える） ----
+// 失敗しても画面は止めない
+export function logEvent(ev, detail = '') {
+  try { supa().rpc('log_event', { ev, detail: String(detail || '').slice(0, 40) }).then(() => {}, () => {}); } catch {}
+}
+
+// ---- お土産（旅のあとに、買ったものを記録） ----
+// 1つ＝1行。写真は小さくしてデータの中に入れる（共有リンク・eガイドブックでもそのまま見せられるように）
+export async function pullSouvenirs() {
+  const { data, error } = await supa().from('souvenirs').select('id,data').eq('user_id', uid);
+  if (error) throw error;
+  return (data || []).map((r) => r.data);
+}
+export async function upsertSouvenirs(list) {
+  if (!uid || !list.length) return;
+  for (let i = 0; i < list.length; i += 50) {
+    const rows = list.slice(i, i + 50).map((s) => ({ user_id: uid, id: s.id, trip: String(s.trip || '').slice(0, 60), data: s, updated_at: now() }));
+    const { error } = await supa().from('souvenirs').upsert(rows);
+    if (error) throw error;
+  }
+}
+export async function deleteSouvenirs(ids) {
+  if (!uid || !ids.length) return;
+  const { error } = await supa().from('souvenirs').delete().eq('user_id', uid).in('id', ids);
+  if (error) throw error;
+}
+
+// ---- 1日の回る順番（旅程）：旅（フォルダ）ごとに1行 ----
+export async function pullPlans() {
+  const { data, error } = await supa().from('trip_plans').select('trip,data').eq('user_id', uid);
+  if (error) throw error;
+  return (data || []).map((r) => ({ ...r.data, id: r.trip }));
+}
+export async function upsertPlans(list) {
+  if (!uid || !list.length) return;
+  const rows = list.map(({ id, ...p }) => ({ user_id: uid, trip: String(id).slice(0, 60), data: p, updated_at: now() }));
+  const { error } = await supa().from('trip_plans').upsert(rows);
+  if (error) throw error;
+}
+export async function deletePlans(trips) {
+  if (!uid || !trips.length) return;
+  const { error } = await supa().from('trip_plans').delete().eq('user_id', uid).in('trip', trips);
+  if (error) throw error;
+}
+
+// 共有リンクで見せる旅程・お土産（共有しているフォルダの分だけ）
+export async function fetchSharedExtras(id) {
+  const { data, error } = await supa().rpc('shared_extras', { share_id: id });
+  if (error) throw error;
+  return data; // { plan, souvenirs } または null
 }

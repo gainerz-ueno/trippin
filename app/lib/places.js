@@ -1,5 +1,6 @@
 // お店検索（Google Places API (New) テキスト検索）
 // APIキーはサーバー側だけで使い、ブラウザには出さない
+import { gfetch, MOCK } from './gfetch';
 const FIELDS = [
   'places.id',
   'places.displayName',
@@ -18,7 +19,7 @@ const FIELDS = [
   'nextPageToken',
 ].join(',');
 
-export const KEY = () => process.env.GOOGLE_MAPS_API_KEY;
+export const KEY = () => process.env.GOOGLE_MAPS_API_KEY || (MOCK ? 'mock' : '');
 
 // 国ごとの範囲（南西の角・北東の角）
 const COUNTRIES = {
@@ -45,7 +46,7 @@ async function searchOnce(textQuery, minRating, pageToken, languageCode, country
     };
   }
   if (pageToken) body.pageToken = pageToken;
-  const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+  const res = await gfetch('https://places.googleapis.com/v1/places:searchText', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -55,14 +56,18 @@ async function searchOnce(textQuery, minRating, pageToken, languageCode, country
     body: JSON.stringify(body),
     cache: 'no-store',
   });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error?.message || '検索に失敗しました');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error('[tabibi] searchText', res.status, data?.error?.message);
+    throw new Error(res.status === 429 ? 'Googleの検索が混み合っています。少し待ってからもう一度試してください' : '検索に失敗しました。言葉を変えて、もう一度試してください');
+  }
   return data;
 }
 
 // 国ごとの現地の言語（Grab・Uber に貼る現地表記を取るため）
 const LANG = { TW: 'zh-TW', KR: 'ko', HK: 'zh-HK', CN: 'zh-CN', VN: 'vi', TH: 'th', SG: 'en', MY: 'en', PH: 'en', JP: 'ja' };
 
+export const LANGS = Object.values(LANG);
 const countryOf = (p) =>
   (p.addressComponents || []).find((c) => c.types?.includes('country'))?.shortText || '';
 
@@ -72,17 +77,38 @@ function mostCommonCountry(places) {
   return Object.entries(n).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
 }
 
-// 1件ずつ現地の言語で名前・住所を取る（検索結果に出てこなかったお店用）
-async function detailsIn(id, lang) {
+// 1件ずつ現地の言語で名前・住所を取る（検索結果に出てこなかったお店用。Place Details Pro）
+export async function detailsIn(id, lang) {
   try {
-    const res = await fetch(`https://places.googleapis.com/v1/places/${id}?languageCode=${lang}`, {
+    const res = await gfetch(`https://places.googleapis.com/v1/places/${id}?languageCode=${encodeURIComponent(lang)}`, {
       headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': 'id,displayName,formattedAddress' },
       cache: 'no-store',
-    });
+    }, 8000);
     return res.ok ? await res.json() : null;
   } catch {
     return null;
   }
+}
+
+// 国を選んでいないとき、地名から国を当てる（当たればGoogleへの検索は1回で済む）
+// ・「場所」の欄：国名も街の名前も使う
+// ・「キーワード」の欄：街の名前だけ（「韓国料理」「タイ料理」のような料理名で国を決めつけないため）
+const CITY = [
+  ['TW', '台湾|臺灣|Taiwan', '台北|臺北|台中|臺中|台南|臺南|高雄|九份|淡水|士林|西門|永康街|花蓮|基隆|新北|桃園|宜蘭|墾丁|日月潭|阿里山|Taipei|Kaohsiung|Tainan|Taichung'],
+  ['KR', '韓国|Korea', 'ソウル|釜山|明洞|弘大|江南|東大門|仁川|済州|景福宮|梨泰院|Seoul|Busan'],
+  ['HK', '香港|Hong ?Kong', '九龍|尖沙咀|旺角|銅鑼湾|中環|Kowloon'],
+  ['VN', 'ベトナム|Vietnam|Viet Nam', 'ホーチミン|ハノイ|ダナン|ホイアン|フエ|ニャチャン|フーコック|Ho Chi Minh|Hanoi|Da ?Nang|Hoi An'],
+  ['TH', 'タイ|Thailand', 'バンコク|プーケット|チェンマイ|パタヤ|アユタヤ|Bangkok|Phuket|Chiang ?Mai'],
+  ['SG', 'シンガポール|Singapore', 'シンガポール|Singapore'],
+  ['MY', 'マレーシア|Malaysia', 'クアラルンプール|ペナン|コタキナバル|ランカウイ|Kuala Lumpur|Penang'],
+  ['PH', 'フィリピン|Philippines', 'マニラ|セブ|ボラカイ|Manila|Cebu'],
+  ['CN', '中国|China', '上海|北京|広州|深圳|成都|西安|杭州|Shanghai|Beijing'],
+].map(([c, nation, city]) => [c, new RegExp(nation + '|' + city, 'i'), new RegExp(city, 'i')]);
+export function guessCountry(area, keyword) {
+  const pick = (list) => (list.length === 1 ? list[0] : '');
+  const byArea = pick(CITY.filter(([, all]) => all.test(area || '')).map(([c]) => c));
+  if (byArea || area) return byArea;
+  return pick(CITY.filter(([, , city]) => city.test(keyword || '')).map(([c]) => c));
 }
 
 // 1ページ分を返す
@@ -112,12 +138,16 @@ export async function searchPage(textQuery, minRating, tokens, country, extra = 
     const local = await searchOnce(textQuery, minRating, tokens?.local, lang, country, extra).catch(() => ({ places: [] }));
     localNext = local.nextPageToken || null;
     for (const lp of local.places || []) localMap.set(lp.id, lp);
-    const missing = jaPlaces.filter((p) => !localMap.has(p.id));
-    const got = await Promise.all(missing.map((p) => detailsIn(p.id, lang)));
-    got.forEach((lp) => { if (lp?.id) localMap.set(lp.id, lp); });
+    // 現地の言語の検索に出てこなかったお店は、ここでは取りに行かない（1件ごとに Place Details Pro の料金がかかる）。
+    // 「候補に追加」したお店だけ /api/localname で現地の表記を取る（docs/マネタイズ根拠.md）
   }
 
-  const places = jaPlaces.map((p) => shape(p, localMap.get(p.id), lang));
+  const places = jaPlaces.map((p) => {
+    const lp = localMap.get(p.id);
+    const out = shape(p, lp, lang);
+    if (lang !== 'ja' && !lp) out.needLocal = lang;
+    return out;
+  });
   const next = ja.nextPageToken ? { ja: ja.nextPageToken, local: localNext, lang } : null;
   return { places, next, lang };
 }
@@ -147,7 +177,7 @@ const hanDominant = (s) => count(s, /\p{Script=Han}/gu) > latin(s);
 
 // name・address = 現地の表記（Grab・Uber に貼る用）
 // altName・altAddress = 日本人が読める表記（文字列=表示 / 'translate'=Geminiで作る / ''=出さない）
-function alts(name, address, jaName, lang, jaKnown) {
+export function alts(name, address, jaName, lang, jaKnown) {
   let altName = '';
   if (lang !== 'ja' && !hasKana(name) && !hanDominant(name)) {
     altName = jaKnown && hasKana(jaName) && jaName !== name ? jaName : 'translate';
@@ -198,6 +228,7 @@ function shape(p, lp, lang, jaKnown = true) {
     photo: p.photos?.[0]?.name || null,
     openNow: p.currentOpeningHours?.openNow ?? null,
     type: p.primaryTypeDisplayName?.text || '',
+    country: countryOf(p),
     hoursInfo: hoursOf(p),
   };
 }
@@ -205,7 +236,7 @@ function shape(p, lp, lang, jaKnown = true) {
 // Gemini で店名は読み方のカタカナ、住所は日本語表記に（使えないときは null）
 export let lastAiError = '';
 async function geminiJapanese(jobs) {
-  const key = process.env.GEMINI_API_KEY;
+  const key = process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
   if (!key) { lastAiError = 'no key'; return null; }
   const items = jobs.map(([, field, src], i) => ({ i, kind: field === 'altName' ? 'name' : 'address', text: src }));
   const prompt = [
@@ -216,7 +247,7 @@ async function geminiJapanese(jobs) {
     JSON.stringify(items),
   ].join('\n');
   try {
-    const res = await fetch(
+    const res = await gfetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent`,
       {
         method: 'POST',
@@ -226,7 +257,8 @@ async function geminiJapanese(jobs) {
           generationConfig: { responseMimeType: 'application/json', temperature: 0 },
         }),
         cache: 'no-store',
-      }
+      },
+      12000
     );
     const data = await res.json();
     if (!res.ok) { lastAiError = `${res.status} ${data?.error?.message || ''}`.slice(0, 300); return null; }
@@ -258,12 +290,12 @@ export async function fillTranslations(places) {
     return places;
   }
   try {
-    const res = await fetch(`https://translation.googleapis.com/language/translate/v2?key=${KEY()}`, {
+    const res = await gfetch(`https://translation.googleapis.com/language/translate/v2?key=${KEY()}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ q: jobs.map((j) => j[2]), target: 'ja', format: 'text' }),
       cache: 'no-store',
-    });
+    }, 8000);
     const data = await res.json();
     const out = data?.data?.translations;
     if (!res.ok || !out) throw new Error();
@@ -277,9 +309,15 @@ export async function fillTranslations(places) {
   return places;
 }
 
+// 「もっと見る」の続きの印（ブラウザから戻ってくるので、中身を確かめてから使う）
 export function decodeToken(t) {
   if (!t) return null;
-  try { return JSON.parse(Buffer.from(t, 'base64url').toString()); } catch { return null; }
+  try {
+    const o = JSON.parse(Buffer.from(t, 'base64url').toString());
+    if (!o || typeof o !== 'object') return null;
+    const tok = (v) => (typeof v === 'string' && v.length <= 2000 ? v : null);
+    return { single: o.single === true, ja: tok(o.ja), local: tok(o.local), lang: LANGS.includes(o.lang) || o.lang === 'en' || o.lang === 'ja' ? o.lang : null };
+  } catch { return null; }
 }
 export function encodeToken(t) {
   return t ? Buffer.from(JSON.stringify(t)).toString('base64url') : null;

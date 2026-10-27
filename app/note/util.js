@@ -2,6 +2,7 @@
 // eタビセツ・eガイドブックで共通に使うもの
 import { supa } from '../cloud';
 import { embedCss } from './fonts';
+import { jaError } from '../lib/api';
 
 // 小さく縮めて見せる（中身は1080pxのまま）
 export function Scaled({ width, children, size }) {
@@ -48,22 +49,35 @@ export async function renderNode(node, size, fontId) {
 export async function callAi(body) {
   const t = await accessToken();
   if (!t) throw new Error('「AIで作る」はGoogleでログインすると使えます');
-  const r = await fetch('/api/noteai', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify(body) });
+  let r;
+  try {
+    // 絵を描くのに1分以上かかることがあるので、2分で打ち切る
+    r = await fetch('/api/noteai', { method: 'POST', headers: { 'content-type': 'application/json', Authorization: 'Bearer ' + t }, body: JSON.stringify(body), signal: AbortSignal.timeout(130000) });
+  } catch (e) {
+    throw new Error(jaError(e, 'AIで作れませんでした。もう一度試してください'));
+  }
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
-    throw new Error(d.error || 'AIで作れませんでした');
+    if (r.status === 413) throw new Error('写真が大きすぎて送れませんでした。写真の枚数を減らしてもう一度試してください');
+    if (r.status === 429 && d.quota) { const { logEvent } = await import('../cloud'); logEvent('ai_quota_hit'); }
+    throw new Error(/[\u3040-\u30ff\u4e00-\u9fff]/.test(d.error || '') ? d.error : 'AIで作れませんでした。もう一度試してください');
   }
   const b = await r.blob();
   try { b.fixJa = decodeURIComponent(r.headers.get('x-fix-ja') || ''); } catch { b.fixJa = ''; }
   return b;
 }
 export async function aiLeft() {
+  const d = await aiPlan();
+  return d ? d.left : null;
+}
+// いまのプラン（無料／プレミアム）と「AIで作る」の残り回数。決めるのはサーバー（Supabase の entitlements）
+export async function aiPlan() {
   const t = await accessToken();
   if (!t) return null;
   try {
-    const r = await fetch('/api/noteai', { headers: { Authorization: 'Bearer ' + t } });
+    const r = await fetch('/api/noteai', { headers: { Authorization: 'Bearer ' + t }, signal: AbortSignal.timeout(15000) });
     const d = await r.json();
-    return r.ok && typeof d.left === 'number' ? d.left : null;
+    return r.ok && typeof d.left === 'number' ? { left: d.left, plan: d.plan || 'free', limit: d.limit ?? null } : null;
   } catch { return null; }
 }
 

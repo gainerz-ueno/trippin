@@ -2,6 +2,7 @@
 // 「行った」のお店・スポットから、eタビセツ（画像）を作る
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './note.css';
+import { jaError } from '../lib/api';
 import NoteCanvas, { TEMPLATES, SIZES, sizeOf } from './NoteCanvas';
 import { FONTS, loadFont } from './fonts';
 import { Scaled, toB64, renderNode, aiLeft, downloadBlob, shareBlob } from './util';
@@ -9,6 +10,9 @@ import AiStudio from './AiStudio';
 import ChatFlow, { aiOptions } from './AiChat';
 import { addPhotos, listPhotos } from '../photos';
 import { ensurePhotos, savePage } from '../cloud';
+import { money } from '../lib/money';
+import { PLAN } from '../lib/plan';
+import { logEvent } from '../cloud';
 
 const MAX = 6;
 const keyOf = (p) => p.cloudId || 'L' + p.id;
@@ -24,9 +28,11 @@ export function defaultNote(trip, items, unsorted) {
 }
 
 // AIで作るときの雰囲気の見本（テンプレートの背景の絵）
-const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
+const AI_NOTE = `写真と文字をAIがまとめて、1枚のイラストに描きます（無料は合計${PLAN.AI_FREE_TOTAL}回・プレミアムは月${PLAN.AI_MONTH}回）`;
 
-export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn, prompts = [], onPrompts }) {
+export const MAX_SV = 4; // eタビセツに入れるお土産の数（NoteCanvas の SouvenirBand が横4列の帯。note.css の .nt-sv-row）
+
+export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, onPhotosAdded, photoVer, unsorted, onClose, user, onSignIn, prompts = [], onPrompts, souvenirs = [] }) {
   const tripsWithDone = folders.filter((f) => items.some((i) => i.done && i.trip === f));
   const [trip, setTrip] = useState(tripsWithDone.includes(trip0) ? trip0 : tripsWithDone[0] || trip0);
   const note = notes[trip] || defaultNote(trip, items, unsorted);
@@ -35,7 +41,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
   const [addBusy, setAddBusy] = useState(null);
   const [err, setErr] = useState('');
   const [out, setOut] = useState(null); // { url, blob, ext }
-  const [left, setLeft] = useState(null); // AIで作る：今日あと何回
+  const [left, setLeft] = useState(null); // AIで作る：あと何回（無料は合計、プレミアムは今月／この1年）
   const [boxW, setBoxW] = useState(320);
   const boxRef = useRef(null);
   const canvasRef = useRef(null);
@@ -112,12 +118,23 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       const added = (await listPhotos(pid)).map(keyOf).filter((k) => !before.has(k));
       save({ people: [...peopleKeys, ...added].slice(-3) });
       onPhotosAdded?.();
-    } catch (e) { setErr(e.message || '写真を追加できませんでした'); }
+    } catch (e) { setErr(jaError(e, '写真を追加できませんでした')); }
     setPeopleBusy(false);
   }
   // メインの写真：えらんでいなければ1枚目の写真（「なし」をえらんだら null）
   const coverUrl = note.cover === null ? null : (note.cover ? allPhotos.find((p) => p.key === note.cover)?.url : null) || allPhotos[0]?.url || null;
   const coverKey = note.cover === null ? null : (note.cover && allPhotos.some((p) => p.key === note.cover) ? note.cover : allPhotos[0]?.key);
+
+  // お土産：この旅のお土産からえらんだもの（えらんでいなければ入れない）
+  const tripSv = souvenirs.filter((x) => x.trip === trip);
+  const svList = (note.souvenirs || []).map((id) => tripSv.find((x) => x.id === id)).filter(Boolean).slice(0, MAX_SV);
+  function toggleSv(id) {
+    const cur = svList.map((x) => x.id);
+    const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(0, MAX_SV);
+    // 4つで足りないか測る：上限まで入れて、まだ入れていないお土産が残っているとき
+    if (!cur.includes(id) && next.length === MAX_SV && tripSv.length > MAX_SV) logEvent('sv_cap_hit');
+    save({ souvenirs: next });
+  }
 
   const canvasSpots = spots.map(({ s, it }) => ({
     it, text: (s.text ?? (it.review || it.memo || '')).trim(), urls: photoKeys(s).map((k) => urlOf(it.id, k)).filter(Boolean),
@@ -153,12 +170,12 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       const added = after.filter((k) => !before.has(k));
       patchSpot(s.id, { photos: [...cur, ...added].slice(0, 2) });
       onPhotosAdded?.();
-    } catch (e) { setErr(e.message || '写真を追加できませんでした'); }
+    } catch (e) { setErr(jaError(e, '写真を追加できませんでした')); }
     setAddBusy(null);
   }
 
-  // AIで作る：今日あと何回使えるか
-  async function loadLeft() { const n = await aiLeft(); if (n != null) setLeft(n); }
+  // AIで作る：あと何回使えるか
+  async function loadLeft() { const n = await aiLeft(); if (n != null) setLeft(n); if (n === 0) logEvent('ai_quota_hit'); }
   useEffect(() => { if (mode === 'ai' && user) loadLeft(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [mode, user?.id]);
 
   // AIに渡す中身（写真と文字）
@@ -166,6 +183,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     return {
       tpl: note.tpl, taste: note.aiTaste, size: note.size, title: note.title, sub: note.sub, place, date: note.date, who: note.who, by: note.by, words: note.words,
       ...aiOptions(note),
+      souvenirs: svList.map((x) => ({ name: x.name, price: money(x.price, x.currency), good: !!x.good })),
       cover: await toB64(coverUrl),
       people: await Promise.all(peopleUrls.map((u) => toB64(u, 768))),
       spots: await Promise.all(canvasSpots.map(async (sp) => ({
@@ -183,7 +201,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
       const blob = await renderNode(canvasRef.current, sizeOf(note.size), note.font);
       setOut({ url: URL.createObjectURL(blob), blob, ext: 'png' });
       setTimeout(() => document.getElementById('nm-out')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
-    } catch (e) { setErr(e.message || '画像を作れませんでした'); }
+    } catch (e) { setErr(jaError(e, '画像を作れませんでした')); }
     setBusy(false);
   }
   const fileName = `tabibi-${(note.title || 'note').replace(/[\\/:*?"<>|\s]+/g, '_')}.${out?.ext || 'png'}`;
@@ -195,7 +213,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
     if (!out) return;
     setSaved('saving');
     try { await savePage({ blob: out.blob, kind: 'note', trip, title: note.title }); setSaved('done'); }
-    catch (e) { setSaved(''); setErr(e.message || '保存できませんでした'); }
+    catch (e) { setSaved(''); setErr(jaError(e, '保存できませんでした')); }
   }
   useEffect(() => { setSaved(''); }, [out]);
   useEffect(() => () => { if (out) URL.revokeObjectURL(out.url); }, [out]);
@@ -216,13 +234,14 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
         toggleSpot={toggleSpot} togglePhoto={togglePhoto} photoKeys={photoKeys} addMore={addMore} addBusy={addBusy}
         allPhotos={allPhotos} coverKey={coverKey} peoplePool={peoplePool} peopleKeys={peopleKeys} togglePeople={togglePeople}
         addPeople={addPeople} peopleBusy={peopleBusy} prompts={prompts} onPrompts={onPrompts} max={MAX}
+        tripSv={tripSv} svList={svList} toggleSv={toggleSv} maxSv={MAX_SV}
         renderTplThumbs={(onPick) => (
           <div className="nm-tpls">
             {TEMPLATES.map((t) => (
-              <button key={t.id} type="button" className="nm-tpl" onClick={() => onPick(t)}>
+              <button key={t.id} type="button" className="nm-tpl" onClick={() => { logEvent('tpl_pick', t.id); onPick(t); }}>
                 <div className="nm-mini">
                   <Scaled width={thumbW} size={size}>
-                    <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} />
+                    <NoteCanvas note={{ ...note, tpl: t.id, font: t.font }} spots={canvasSpots} coverUrl={coverUrl} place={place} souvenirs={svList} />
                   </Scaled>
                 </div>
                 <span>{t.label}</span>
@@ -234,7 +253,7 @@ export default function NoteMaker({ items, folders, trip: trip0, notes, onSave, 
           <>
             <div className="nm-preview" style={{ width: boxW - 8 }}>
               <Scaled width={boxW - 8} size={size}>
-                <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} />
+                <NoteCanvas note={note} spots={canvasSpots} coverUrl={coverUrl} nodeRef={canvasRef} place={place} souvenirs={svList} />
               </Scaled>
             </div>
             {err && <p className="nm-err">{err}</p>}

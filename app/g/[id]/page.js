@@ -2,13 +2,15 @@
 // eガイドブックを読むページ（リンクを知っている人なら、ログインもパスワードもいらない）
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { fetchGuide, guideUrls } from '../../cloud';
+import { fetchGuide, guideUrls, logEvent } from '../../cloud';
+import { yen } from '../../lib/plan';
 
 export default function GuidePage() {
   const { id } = useParams();
   const [g, setG] = useState(undefined); // undefined=読み込み中 / null=見つからない
   const [urls, setUrls] = useState({});
   const [big, setBig] = useState(null);
+  const [wanted, setWanted] = useState(false);
 
   useEffect(() => {
     if (!/^[A-Za-z0-9]{10}$/.test(String(id || ''))) { setG(null); return; }
@@ -17,6 +19,7 @@ export default function GuidePage() {
         const d = await fetchGuide(id);
         if (!d) { setG(null); return; }
         setG(d);
+        if (d.locked) logEvent('guide_locked_view', String(d.price || ''));
         setUrls(await guideUrls([d.cover, ...(d.pages || [])]));
         document.title = `${d.title} | Tabibi`;
       } catch { setG(null); }
@@ -38,15 +41,24 @@ export default function GuidePage() {
             <h1>{g.title}</h1>
             {g.author && <p className="gv-by">by {g.author}</p>}
             {g.description && <p className="gv-desc">{g.description}</p>}
-            <p className="gv-count">{(g.pages || []).length}ページ</p>
+            <p className="gv-count">{g.total_pages ?? (g.pages || []).length}ページ{g.price > 0 ? `・有料 ${yen(g.price)}` : ''}</p>
           </section>
           <div className="gv-pages">
             {list.map((p, i) => (
               <figure key={p + i} className="gv-page">
                 {urls[p] ? <img src={urls[p]} alt={i === 0 && g.cover ? '表紙' : `${i}ページ目`} loading={i < 2 ? 'eager' : 'lazy'} onClick={() => setBig(urls[p])} /> : <div className="gv-ph" />}
-                <figcaption>{i === 0 && g.cover ? '表紙' : `${g.cover ? i : i + 1} / ${(g.pages || []).length}`}</figcaption>
+                <figcaption>{i === 0 && g.cover ? '表紙' : `${g.cover ? i : i + 1} / ${g.total_pages ?? (g.pages || []).length}`}</figcaption>
               </figure>
             ))}
+            {g.locked && (
+              <div className="gv-lock">
+                <p>ここから先（あと{(g.total_pages || 0) - (g.pages || []).length}ページ）は有料です。</p>
+                <p className="gv-price">{yen(g.price)}</p>
+                {wanted ? <p>ありがとうございます。お支払いの準備ができたら、このページで買えるようになります。</p> : (
+                  <button type="button" className="gv-buy" onClick={() => { logEvent('guide_buy_interest', String(g.price)); setWanted(true); }}>買いたい（お支払いは準備中）</button>
+                )}
+              </div>
+            )}
           </div>
           <footer className="gv-foot">
             <p>このeガイドブックは「Tabibi」で作られました。</p>
@@ -77,6 +89,7 @@ export default function GuidePage() {
         .gv-page figcaption{font-size:12px;color:var(--sub)}
         .gv-foot{text-align:center;display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid var(--line)}
         .gv-foot p{margin:0;font-size:13px;color:var(--sub)}
+        .gv-buy{font:inherit;font-weight:700;background:var(--accent);color:var(--accent-ink);padding:12px 20px;border-radius:12px;border:0;cursor:pointer}
         .gv-foot a{display:inline-block;margin:0 auto;font-weight:700;background:var(--accent);color:var(--accent-ink);padding:12px 20px;border-radius:12px;text-decoration:none}
         .gv-big{position:fixed;inset:0;background:rgba(0,0,0,.9);display:grid;place-items:center;z-index:50;padding:10px}
         .gv-big img{max-width:100%;max-height:100%;object-fit:contain}
