@@ -593,3 +593,13 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .head-btns{flex:none}
 .head-btns .login-btn{white-space:nowrap;padding:0 10px;gap:4px}
 @media (max-width:400px){h1.logo img{height:26px}.head-btns .login-btn{font-size:12px;height:34px}}
+
+/* 特定商取引法に基づく表記・ログイン画面の下の案内 */
+.legal-h{font-family:var(--display);font-size:20px;margin:0}
+.legal-dl{margin:0;display:flex;flex-direction:column}
+.legal-dl>div{border-top:1px solid var(--line);padding:10px 0}
+.legal-dl dt{font-size:12px;color:var(--sub);font-weight:700}
+.legal-dl dd{margin:2px 0 0;font-size:14px;overflow-wrap:anywhere}
+.legal-dl dd p{margin:0 0 4px}
+.legal-foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;font-size:12px;color:var(--sub)}
+.legal-foot a{color:var(--go)}

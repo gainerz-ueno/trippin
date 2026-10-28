@@ -28,6 +28,8 @@ const LIMITED = ['/api/search', '/api/recommend', '/api/screenshot', '/api/detai
 export async function middleware(req) {
   const { pathname } = req.nextUrl;
   if (pathname === '/login' || pathname === '/api/login') return NextResponse.next();
+  // 特定商取引法に基づく表記は、決済の審査・購入前の確認のため誰でも見られるようにする
+  if (pathname === '/tokushoho') return NextResponse.next();
   // 共有リンク（/s/...）は、パスワードなしで誰でも見られる。見るのに使う地図の鍵とお店の写真も同じ
   if (pathname.startsWith('/s/') || pathname.startsWith('/g/') || pathname === '/api/mapkey') return NextResponse.next();
   if (pathname === '/api/photo') {
