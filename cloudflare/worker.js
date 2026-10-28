@@ -4,6 +4,7 @@
 //   使わない時間が続くとコンテナは眠り、費用はかからない。次に使うときは数秒で起き上がる（AIが描く時間に比べればわずか）
 import { Container } from '@cloudflare/containers';
 import handler from '../.open-next/worker.js';
+import { handleWs, handleStatus } from './call.js';
 
 export class NoteAi extends Container {
   defaultPort = 8080;
@@ -29,6 +30,9 @@ export default {
   async fetch(request, env, ctx) {
     // お店の写真（/api/photo）の転送先は、Vercel のときと同じく1日覚えておく（Google に何度も取りに行かず、費用を抑える）
     const url = new URL(request.url);
+    // タビビコール：電話の会話と電話の状態（Twilio から来る。中身は cloudflare/call.js）
+    if (url.pathname === '/call/ws') return handleWs(request, env, ctx);
+    if (url.pathname === '/call/status') return handleStatus(request, env);
     if (request.method === 'GET' && url.pathname === '/api/photo') {
       const cache = caches.default;
       const hit = await cache.match(request);

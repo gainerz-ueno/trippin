@@ -16,6 +16,7 @@ import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
 import { distanceKm } from './lib/geo';
 const PremiumSheet = dynamic(() => import('./Premium'), { ssr: false });
+const CallSheet = dynamic(() => import('./CallSheet'), { ssr: false });
 
 const KEY = 'trippin.v1';
 
@@ -330,7 +331,7 @@ function Stars({ n }) {
   return <span className="stars" aria-label={`星${n}`}>{'★'.repeat(r)}<span>{'★'.repeat(5 - r)}</span></span>;
 }
 
-function DetailPanel({ id }) {
+function DetailPanel({ id, onCall }) {
   const [d, setD] = useState(detailCache.get(id) || null);
   const [err, setErr] = useState('');
   useEffect(() => {
@@ -376,6 +377,9 @@ function DetailPanel({ id }) {
       {(d.phone || d.website || d.price || d.priceRange) && (
         <section className="facts">
           {d.phone && <p><b>電話</b><a href={`tel:${d.phone.replace(/\s/g, '')}`}>{d.phone}</a></p>}
+          {d.phone && onCall && (
+            <button type="button" className="btn call-btn" onClick={onCall}>AIに予約の電話をしてもらう（タビビコール）</button>
+          )}
           {d.website && <p><b>ホームページ</b><a href={safeUrl(d.website)} target="_blank" rel="noopener noreferrer">{d.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a></p>}
           {(d.price || d.priceRange) && <p><b>価格帯</b><span>{[d.price, d.priceRange].filter(Boolean).join('　')}</span></p>}
         </section>
@@ -812,6 +816,7 @@ export default function Home() {
   const [notes, setNotes] = useState({}); // フォルダごとのeタビセツ
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
   const [premOpen, setPremOpen] = useState(false); // プレミアムの案内
+  const [callFor, setCallFor] = useState(null); // タビビコール（予約の電話）をかけるお店
   useEffect(() => {
     const open = () => setPremOpen(true);
     window.addEventListener('tabibi:premium', open);
@@ -1383,7 +1388,7 @@ export default function Home() {
         <button type="button" className={'detailbar' + (openDetail === 'l:' + it.id ? ' on' : '')} onClick={() => toggleDetail('l:' + it.id)}>
           {openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細を開く'}
         </button>
-        {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} />}
+        {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} onCall={() => setCallFor({ placeId: it.placeId || it.id, name: it.name, altName: it.altName })} />}
       </article>
     );
   }
@@ -1400,6 +1405,7 @@ export default function Home() {
         </span>
       </header>
       {premOpen && <PremiumSheet user={user} onSignIn={() => signIn()} onClose={() => setPremOpen(false)} />}
+      {callFor && <CallSheet place={callFor} user={user} onSignIn={() => signIn()} onClose={() => setCallFor(null)} />}
 
       {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
       {notice && <p className="err notice" role="alert" onClick={() => setNotice('')}>{notice}</p>}

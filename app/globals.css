@@ -603,3 +603,27 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .legal-dl dd p{margin:0 0 4px}
 .legal-foot{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:center;font-size:12px;color:var(--sub)}
 .legal-foot a{color:var(--go)}
+
+/* タビビコール（AIが予約の電話をかける） */
+.call-btn{width:100%;margin-top:6px}
+.call-shop{margin:0;display:flex;flex-direction:column;gap:2px}
+.call-shop span{font-size:13px;color:var(--sub)}
+.call-form{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.call-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--sub);min-width:0}
+.call-form .wide{grid-column:1/-1}
+.call-form input,.call-form select{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;min-width:0;width:100%}
+.call-test{border:1px dashed var(--line);border-radius:12px;padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
+.call-test legend{font-size:12px;color:var(--sub);padding:0 4px}
+.call-res{border:2px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.call-res.booked{border-color:var(--go)}
+.call-res.alternative{border-color:var(--star)}
+.call-res.declined{border-color:var(--accent)}
+.call-st{margin:0;font-size:17px;font-weight:800}
+.call-sum{margin:0;line-height:1.7}
+.call-notes{margin:0;font-size:13px;color:var(--sub);line-height:1.6}
+.call-log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.5}
+.call-log li{padding:6px 8px;border-radius:8px;background:var(--bg)}
+.call-log li b{margin-right:6px;font-size:11px;color:var(--sub)}
+.call-log li.ai{background:var(--teal-tint)}
+.call-past ul{margin:4px 0 0;padding-left:16px;font-size:13px;line-height:1.8}
+@media (max-width:380px){.call-form{grid-template-columns:1fr 1fr}.call-test{grid-template-columns:1fr}}
