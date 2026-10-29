@@ -4,7 +4,7 @@
 // ・回数券（1回300円）を1つ使う。お店が出なかった・話し中だったときは回数を戻す
 import { useEffect, useRef, useState } from 'react';
 import { accessToken } from './note/util';
-import { CALL_PRICE, CALL_MAX_SEC, CALL_LANGS } from './lib/call';
+import { CALL_PRICE, CALL_BLOCK_SEC, CALL_LANGS } from './lib/call';
 
 // テストで話す言語（重ならないように）
 const TEST_LANGS = [...new Map(Object.values(CALL_LANGS).map((x) => [x.lang, x.name])).entries()];
@@ -54,7 +54,8 @@ function Result({ c }) {
   return (
     <div className={'call-res ' + (c.outcome || '')}>
       <p className="call-st">{final && c.status === 'done' ? OUTCOME_JA[c.outcome] || STATUS_JA.done : STATUS_JA[c.status] || STATUS_JA.calling}</p>
-      {!final && <p className="hint">そのまま待ってください（最大{CALL_MAX_SEC / 60}分）。画面を閉じても電話は続き、結果はあとでここに残ります。</p>}
+      {!final && <p className="hint">そのまま待ってください。画面を閉じても電話は続き、結果はあとでここに残ります。</p>}
+      {final && c.tickets > 0 && !c.is_test && <p className="hint">この電話で使ったチケット：{c.tickets}枚</p>}
       {c.result?.summary_ja && <p className="call-sum">{c.result.summary_ja}</p>}
       {c.result?.notes_ja && <p className="call-notes">{c.result.notes_ja}</p>}
       {Array.isArray(c.transcript) && c.transcript.length > 1 && (
@@ -135,7 +136,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
           <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
         </header>
         <p className="call-shop"><b>{place.name}</b>{place.altName && place.altName !== place.name ? <span>{place.altName}</span> : null}</p>
-        <p className="prem-now">AIがお店の言葉で予約の電話をかけて、結果を日本語でお知らせします。1回{CALL_PRICE}円（回数券）・最大{CALL_MAX_SEC / 60}分。お店が出なかったときや話し中のときは、回数を戻します。</p>
+        <p className="prem-now">AIがお店の言葉で予約の電話をかけて、結果を日本語でお知らせします。チケット1枚（{CALL_PRICE}円）で{CALL_BLOCK_SEC / 60}分。{CALL_BLOCK_SEC / 60}分を超えると、{CALL_BLOCK_SEC / 60}分ごとに1枚ずつ使い、チケットがなくなると電話は切れます。お店が出なかったときや話し中のときは、チケットを戻します。</p>
 
         {!user ? (
           <p className="prem-now">使うには <button type="button" className="linkbtn" onClick={onSignIn}>Googleでログイン</button> してください。</p>

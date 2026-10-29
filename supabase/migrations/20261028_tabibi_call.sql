@@ -37,6 +37,7 @@ create table if not exists public.calls (
   duration integer,
   secret_hash text not null,                           -- 電話の仕組み（Cloudflare）だけが知る合言葉のハッシュ
   charged boolean not null default true,               -- 回数を使ったか（つながらなかったら戻す）
+  tickets integer not null default 1 check (tickets between 0 and 10), -- この電話で使ったチケット（3分ごとに1枚）
   is_test boolean not null default false               -- 運営者のテスト（本物のお店にはかけない）
 );
 create index if not exists calls_user_time on public.calls (user_id, created_at desc);
@@ -44,7 +45,8 @@ alter table public.calls enable row level security;
 drop policy if exists "calls_select_own" on public.calls;
 create policy "calls_select_own" on public.calls for select to authenticated using (auth.uid() = user_id);
 revoke all on public.calls from anon, authenticated;
-grant select (id, created_at, updated_at, place_id, place_name, phone, lang, request, status, outcome, result, transcript, duration, charged, is_test)
+alter table public.calls add column if not exists tickets integer not null default 1;
+grant select (id, created_at, updated_at, place_id, place_name, phone, lang, request, status, outcome, result, transcript, duration, charged, tickets, is_test)
   on public.calls to authenticated;
 
 -- 運営者（動作確認用）。回数の制限なし・自分のスマホ（テスト番号）にもかけられる
@@ -133,15 +135,46 @@ begin
     updated_at = now()
   where id = cid;
   if st in ('no_answer', 'busy', 'failed', 'canceled') and c.charged then
-    update public.calls set charged = false where id = cid;
-    insert into public.call_credits (user_id, credits) values (c.user_id, 1)
-    on conflict (user_id) do update set credits = public.call_credits.credits + 1, updated_at = now();
+    update public.calls set charged = false, tickets = 0 where id = cid;
+    insert into public.call_credits (user_id, credits) values (c.user_id, greatest(c.tickets, 1))
+    on conflict (user_id) do update set credits = public.call_credits.credits + excluded.credits, updated_at = now();
   end if;
   return true;
 end;
 $$;
 revoke all on function public.call_update(uuid, text, jsonb) from public;
 grant execute on function public.call_update(uuid, text, jsonb) to anon, authenticated;
+
+-- 3分を過ぎたら、もう1枚チケットを使って話を続ける（電話の仕組みから。合言葉が合うときだけ）
+-- use = false：使わずに「まだ残っているか」だけ答える（締めくくりを始めるかどうかの判断）
+-- use = true ：1枚使う。残っていなければ false（＝電話を切る）
+create or replace function public.call_extend(cid uuid, secret text, use boolean)
+returns boolean
+language plpgsql
+volatile
+security definer
+set search_path = public, extensions
+as $$
+declare
+  c public.calls%rowtype;
+  owner boolean;
+begin
+  select * into c from public.calls where id = cid and secret_hash = encode(digest(coalesce(secret, ''), 'sha256'), 'hex') for update;
+  if not found or c.status not in ('calling', 'ringing', 'talking') or c.tickets >= 10 then return false; end if;
+  owner := public.call_is_owner(c.user_id);
+  if not use then
+    return owner or coalesce((select credits from public.call_credits where user_id = c.user_id), 0) > 0;
+  end if;
+  if not owner then
+    update public.call_credits set credits = credits - 1, updated_at = now() where user_id = c.user_id and credits > 0;
+    if not found then return false; end if;
+  end if;
+  update public.calls set tickets = tickets + 1, updated_at = now() where id = cid;
+  return true;
+end;
+$$;
+revoke all on function public.call_extend(uuid, text, boolean) from public;
+grant execute on function public.call_extend(uuid, text, boolean) to anon, authenticated;
 
 -- 電話の仕組みが会話の前に読む（合言葉が合うときだけ。お店の名前・言語・予約の中身）
 create or replace function public.call_brief(cid uuid, secret text)

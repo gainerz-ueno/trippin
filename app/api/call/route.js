@@ -5,7 +5,7 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { KEY } from '../../lib/places';
 import { gfetch, MOCK } from '../../lib/gfetch';
-import { CALL_LANGS, CALL_MAX_SEC, GREETING, VOICE, cleanRequest, langOfPhone, toE164 } from '../../lib/call';
+import { CALL_BLOCK_SEC, CALL_MAX_BLOCKS, GREETING, VOICE, cleanRequest, langOfPhone, toE164 } from '../../lib/call';
 import { rpcJson, randomSecret, relayTwiml, twilioCreateCall, callUpdate } from '../../lib/call-server';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
 
@@ -36,7 +36,7 @@ function mockGet(id) {
   const status = s < 3 ? 'calling' : s < 6 ? 'ringing' : s < 10 ? 'talking' : 'done';
   const done = status === 'done';
   return json({ ...c, t: undefined, status, outcome: done ? 'alternative' : null,
-    result: done ? { summary_ja: '19時は満席のため、19時30分に2名で予約できました。名前はUENOです。', notes_ja: '席は2時間制だそうです。' } : null,
+    tickets: done ? 1 : 1, result: done ? { summary_ja: '19時は満席のため、19時30分に2名で予約できました。名前はUENOです。', notes_ja: '席は2時間制だそうです。' } : null,
     transcript: done ? [{ who: 'ai', text: '안녕하세요. AI 예약 도우미입니다.' }, { who: 'shop', text: '네 말씀하세요' }, { who: 'ai', text: '7시에 2명 가능할까요?' }, { who: 'shop', text: '7시 반은 돼요' }] : null });
 }
 
@@ -47,7 +47,7 @@ export async function GET(req) {
   if (MOCK) return mockGet(id);
   if (id) {
     if (!/^[0-9a-f-]{36}$/.test(id)) return json({ error: '電話の指定が正しくありません' }, 400);
-    const r = await fetch(`${SUPABASE_URL}/rest/v1/calls?id=eq.${id}&select=id,created_at,place_name,lang,request,status,outcome,result,transcript,duration,charged,is_test`, {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/calls?id=eq.${id}&select=id,created_at,place_name,lang,request,status,outcome,result,transcript,duration,charged,tickets,is_test`, {
       headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${token}` },
       cache: 'no-store',
       signal: AbortSignal.timeout(10000),
@@ -126,7 +126,9 @@ export async function POST(req) {
   const q = `c=${id}&k=${secret}`;
   try {
     const twiml = relayTwiml({ wsUrl: `wss://${host}/call/ws?${q}`, greeting: GREETING[lang], voice: VOICE[lang] });
-    const c = await twilioCreateCall(env, { to: phone, twiml, statusUrl: `${origin}/call/status?${q}`, timeLimit: CALL_MAX_SEC });
+    // 電話の長さの上限：持っているチケット（はじめの1枚＋残り）× 3分。運営者は念のための上限まで
+    const blocks = owner ? CALL_MAX_BLOCKS : Math.min(CALL_MAX_BLOCKS, Math.max(1, Number(me.data.left) || 1));
+    const c = await twilioCreateCall(env, { to: phone, twiml, statusUrl: `${origin}/call/status?${q}`, timeLimit: blocks * CALL_BLOCK_SEC + 15 });
     await callUpdate(id, secret, { call_sid: c.sid, status: 'calling' });
   } catch (e) {
     console.error('[tabibi] call start', String(e?.message || e));

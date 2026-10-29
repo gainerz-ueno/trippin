@@ -2,8 +2,10 @@
 // ・/call/ws     … お店が話したこと（文字）が届く → Claude が現地語で返事 → Twilio が読み上げる
 // ・/call/status … Twilio から「呼び出し中・出た・切れた・出なかった」が届く
 // どちらも、電話を始めたときに作った合言葉（k）が合うときだけ動く。サイトのパスワードはかけない（Twilio が来るため）
-import { CALL_MAX_SEC, GREETING, callSystemPrompt, summaryPrompt } from '../app/lib/call.js';
+import { CALL_BLOCK_SEC, GREETING, callSystemPrompt, summaryPrompt } from '../app/lib/call.js';
 import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from '../app/lib/call-server.js';
+
+const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
 
 const END = '[END]';
 const ID = /^[0-9a-f-]{36}$/;
@@ -82,8 +84,9 @@ export class CallSession {
     this.busy = null; // 返事を作っている途中（話をさえぎられたら止める）
     this.ending = false;
     this.finished = false;
-    // 3分を超えないように、少し手前で締めくくる
-    this.timer = setTimeout(() => this.wrapUp(), (CALL_MAX_SEC - 20) * 1000);
+    // 3分ごとにチケットを1枚使う。区切りの20秒前に「次の1枚が残っているか」を見て、残っていなければ締めくくる
+    this.timers = [];
+    this.block(1);
   }
 
   send(o) {
@@ -147,7 +150,22 @@ export class CallSession {
     if (done) this.hangUpAfter(spoken);
   }
 
-  // 締めくくり（3分の少し手前）：お礼を言って切る
+  // n 枚目の3分の区切り
+  block(n) {
+    const end = n * CALL_BLOCK_SEC * 1000;
+    const wait = (ms) => Math.max(0, this.start + ms - Date.now());
+    this.timers.push(setTimeout(async () => {
+      if (this.ending || this.finished) return;
+      if (!(await extend(this.p, false))) this.wrapUp();
+    }, wait(end - 20000)));
+    this.timers.push(setTimeout(async () => {
+      if (this.ending || this.finished) return;
+      if (await extend(this.p, true)) this.block(n + 1);
+      else this.send({ type: 'end', handoffData: '{"reason":"no_tickets"}' });
+    }, wait(end)));
+  }
+
+  // 締めくくり（チケットの残りがないとき、3分の区切りの少し手前）：お礼を言って切る
   wrapUp() {
     if (this.ending || this.finished) return;
     this.history.push({ role: 'user', content: '(The call is about to reach its time limit. Confirm what was agreed in one short sentence, thank them, and end with [END].)' });
@@ -164,7 +182,7 @@ export class CallSession {
   finish() {
     if (this.finished) return;
     this.finished = true;
-    clearTimeout(this.timer);
+    this.timers.forEach(clearTimeout);
     if (this.busy) this.busy.abort();
     this.ctx.waitUntil(this.summarize());
   }
