@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { fetchGuide, guideUrls, logEvent } from '../../cloud';
-import { yen } from '../../lib/plan';
+const yen = (n) => Number(n).toLocaleString('ja-JP') + '円';
 
 export default function GuidePage() {
   const { id } = useParams();

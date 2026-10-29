@@ -1,4 +1,3 @@
-import { PLAN, yen } from '../lib/plan';
 
 export const metadata = { title: 'Tabibi' };
 
@@ -19,7 +18,7 @@ export default async function Login({ searchParams }) {
       </form>
       <section className="panel">
         <h2>Tabibi（タビビ）とは</h2>
-        <p className="hint">旅行前に行きたいお店・名所をGoogleマップから探して候補リストにまとめ、旅のしおり（eタビセツ）やeガイドブックを作れる旅行アプリです。有料のプレミアム（{yen(PLAN.PRICE_MONTH)}／月・{yen(PLAN.PRICE_YEAR)}／年）と、旅行先のお店へAIが電話予約を代行する「タビビコール」（1回300円）があります。</p>
+        <p className="hint">旅行前に行きたいお店・名所をGoogleマップから探して候補リストにまとめ、旅のしおり（eタビセツ）やeガイドブックを作れる旅行アプリです。旅行先のお店へAIが電話予約を代行する「タビビコール」（1回300円）もあります。</p>
       </section>
       <footer className="legal-foot">
         <a href="/tokushoho">特定商取引法に基づく表記</a>

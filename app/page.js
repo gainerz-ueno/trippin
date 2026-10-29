@@ -15,7 +15,6 @@ import { logEvent, supa, setUser as setCloudUser, signIn, signOut, pullItems, up
 import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
 import { distanceKm } from './lib/geo';
-const PremiumSheet = dynamic(() => import('./Premium'), { ssr: false });
 
 const KEY = 'trippin.v1';
 
@@ -24,11 +23,10 @@ const COUNTRY_LIST = [
   ['TH', 'タイ'], ['SG', 'シンガポール'], ['MY', 'マレーシア'], ['PH', 'フィリピン'], ['JP', '日本'],
 ];
 // 基本カテゴリー（本人が決めた12個。色は地図のピンにも使う）
-// 「マッサージ」は本人の一覧にないので基本から外した。前に「マッサージ」で登録したお店は、自分で作ったカテゴリーとして残る
 const BASE_CATS = [
   ['観光', '#2F7D6B'], ['朝市', '#C9822B'], ['夜市', '#5B4BA8'], ['朝食', '#E0A526'], ['昼食', '#D9692E'],
   ['夕食', '#B8432F'], ['夜食', '#3F4F86'], ['おやつ', '#D45C8C'], ['カフェ', '#8A5A3C'], ['酒場', '#8E2F4F'],
-  ['買物', '#2E7FB8'], ['美容', '#C2569E'],
+  ['買物', '#2E7FB8'], ['美容', '#C2569E'], ['マッサージ', '#4E9A5B'],
 ];
 const CUSTOM_COLOR = '#6B7A8C';
 const CATS_KEY = 'trippin.cats';
@@ -811,12 +809,6 @@ export default function Home() {
   const [photoVer, setPhotoVer] = useState(0);
   const [notes, setNotes] = useState({}); // フォルダごとのeタビセツ
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
-  const [premOpen, setPremOpen] = useState(false); // プレミアムの案内
-  useEffect(() => {
-    const open = () => setPremOpen(true);
-    window.addEventListener('tabibi:premium', open);
-    return () => window.removeEventListener('tabibi:premium', open);
-  }, []);
   const [shelfKey, setShelfKey] = useState(0); // わたしのeタビセツを読み直す合図
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
@@ -1393,13 +1385,11 @@ export default function Home() {
       <header className="apphead">
         <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
         <span className="head-btns">
-          <button type="button" className="login-btn prem-btn" onClick={() => setPremOpen(true)}><i aria-hidden="true">★</i>プレミアム</button>
           {user
             ? <button type="button" className="login-btn" onClick={() => signOut()}><IcUser size={16} />ログアウト</button>
             : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}
         </span>
       </header>
-      {premOpen && <PremiumSheet user={user} onSignIn={() => signIn()} onClose={() => setPremOpen(false)} />}
 
       {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
       {notice && <p className="err notice" role="alert" onClick={() => setNotice('')}>{notice}</p>}

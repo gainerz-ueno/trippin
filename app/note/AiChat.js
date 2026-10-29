@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, SIZES } from './NoteCanvas';
 import { TASTES } from './tastes';
 import { FONTS } from './fonts';
-import { PLAN } from '../lib/plan';
 import { logEvent } from '../cloud';
 
 const TYPES = ['トリセツ風ポスター', '旅の雑誌の1ページ', '絵日記', '映画のポスター風'];
@@ -109,7 +108,7 @@ export default function ChatFlow(props) {
     ui: () => (
       <div className="ac-modes">
         <button type="button" onClick={() => { setMode('tpl'); save({ mode: 'tpl' }); answer('mode', 'テンプレートで作る'); }}><b>テンプレートで作る</b><small>すぐできる・何枚でも</small></button>
-        <button type="button" onClick={() => { setMode('ai'); save({ mode: 'ai' }); answer('mode', 'AIで作る'); }}><b>AIで作る</b><small>写真と文字をAIがイラストに仕上げる（無料は合計{PLAN.AI_FREE_TOTAL}回・プレミアムは月{PLAN.AI_MONTH}回）</small></button>
+        <button type="button" onClick={() => { setMode('ai'); save({ mode: 'ai' }); answer('mode', 'AIで作る'); }}><b>AIで作る</b><small>写真と文字をAIがイラストに仕上げる（1日3回まで）</small></button>
       </div>
     ),
   });

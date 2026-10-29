@@ -5,7 +5,6 @@ import { photoHooks, listPhotos, listAllPhotos, setCloudId, putFromCloud } from 
 
 import { SUPABASE_URL, SUPABASE_KEY } from './lib/supabase-public';
 import { mockClient } from './lib/mock-supabase';
-import { PLAN, validGuidePrice } from './lib/plan';
 const BUCKET = 'photos';
 // テスト用モード（本物のSupabaseを使わない）。本番のビルドでは付けない
 // まちがって本番で付けても動かないよう、自分のパソコン（localhost）で開いたときだけ
@@ -248,19 +247,11 @@ export async function saveGuide(g) {
   const row = {
     id: g.id || shareId(), user_id: uid, title: String(g.title || '').slice(0, 60) || '旅のeガイドブック',
     author: String(g.author || '').slice(0, 30), description: String(g.description || '').slice(0, 300),
-    cover_id: g.cover_id || null, page_ids: (g.page_ids || []).slice(0, PLAN.GUIDE_MAX_PAGES), published: !!g.published,
-    // 無料で見せる／有料（作り手が値段を決める。0＝無料）。有料のときは、はじめの free_pages ページだけ無料で見せる
-    price: validGuidePrice(Number(g.price)) ? Number(g.price) : 0,
-    free_pages: Math.max(0, Math.min(PLAN.GUIDE_MAX_PAGES, Math.floor(Number(g.free_pages) || 0))),
+    cover_id: g.cover_id || null, page_ids: (g.page_ids || []).slice(0, 60), published: !!g.published,
     updated_at: new Date().toISOString(),
   };
-  let { error } = await supa().from('guidebooks').upsert(row);
-  // SQL（20261027_premium.sql）を流す前の本番：値段の列がまだないので、無料のときは値段なしで保存し直す
-  if (error && /price|free_pages/.test(error.message || '') && !row.price) {
-    const { price, free_pages, ...old } = row;
-    ({ error } = await supa().from('guidebooks').upsert(old));
-  }
-  if (error) throw new Error(row.price ? '有料の設定を保存できませんでした（運営者のデータベースの準備待ち）。いったん無料で保存してください' : '保存できませんでした。もう一度試してください');
+  const { error } = await supa().from('guidebooks').upsert(row);
+  if (error) throw new Error('保存できませんでした。もう一度試してください');
   return row;
 }
 export async function deleteGuide(id) {
@@ -276,9 +267,7 @@ export async function fetchGuide(id) {
 
 // ---- わからないことを測るための記録（決まった名前だけ。ログインしている人は1日1回まで数える） ----
 // 失敗しても画面は止めない
-export function logEvent(ev, detail = '') {
-  try { supa().rpc('log_event', { ev, detail: String(detail || '').slice(0, 40) }).then(() => {}, () => {}); } catch {}
-}
+export function logEvent() {} // 記録はしない
 
 // ---- お土産（旅のあとに、買ったものを記録） ----
 // 1つ＝1行。写真は小さくしてデータの中に入れる（共有リンク・eガイドブックでもそのまま見せられるように）

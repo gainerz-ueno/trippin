@@ -1,10 +1,9 @@
 // 「AIで作る」eタビセツ：写真と文字をまとめて画像AI（Gemini）に渡し、1枚の絵として描かせる
 // ※ 絵の切り貼り・縮小に sharp を使うため、この部分は Cloudflare の「コンテナ」（noteai-container/）の中で動かす。
 //   route.js は、届いた注文をそのままコンテナへ回すだけ。中身を直すときは、このファイルを直す。
-// ・Googleでログインしている人だけ。回数は無料／プレミアムで決まる（app/lib/plan.js。数えるのはSupabaseの ai_quota_use。失敗したら回数を戻す）
+// ・Googleでログインしている人だけ。回数は1人1日3回（数えるのはSupabaseの use_ai_credit。失敗したら回数を戻す）
 // ・コンテナの中では Node の決まりで、読み込むファイル名に .js まで書く
 import sharp from 'sharp';
-import { PLAN } from '../../lib/plan.js';
 import { json, rpc, bearer, isUnlimited } from './credits.js';
 import { gfetch, MOCK } from '../../lib/gfetch.js';
 const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
@@ -422,7 +421,7 @@ export async function POST(req) {
   return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
 }
 
-// 回数を1つ使って絵を描く（回数は app/lib/plan.js。うまく描けなかったら回数を戻す）
+// 回数を1つ使って絵を描く（1人1日3回。うまく描けなかったら回数を戻す）
 async function run(req, job) {
   if (!GKEY()) return json({ error: '「AIで作る」の設定がまだ終わっていません（運営者の設定待ち）' }, 500);
   const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
@@ -433,15 +432,15 @@ async function run(req, job) {
     if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
     return new Response(o.jpg, { headers: imgHeaders(o) });
   }
-  const r = await rpc('ai_quota_use', token);
+  const r = await rpc('use_ai_credit', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);
   const ticket = await r.json();
-  if (!ticket) return json({ error: `「AIで作る」の回数を使い切りました（無料は合計${PLAN.AI_FREE_TOTAL}回、プレミアムは月${PLAN.AI_MONTH}回・年払いは年${PLAN.AI_YEAR}回。直すときも1回に数えます）`, quota: true }, 429);
+  if (!ticket) return json({ error: '「AIで作る」は1日3回までです（直すときも1回に数えます）。また明日使ってください', quota: true }, 429);
 
   const out = await make();
   if (!out.ok) {
-    await rpc('ai_quota_refund', token, { ticket }).catch(() => {});
+    await rpc('refund_ai_credit', token, { ticket }).catch(() => {});
     return json({ error: 'AIがうまく描けませんでした。もう一度試してください（回数は減っていません）' }, 502);
   }
   return new Response(out.jpg, { headers: imgHeaders(out) });
