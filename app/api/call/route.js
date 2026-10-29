@@ -108,7 +108,7 @@ export async function POST(req) {
     if (!phone) return json({ error: 'このお店の電話番号がGoogleマップに載っていませんでした' }, 400);
   }
   const L = langOfPhone(phone);
-  if (!L) return json({ error: `この国のお店にはまだ電話できません（いま使えるのは${Object.values(CALL_LANGS).filter((x) => !x.testOnly).map((x) => x.name.replace(/語.*$/, '')).join('・')}）` }, 400);
+  if (!L) return json({ error: 'この国のお店にはまだ電話できません' }, 400);
   if (L.testOnly && !isTest) return json({ error: '日本のお店には電話できません' }, 400);
   // テストのときは、話す言語を選べる（自分のスマホで韓国語の会話を試すため）
   const lang = isTest && typeof body?.testLang === 'string' && VOICE[body.testLang] ? body.testLang : L.lang;

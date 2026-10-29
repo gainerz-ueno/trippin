@@ -4,7 +4,10 @@
 // ・回数券（1回300円）を1つ使う。お店が出なかった・話し中だったときは回数を戻す
 import { useEffect, useRef, useState } from 'react';
 import { accessToken } from './note/util';
-import { CALL_PRICE, CALL_MAX_SEC } from './lib/call';
+import { CALL_PRICE, CALL_MAX_SEC, CALL_LANGS } from './lib/call';
+
+// テストで話す言語（重ならないように）
+const TEST_LANGS = [...new Map(Object.values(CALL_LANGS).map((x) => [x.lang, x.name])).entries()];
 
 const STATUS_JA = {
   calling: '電話をかけています…',
@@ -164,10 +167,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
                     <label>テストの番号<input value={form.testPhone} inputMode="tel" placeholder="+8190..." onChange={set('testPhone')} /></label>
                     <label>話す言語
                       <select value={form.testLang} onChange={set('testLang')}>
-                        <option value="ko-KR">韓国語</option>
-                        <option value="cmn-TW">中国語（台湾）</option>
-                        <option value="vi-VN">ベトナム語</option>
-                        <option value="ja-JP">日本語</option>
+                        {TEST_LANGS.map(([v, n]) => <option key={v} value={v}>{n}</option>)}
                       </select>
                     </label>
                   </fieldset>

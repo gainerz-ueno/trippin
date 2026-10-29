@@ -26,7 +26,7 @@ create table if not exists public.calls (
   place_id text not null default '' check (char_length(place_id) <= 300),
   place_name text not null default '' check (char_length(place_name) <= 200),
   phone text not null check (phone ~ '^\+[0-9]{6,16}$'),
-  lang text not null check (lang in ('ko-KR', 'cmn-TW', 'vi-VN', 'ja-JP', 'en-US')),
+  lang text not null check (lang ~ '^[a-z]{2,3}-[A-Z]{2}$'),
   request jsonb not null default '{}'::jsonb,          -- 日時・人数・名前・ひとこと
   status text not null default 'calling'
     check (status in ('calling', 'ringing', 'talking', 'done', 'no_answer', 'busy', 'failed', 'canceled')),
