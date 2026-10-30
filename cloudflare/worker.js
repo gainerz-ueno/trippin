@@ -16,6 +16,8 @@ export class NoteAi extends Container {
     super(ctx, env);
     // コンテナに渡すのは、絵を描くのに要る鍵だけ
     this.envVars = { GEMINI_API_KEY: env.GEMINI_API_KEY || '', PORT: '8080', NODE_ENV: 'production' };
+    // 無料の人の「AIで作る」に使う安いAIの名前（入れていなければ draw.js の決まった名前）
+    if (env.NOTEAI_MODEL_FREE) this.envVars.NOTEAI_MODEL_FREE = env.NOTEAI_MODEL_FREE;
   }
 
   // 届いた注文をコンテナに渡す。

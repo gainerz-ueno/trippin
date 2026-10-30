@@ -8,7 +8,12 @@ import { json, rpc, bearer, isUnlimited } from './credits.js';
 import { gfetch, MOCK } from '../../lib/gfetch.js';
 const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
 
+// 絵を描くAI
+// ・運営者（回数の制限なし）：これまでどおりの高いAI（Nano Banana Pro）
+// ・ほかの人（無料・1日3回）：安いAI（Nano Banana 2 = Gemini 3.1 Flash Image。2Kで1枚 約$0.101。Proは約$0.134）
+//   環境変数 NOTEAI_MODEL_FREE で変えられる。安いAIが使えない（名前が違う・400）ときは、自動で高いAIに切り替えて描く
 const MODEL = 'gemini-3-pro-image';
+const MODEL_FREE = () => process.env.NOTEAI_MODEL_FREE || 'gemini-3.1-flash-image';
 const GEMINI = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 const STYLES = {
@@ -305,7 +310,7 @@ async function sameish(a, b, w, h) {
 }
 
 const RATIOS = [['1:1', 1], ['4:5', 0.8], ['3:4', 0.75], ['2:3', 2 / 3], ['9:16', 0.5625], ['5:4', 1.25], ['4:3', 4 / 3], ['3:2', 1.5], ['16:9', 16 / 9]];
-async function editArea(base, mark, box, instruction) {
+async function editArea(base, mark, box, instruction, model) {
   const bb = Buffer.from(base, 'base64');
   const { width: W, height: H } = await sharp(bb).metadata();
   // 囲んだ範囲のまわりに少し余白をとり、AIが描ける縦横比に合わせる
@@ -331,7 +336,7 @@ async function editArea(base, mark, box, instruction) {
     const parts = [{ text: areaPrompt({ instruction, concrete: u?.en, retry: t > 0 }) },
       { text: 'FIRST image (the part to edit):' }, { inlineData: { mimeType: 'image/jpeg', data: c1.toString('base64') } },
       { text: 'SECOND image (same part, red outline shows what to change):' }, { inlineData: { mimeType: 'image/jpeg', data: c2.toString('base64') } }];
-    const o = await gen(parts, ar, true);
+    const o = await gen(parts, ar, true, model);
     if (!o.ok) { if (fixed) break; return o; }
     fixed = await sharp(o.raw).resize(w, h, { fit: 'fill' }).removeAlpha().raw().toBuffer();
     diff = await sameish(fixed, orig, w, h);
@@ -384,9 +389,9 @@ export async function POST(req) {
     const b = body.box && typeof body.box === 'object' ? body.box : null;
     const n = (v) => Math.max(0, Math.min(100, Math.round(Number(v) || 0)));
     const box = mark && b ? { x0: n(b.x0), y0: n(b.y0), x1: n(b.x1), y1: n(b.y1) } : null;
-    if (box) return run(req, () => editArea(base, mark, box, instruction));
+    if (box) return run(req, (model) => editArea(base, mark, box, instruction, model));
     const parts = [{ text: editPrompt({ instruction }) }, { inlineData: { mimeType: 'image/jpeg', data: base } }];
-    return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
+    return run(req, (model) => gen(parts, size === 'story' ? '9:16' : '4:5', false, model));
   }
   const spotsIn = Array.isArray(body.spots) ? body.spots.slice(0, 6) : [];
   if (!isCover && (!tpl || !spotsIn.length)) return json({ error: 'お店とデザインをえらんでください' }, 400);
@@ -418,17 +423,17 @@ export async function POST(req) {
   if (d.cover) parts.push({ text: 'MAIN photo of the trip (do not label it):' }, { inlineData: { mimeType: 'image/jpeg', data: d.cover } });
   d.people.forEach((x, i) => parts.push({ text: `"us" reference photo ${i + 1} - the travelers (do not label it):` }, { inlineData: { mimeType: 'image/jpeg', data: x } }));
   if (!isCover) d.spots.forEach((p) => p.imgs.forEach((x) => parts.push({ text: `Reference photo for the place 「${p.name}」 (do not label it):` }, { inlineData: { mimeType: 'image/jpeg', data: x } })));
-  return run(req, () => gen(parts, size === 'story' ? '9:16' : '4:5'));
+  return run(req, (model) => gen(parts, size === 'story' ? '9:16' : '4:5', false, model));
 }
 
 // 回数を1つ使って絵を描く（1人1日3回。うまく描けなかったら回数を戻す）
 async function run(req, job) {
   if (!GKEY()) return json({ error: '「AIで作る」の設定がまだ終わっていません（運営者の設定待ち）' }, 500);
-  const make = async () => { try { return await job(); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
+  const make = async (model) => { try { return await job(model); } catch (e) { console.error('noteai', e); return { ok: false, error: String(e?.message || e) }; } };
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) {
-    const o = await make();
+    const o = await make(MODEL);
     if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
     return new Response(o.jpg, { headers: imgHeaders(o) });
   }
@@ -438,7 +443,7 @@ async function run(req, job) {
   const ticket = await r.json();
   if (!ticket) return json({ error: '「AIで作る」は1日3回までです（直すときも1回に数えます）。また明日使ってください', quota: true }, 429);
 
-  const out = await make();
+  const out = await make(MODEL_FREE());
   if (!out.ok) {
     await rpc('refund_ai_credit', token, { ticket }).catch(() => {});
     return json({ error: 'AIがうまく描けませんでした。もう一度試してください（回数は減っていません）' }, 502);
@@ -451,16 +456,25 @@ function imgHeaders(o) {
   return h;
 }
 
-async function gen(parts, aspect, rawOut) {
+// 安いAIの名前が違う・使えないときの答え（このときは高いAIで描き直す）
+const modelMissing = (status, d) => status === 404 || (status === 400 && /model|not found|not supported|invalid/i.test(d?.error?.message || ''));
+
+async function gen(parts, aspect, rawOut, model = MODEL) {
   try {
-    const r = await gfetch(`${GEMINI}/${MODEL}:generateContent`, {
+    const call = (m) => gfetch(`${GEMINI}/${m}:generateContent`, {
       method: 'POST',
       headers: { 'x-goog-api-key': GKEY(), 'content-type': 'application/json' },
       body: JSON.stringify({ contents: [{ role: 'user', parts }], generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspect, imageSize: '2K' } } }),
     }, 100000);
-    const d = await r.json().catch(() => ({}));
+    let r = await call(model);
+    let d = await r.json().catch(() => ({}));
+    if (model !== MODEL && modelMissing(r.status, d)) {
+      console.error('[tabibi] noteai model fallback', model, r.status, d?.error?.message);
+      r = await call(MODEL);
+      d = await r.json().catch(() => ({}));
+    }
     // 1回あたりの本当の量を測る（docs/マネタイズ根拠.md「わからないこと」：文字の入力トークン）。Cloudflare のコンテナのログで見る
-    if (d.usageMetadata) console.log('[tabibi] noteai usage', JSON.stringify({ in: d.usageMetadata.promptTokenCount, out: d.usageMetadata.candidatesTokenCount, imgs: parts.filter((p) => p.inlineData).length }));
+    if (d.usageMetadata) console.log('[tabibi] noteai usage', JSON.stringify({ model, in: d.usageMetadata.promptTokenCount, out: d.usageMetadata.candidatesTokenCount, imgs: parts.filter((p) => p.inlineData).length }));
     const part = d.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
     if (!part) return { ok: false, error: d.error?.message || d.candidates?.[0]?.finishReason || 'no image' };
     if (rawOut) return { ok: true, raw: Buffer.from(part.inlineData.data, 'base64') };
