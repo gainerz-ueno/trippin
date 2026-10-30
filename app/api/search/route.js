@@ -18,8 +18,8 @@ export async function POST(req) {
     const pageToken = typeof body.pageToken === 'string' && body.pageToken.length <= 4000 ? body.pageToken : null;
     const jaOnly = body.jaOnly === true;
     const near = latLng(body.near);
-    // 国の指定は任意。選んでいないときは、場所・キーワードの地名から国を当てる
-    // （当たればGoogleへの検索は1回。当たらなければ日本語＋現地の言語の2回になる）
+    // 国を選んでいないときは、場所・キーワードの地名から国を当てる。
+    // 当たらないときは検索しない（国を決めてもらってから、Googleへの検索は1回だけにする）
     const country = countryOf(body.country) || (jaOnly ? '' : guessCountry(area, keyword));
     const opts = { jaOnly: !!jaOnly };
     // 宿泊先の近くでさがす：宿泊先から3kmを中心に探す（範囲外のお店も少しは出る）
@@ -28,13 +28,17 @@ export async function POST(req) {
       : {};
     const textQuery = [keyword, area].filter(Boolean).join(' ');
     if (!textQuery) return bad('キーワードか場所を入力してください');
+    // 宿泊先の近くでさがすときは国がわからなくても、日本語の1回だけで探せる
+    if (!country && !near && !jaOnly && !pageToken) {
+      return Response.json({ error: '国をえらんでから、さがしてください', needCountry: true }, { status: 400 });
+    }
 
-    // レビュー件数で絞るとき：1ページずつ取り、10件そろったら止める（最大3ページ）
+    // レビュー件数で絞るとき：1ページずつ取り、10件そろったら止める（自動で取るのは次の1ページまで＝最大2回）
     // 続きは「もっと見る」で同じように取る
     if (minReviews > 0) {
       let all = [];
       let tokens = decodeToken(pageToken);
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 2; i++) {
         const { places, next } = await searchPage(textQuery, minRating, tokens, country, extra, opts);
         all = all.concat(places.filter((p) => p.reviews >= minReviews));
         tokens = next;

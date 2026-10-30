@@ -90,30 +90,12 @@ export async function detailsIn(id, lang) {
   }
 }
 
-// 国を選んでいないとき、地名から国を当てる（当たればGoogleへの検索は1回で済む）
-// ・「場所」の欄：国名も街の名前も使う
-// ・「キーワード」の欄：街の名前だけ（「韓国料理」「タイ料理」のような料理名で国を決めつけないため）
-const CITY = [
-  ['TW', '台湾|臺灣|Taiwan', '台北|臺北|台中|臺中|台南|臺南|高雄|九份|淡水|士林|西門|永康街|花蓮|基隆|新北|桃園|宜蘭|墾丁|日月潭|阿里山|Taipei|Kaohsiung|Tainan|Taichung'],
-  ['KR', '韓国|Korea', 'ソウル|釜山|明洞|弘大|江南|東大門|仁川|済州|景福宮|梨泰院|Seoul|Busan'],
-  ['HK', '香港|Hong ?Kong', '九龍|尖沙咀|旺角|銅鑼湾|中環|Kowloon'],
-  ['VN', 'ベトナム|Vietnam|Viet Nam', 'ホーチミン|ハノイ|ダナン|ホイアン|フエ|ニャチャン|フーコック|Ho Chi Minh|Hanoi|Da ?Nang|Hoi An'],
-  ['TH', 'タイ|Thailand', 'バンコク|プーケット|チェンマイ|パタヤ|アユタヤ|Bangkok|Phuket|Chiang ?Mai'],
-  ['SG', 'シンガポール|Singapore', 'シンガポール|Singapore'],
-  ['MY', 'マレーシア|Malaysia', 'クアラルンプール|ペナン|コタキナバル|ランカウイ|Kuala Lumpur|Penang'],
-  ['PH', 'フィリピン|Philippines', 'マニラ|セブ|ボラカイ|Manila|Cebu'],
-  ['CN', '中国|China', '上海|北京|広州|深圳|成都|西安|杭州|Shanghai|Beijing'],
-].map(([c, nation, city]) => [c, new RegExp(nation + '|' + city, 'i'), new RegExp(city, 'i')]);
-export function guessCountry(area, keyword) {
-  const pick = (list) => (list.length === 1 ? list[0] : '');
-  const byArea = pick(CITY.filter(([, all]) => all.test(area || '')).map(([c]) => c));
-  if (byArea || area) return byArea;
-  return pick(CITY.filter(([, , city]) => city.test(keyword || '')).map(([c]) => c));
-}
+// 地名から国を当てる部分は、画面（さがす前に国を決める）でも使うので別のファイルにした
+export { guessCountry } from './country-guess.js';
 
-// 1ページ分を返す
-// ・国を選んでいるとき：現地の言語で1回だけ検索（日本語表記はAIで作る）→ Googleへの検索は1回
-// ・国を選んでいないとき：日本語で検索して国を判定 → 現地の言語でもう1回（現地の表記を取るため）
+// 1ページ分を返す（Googleへの検索は、どの場合も1回だけ）
+// ・国がわかっているとき：現地の言語で1回（日本語の表記はAIで作る）
+// ・国がわからないとき（宿泊先の近く・AIナビ）：日本語で1回。現地の表記は「候補に追加」したお店だけ後で取る（/api/localname）
 // ・opts.jaOnly：日本語の1回だけ（AIナビの近く探し用。現地の表記は選ばれたお店だけ後で取る）
 export async function searchPage(textQuery, minRating, tokens, country, extra = {}, opts = {}) {
   const lang0 = LANG[country];
@@ -129,26 +111,14 @@ export async function searchPage(textQuery, minRating, tokens, country, extra = 
   const ja = await searchOnce(textQuery, minRating, tokens?.ja, 'ja', country, extra);
   const jaPlaces = (ja.places || []).filter((p) => !COUNTRIES[country] || countryOf(p) === country);
   const lang = tokens?.lang || lang0 || LANG[mostCommonCountry(jaPlaces)] || 'en';
-
-  if (opts.jaOnly) return { places: jaPlaces.map((p) => shape(p, null, 'ja')), next: null, lang };
-
-  let localNext = null;
-  const localMap = new Map();
-  if (lang !== 'ja') {
-    const local = await searchOnce(textQuery, minRating, tokens?.local, lang, country, extra).catch(() => ({ places: [] }));
-    localNext = local.nextPageToken || null;
-    for (const lp of local.places || []) localMap.set(lp.id, lp);
-    // 現地の言語の検索に出てこなかったお店は、ここでは取りに行かない（1件ごとに Place Details Pro の料金がかかる）。
-    // 「候補に追加」したお店だけ /api/localname で現地の表記を取る（docs/マネタイズ根拠.md）
-  }
-
   const places = jaPlaces.map((p) => {
-    const lp = localMap.get(p.id);
-    const out = shape(p, lp, lang);
-    if (lang !== 'ja' && !lp) out.needLocal = lang;
+    const out = shape(p, null, 'ja');
+    // 現地の言語で2回目の検索はしない（費用が2倍になるため）。現地の表記は追加したときだけ取る
+    const local = LANG[countryOf(p)] || lang;
+    if (!opts.jaOnly && local !== 'ja') out.needLocal = local;
     return out;
   });
-  const next = ja.nextPageToken ? { ja: ja.nextPageToken, local: localNext, lang } : null;
+  const next = ja.nextPageToken ? { ja: ja.nextPageToken, lang } : null;
   return { places, next, lang };
 }
 
@@ -254,7 +224,8 @@ async function geminiJapanese(jobs) {
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+          // 考える量は最小（gemini-3.8-flash は low が最小。考えた分も出力の料金になる）。出力の上限は考える分も込み
+          generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 4096, thinkingConfig: { thinkingLevel: 'low' } },
         }),
         cache: 'no-store',
       },
