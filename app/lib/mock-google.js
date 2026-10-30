@@ -97,6 +97,12 @@ async function gemini(url, body) {
   const parts = body?.contents?.[0]?.parts || [];
   const text = parts.map((p) => p.text || '').join('\n');
   const reply = (o) => json({ candidates: [{ content: { parts: [{ text: typeof o === 'string' ? o : JSON.stringify(o) }] } }] });
+  // 本物と同じく、gemini-3.8-flash に thinkingLevel "minimal" を送るとエラー（本物は low が最小）
+  const tl = body?.generationConfig?.thinkingConfig?.thinkingLevel;
+  if (process.env.TABIBI_MOCK_LOG === '1' && /flash:/.test(url)) console.log('[mock-google] gemini thinking', tl, 'max', body?.generationConfig?.maxOutputTokens);
+  if (/gemini-3\.8-flash/.test(url) && tl === 'minimal') return json({ error: { code: 400, message: 'thinking level minimal is not supported (mock)' } }, 400);
+  // 安いAIが使えないときの切り替えを確かめる用（NOTEAI_MODEL_FREE=mock-missing-model）
+  if (/mock-missing-model/.test(url)) return json({ error: { code: 404, message: 'models/mock-missing-model is not found (mock)' } }, 404);
   if (/image/.test(url) && body?.generationConfig?.responseModalities?.includes('IMAGE')) {
     // Cloudflare の Worker には sharp が無いので、作り置きの絵（縦長2種×色2種）を返す。縦横の比が合わないときは 4:5 を使う
     const ar = body.generationConfig.imageConfig?.aspectRatio || '4:5';
@@ -124,7 +130,10 @@ async function gemini(url, body) {
 
 export async function mockGoogle(url, opts = {}) {
   mockCalls.push(url.replace(/key=[^&]+/, 'key=…'));
-  if (process.env.TABIBI_MOCK_LOG === '1') console.log('[mock-google]', url.replace(/key=[^&]+/, 'key=…').slice(0, 120));
+  if (process.env.TABIBI_MOCK_LOG === '1') {
+    const fm = opts.headers && (opts.headers['X-Goog-FieldMask'] || opts.headers['x-goog-fieldmask']);
+    console.log('[mock-google]', url.replace(/key=[^&]+/, 'key=…').slice(0, 120), fm ? `mask=${fm}` : '');
+  }
   const u = new URL(url);
   const mask = (opts.headers && (opts.headers['X-Goog-FieldMask'] || opts.headers['x-goog-fieldmask'])) || '';
   let body = null;

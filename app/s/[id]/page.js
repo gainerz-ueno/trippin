@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import MapView from '../../MapView';
+import PhotoThumb, { AUTO_PHOTOS } from '../../PhotoThumb';
 import { fetchShared, fetchSharedExtras } from '../../cloud';
 import PlanView, { dayStops, dayLabel } from '../../PlanView';
 import { SouvenirCard } from '../../Souvenirs';
@@ -118,7 +119,7 @@ export default function SharedFolder() {
               <article key={it.id} className={'item' + (it.done ? ' done' : '')}>
                 <div className="item-top">
                   <div className="thumbwrap side">
-                    {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+                    <PhotoThumb name={it.photo} auto={i < AUTO_PHOTOS} />
                     <span className="no" style={{ '--c': catColor(it.category) }}>{i + 1}</span>
                     <div className="side-acts">
                       <a href={mapsLink(it)} target="_blank" rel="noopener noreferrer">Googleマップ</a>

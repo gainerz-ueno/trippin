@@ -4,6 +4,8 @@ import { NaverLinks, inKorea } from './naver';
 import { CatIcon, CAT_SEARCH, IcSearch, IcBookmark, IcCheckCircle, IcCheck, IcPin, IcPen, IcHotel, IcPlane, IcUser, IcDown, IcRight, IcMore } from './icons';
 import dynamic from 'next/dynamic';
 import MapView from './MapView';
+import PhotoThumb, { AUTO_PHOTOS, Cam } from './PhotoThumb';
+import { guessCountry } from './lib/country-guess';
 // eタビセツ（開いたときだけ読み込む）
 const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
 const GuideMaker = dynamic(() => import('./note/GuideMaker'), { ssr: false });
@@ -331,6 +333,26 @@ function Stars({ n }) {
 function DetailPanel({ id }) {
   const [d, setD] = useState(detailCache.get(id) || null);
   const [err, setErr] = useState('');
+  // 写真は1枚だけ自動で出す（1枚ごとに料金がかかるため）。残りは「写真をもっと見る」を押したときだけ
+  const [allPhotos, setAllPhotos] = useState(false);
+  // 口コミは料金の高い区分なので、「口コミを見る」を押したときだけ取りに行く（このページを開いている間は覚えておく）
+  const [rv, setRv] = useState(detailCache.get('rv:' + id) || null);
+  const [rvBusy, setRvBusy] = useState(false);
+  const [rvErr, setRvErr] = useState('');
+  async function loadReviews() {
+    if (rvBusy) return;
+    setRvBusy(true); setRvErr('');
+    try {
+      const x = await api(`/api/details?id=${encodeURIComponent(id)}&reviews=1`, { fallback: '口コミを取得できませんでした' });
+      const list = Array.isArray(x.reviews) ? x.reviews : [];
+      detailCache.set('rv:' + id, list);
+      setRv(list);
+    } catch (e) {
+      setRvErr(e.message);
+    } finally {
+      setRvBusy(false);
+    }
+  }
   useEffect(() => {
     if (detailCache.has(id)) return;
     let alive = true;
@@ -351,12 +373,17 @@ function DetailPanel({ id }) {
     <div className="detail">
       {d.photos.length > 0 && (
         <div className="photos">
-          {d.photos.slice(0, 3).map((ph) => (
+          {d.photos.slice(0, allPhotos ? 3 : 1).map((ph) => (
             <figure key={ph.name}>
               <img src={photoSrc(ph.name)} alt="" loading="lazy" />
               {ph.by && <figcaption>写真: {ph.by}</figcaption>}
             </figure>
           ))}
+          {!allPhotos && d.photos.length > 1 && (
+            <button type="button" className="more-photos" onClick={() => setAllPhotos(true)}>
+              <Cam size={26} />写真をもっと見る
+            </button>
+          )}
         </div>
       )}
       {/* 写真は3枚まで（1枚ごとに費用がかかるため）。続きはGoogleマップのお店情報で見る */}
@@ -379,11 +406,20 @@ function DetailPanel({ id }) {
         </section>
       )}
 
-      {d.reviews.length > 0 && (
+      {!rv && (
+        <section>
+          <button type="button" className="btn rv-open" disabled={rvBusy} onClick={loadReviews}>
+            {rvBusy ? '口コミを読み込んでいます…' : '口コミを見る'}
+          </button>
+          {rvErr && <p className="err">{rvErr}</p>}
+        </section>
+      )}
+      {rv && rv.length === 0 && <p className="hint">このお店の口コミはありませんでした。</p>}
+      {rv && rv.length > 0 && (
         <section>
           <h3>口コミ</h3>
           <ul className="reviews">
-            {d.reviews.map((r, i) => (
+            {rv.map((r, i) => (
               <li key={i}>
                 <p className="rv-head"><Stars n={r.rating} /> <span className="addr">{r.when}{r.author ? `・${r.author}` : ''}</span></p>
                 <p className="rv-text">{r.text}</p>
@@ -435,6 +471,19 @@ function fromHotel(h, it) {
   return `ホテルから約${dist}・車で約${Math.max(5, Math.round((road / 25) * 60))}分`;
 }
 
+// 国がわからないときに出す「国をえらぶ」ボタン（Googleへの検索を1回で済ませるため、国を決めてからさがす）
+function NeedCountry({ onPick }) {
+  return (
+    <div className="need-country" role="alert">
+      <b>どの国でさがしますか？</b>
+      <p className="hint">国をえらぶと、すぐにさがします。</p>
+      <div className="cat-chips">
+        {COUNTRY_LIST.map(([k, v]) => <button type="button" key={k} onClick={() => onPick(k)}>{v}でさがす</button>)}
+      </div>
+    </div>
+  );
+}
+
 // 泊まるホテルをGoogleマップから選ぶ
 function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
   const [country, setCountry] = useState(country0 || '');
@@ -442,13 +491,18 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
   const [list, setList] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  async function search(e) {
-    e.preventDefault();
+  const [askCountry, setAskCountry] = useState(false);
+  async function search(e, c0) {
+    e?.preventDefault?.();
     if (!q.trim()) return;
+    const c = c0 || country || guessCountry('', q.trim());
+    // 国がわからないときは、先に国をえらんでもらう（Googleへの検索を1回で済ませるため）
+    if (!c) { setAskCountry(true); setErr(''); return; }
+    setAskCountry(false);
     setBusy(true); setErr('');
     try {
       // Grab・Uberでホテルに帰るときに貼れるよう、現地の表記（と日本語）も取る
-      const d = await api('/api/search', { method: 'POST', body: { keyword: q.trim(), country }, timeout: 30000, fallback: '検索に失敗しました' });
+      const d = await api('/api/search', { method: 'POST', body: { keyword: q.trim(), country: c }, timeout: 30000, fallback: '検索に失敗しました' });
       setList(d.places.slice(0, 8));
       if (!d.places.length) setErr('見つかりませんでした。ホテル名を変えて試してください。');
     } catch (e2) {
@@ -483,8 +537,8 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
           <NameBlock p={current} />
         </div>
       )}
-      <label htmlFor="hotelct">国（えらばなくても探せます）
-        <select id="hotelct" value={country} onChange={(e) => setCountry(e.target.value)}>
+      <label htmlFor="hotelct">国
+        <select id="hotelct" value={country} onChange={(e) => { setCountry(e.target.value); if (e.target.value) setAskCountry(false); }}>
           <option value="">指定なし</option>
           {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
@@ -493,6 +547,7 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
         <input id="hotelq" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="ホテル名（例：シェラトン）" />
         <button className="btn" type="submit" disabled={busy}>{busy ? 'さがしています…' : 'さがす'}</button>
       </form>
+      {askCountry && <NeedCountry onPick={(k) => { setCountry(k); search(null, k); }} />}
       {err && <p className="err">{err}</p>}
       {list.length > 0 && (
         <ul className="hotel-list">
@@ -770,6 +825,16 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
   const lastQuery = useRef(null);
+  const pendingQuery = useRef(null); // 国をえらぶのを待っている検索
+  const [needCountry, setNeedCountry] = useState(false);
+  function pickCountry(k) {
+    setCountry(k);
+    try { localStorage.setItem('trippin.country', k); } catch {}
+    setNeedCountry(false);
+    const q = pendingQuery.current;
+    pendingQuery.current = null;
+    if (q) runSearch(false, { ...q, country: k });
+  }
   const resultsTop = useRef(null);
   const [searchSeq, setSearchSeq] = useState(0);
   const [moreBusy, setMoreBusy] = useState(false);
@@ -1065,6 +1130,13 @@ export default function Home() {
     const base = useNear ? { area: '', country: hotel.country || country } : { area, country };
     const q = more ? lastQuery.current : { keyword, ...base, minRating: Number(minRating), minReviews: Number(minReviews), near, ...(override || {}) };
     if (!more && !String(q.keyword).trim() && !String(q.area).trim()) { setError('キーワードか場所を入力してください'); return; }
+    // 国がわからないときは、先に国をえらんでもらう（Googleへの検索は国を決めて1回だけ。宿泊先の近くでさがすときは不要）
+    if (!more && !q.near && !q.country && !guessCountry(q.area, q.keyword)) {
+      pendingQuery.current = q;
+      setNeedCountry(true); setError('');
+      return;
+    }
+    setNeedCountry(false);
     searching.current = true;
     setBusy(true); setMoreBusy(more); setError('');
     try {
@@ -1142,6 +1214,8 @@ export default function Home() {
 
 
   const sorted = [...results];
+  // 写真を自動で出すのは、検索で上に出た5件だけ（並び替えても増やさない）
+  const autoPhotoIds = new Set(results.slice(0, AUTO_PHOTOS).map((p) => p.placeId));
   if (sort === 'rating') sorted.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
   if (sort === 'reviews') sorted.sort((a, b) => b.reviews - a.reviews);
   if (sort === 'hotel' && hotel?.lat != null) sorted.sort((a, b) => (a.lat == null ? 1e9 : distanceKm(hotel, a)) - (b.lat == null ? 1e9 : distanceKm(hotel, b)));
@@ -1272,9 +1346,7 @@ export default function Home() {
       <article key={it.id} id={'item-' + it.id} className={'item' + (it.done ? ' done' : '')}>
         <div className="item-top">
           <div className="thumbwrap">
-            <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
-              {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" onError={() => refreshPhoto(it)} /> : <div className="thumb" />}
-            </button>
+            <PhotoThumb name={it.photo} auto={no <= AUTO_PHOTOS} onOpen={() => toggleDetail('l:' + it.id)} onError={() => refreshPhoto(it)} />
             <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
             {it.done && (
               <button className={'star photo-star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
@@ -1446,7 +1518,7 @@ export default function Home() {
             </div>
             <div className="row">
               <label htmlFor="ct">国
-                <select id="ct" value={useNear ? hotel.country || country : country} disabled={useNear} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
+                <select id="ct" value={useNear ? hotel.country || country : country} disabled={useNear} onChange={(e) => { setCountry(e.target.value); if (e.target.value) setNeedCountry(false); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
                   <option value="">指定なし</option>
                   {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
@@ -1474,6 +1546,7 @@ export default function Home() {
               </label>
             </div>
             <button className="btn search-go" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
+            {needCountry && <NeedCountry onPick={pickCountry} />}
             {error && <p className="err">{error}</p>}
             <div className="shot">
               <input ref={shotInput} id="shot" type="file" accept="image/*" hidden onChange={(e) => readShot(e.target.files?.[0])} />
@@ -1517,7 +1590,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-            <p className="hint">国はえらばなくても探せます（例：キーワード「魯肉飯」＋場所「台北」）。えらぶと、その国の中だけを探します。</p>
+            <p className="hint">国をえらぶと、その国の中だけを探します。えらばなくても、場所に街の名前（例：台北）を入れれば国がわかります。</p>
           </form>
 
           <div className="list" ref={resultsTop} style={{ scrollMarginTop: '72px' }}>
@@ -1547,9 +1620,7 @@ export default function Home() {
               <article className="item" key={p.placeId}>
                 <div className="item-top">
                   <div className="thumbwrap">
-                    <button type="button" className="thumbbtn" onClick={() => toggleDetail('s:' + p.placeId)} aria-label="詳細を見る">
-                      {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
-                    </button>
+                    <PhotoThumb name={p.photo} auto={autoPhotoIds.has(p.placeId)} onOpen={() => toggleDetail('s:' + p.placeId)} />
                   </div>
                   <div className="body">
                     <NameBlock p={p} />
