@@ -585,10 +585,6 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 /* eガイドブック：無料／有料 */
 .gm-paid{display:flex;flex-direction:column;gap:8px}
 .nm-seg-row{display:flex;gap:8px;flex-wrap:wrap}
-/* 有料のeガイドブックを読む人向け */
-.gv-lock{border:2px dashed var(--line);border-radius:12px;padding:16px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
-.gv-lock p{margin:0;line-height:1.7}
-.gv-price{font-size:22px;font-weight:800}
 .apphead{gap:8px}
 .head-btns{flex:none}
 .head-btns .login-btn{white-space:nowrap;padding:0 10px;gap:4px}

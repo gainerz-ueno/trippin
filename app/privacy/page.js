@@ -1,0 +1,48 @@
+
+export const metadata = { title: 'プライバシーポリシー｜Tabibi' };
+
+// パスワードなしで誰でも見られるページ（middleware.js で /privacy を通している）
+// 中身はプログラムで実際に預かっているものだけを書いた。利用データの扱い（decisions.md 70行目）は本人が決めてから書き足す
+const ROWS = [
+  ['事業者', 'コネクター合同会社（CONEXTOR）　運営責任者：植野 博徳'],
+  ['お預かりする情報', [
+    'Googleでログインしたときの、Googleアカウントの情報（Supabase の認証で使うもの）',
+    'お客様が保存した、お店・名所の候補リスト、メモ、旅程、お土産の記録、写真、作ったeタビセツ・eガイドブックの画像',
+  ]],
+  ['使う目的', [
+    'ログインした端末どうしで、保存したデータを同じように見られるようにするため',
+    '共有リンク・eガイドブックを、お客様が選んだ相手に見せるため',
+    'お問い合わせに答えるため',
+  ]],
+  ['外部のサービスへの送信', [
+    'データの保存とログインには Supabase を、サイトの配信には Cloudflare を使っています。',
+    'お店の検索・写真には Google のサービスを、スクリーンショットの読み取り・AIのおすすめ・AIで作る画像には Google の AI を使っており、そのときに入力した言葉や画像を送ります。',
+  ]],
+  ['共有について', '共有リンク・公開したeガイドブックは、リンクを知っている人ならだれでも見られます。共有リンクでは、メモ・元の投稿・宿泊先は見せません。お土産の「ひとこと」は見えます。'],
+  ['第三者への提供', '法令にもとづく場合を除き、お客様の同意なく、お預かりした情報を第三者に渡しません。'],
+  ['利用状況の記録', '現在、どの機能を使ったかなどの利用状況の記録は行っていません。始めるときは、このページを書き直してお知らせし、同意をいただいてから行います。'],
+  ['削除・お問い合わせ', '保存したデータは画面から消せます。アカウントごと消したいときや、ご質問は info@conextor.jp までご連絡ください。'],
+];
+
+export default function Privacy() {
+  return (
+    <main className="wrap legal">
+      <header>
+        <a href="/" aria-label="Tabibi"><img src="/logo.png" alt="Tabibi" width="720" height="168" style={{ width: 160, height: 'auto' }} /></a>
+      </header>
+      <section className="panel">
+        <h1 className="legal-h">プライバシーポリシー</h1>
+        <dl className="legal-dl">
+          {ROWS.map(([k, v]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd>{Array.isArray(v) ? v.map((t) => <p key={t}>{t}</p>) : <p>{v}</p>}</dd>
+            </div>
+          ))}
+        </dl>
+        <p className="hint">制定日：2026年11月7日</p>
+        <p className="hint"><a href="/tokushoho">特定商取引法に基づく表記</a></p>
+      </section>
+    </main>
+  );
+}

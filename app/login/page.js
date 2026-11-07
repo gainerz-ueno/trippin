@@ -18,11 +18,12 @@ export default async function Login({ searchParams }) {
       </form>
       <section className="panel">
         <h2>Tabibi（タビビ）とは</h2>
-        <p className="hint">旅行前に行きたいお店・名所をGoogleマップから探して候補リストにまとめ、旅のしおり（eタビセツ）やeガイドブックを作れる旅行アプリです。旅行先のお店へAIが電話予約を代行する「タビビコール」（1回300円）もあります。</p>
+        <p className="hint">旅行前に行きたいお店・名所をGoogleマップから探して候補リストにまとめ、旅のしおり（eタビセツ）やeガイドブックを作れる旅行アプリです。旅行先のお店へAIが電話予約を代行する「タビビコール」は準備中です。</p>
       </section>
       <footer className="legal-foot">
         <a href="/tokushoho">特定商取引法に基づく表記</a>
-        <span>運営：CONEXTOR合同会社</span>
+        <a href="/privacy">プライバシーポリシー</a>
+        <span>運営：コネクター合同会社（CONEXTOR）</span>
       </footer>
     </main>
   );
