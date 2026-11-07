@@ -38,7 +38,8 @@ export async function middleware(req) {
     const ref = req.headers.get('referer');
     let refHost = '';
     try { refHost = ref ? new URL(ref).host : ''; } catch {}
-    const own = site ? site === 'same-origin' || site === 'none' : !ref || refHost === req.nextUrl.host;
+    // sec-fetch-site も referer も無い呼び出し（プログラムからの直接の呼び出し）は通さない
+    const own = site ? site === 'same-origin' || site === 'none' : refHost === req.nextUrl.host;
     if (!own) return new NextResponse('forbidden', { status: 403 });
     if (tooMany(ipOf(req), 200, 'photo:')) return new NextResponse('too many', { status: 429 });
     return NextResponse.next();
