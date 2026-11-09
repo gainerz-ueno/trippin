@@ -5,6 +5,7 @@ import { photoHooks, listPhotos, listAllPhotos, setCloudId, putFromCloud } from 
 
 import { SUPABASE_URL, SUPABASE_KEY } from './lib/supabase-public';
 import { mockClient } from './lib/mock-supabase';
+import { TERMS_VERSION } from './lib/loginsafety.mjs';
 const BUCKET = 'photos';
 // テスト用モード（本物のSupabaseを使わない）。本番のビルドでは付けない
 // まちがって本番で付けても動かないよう、自分のパソコン（localhost）で開いたときだけ
@@ -30,11 +31,39 @@ export function setUser(id) {
 }
 
 export function signIn() {
+  // ログインして戻ってきたとき、本人にメールで知らせるための印（page.js が見る）
+  try { localStorage.setItem('trippin.pendingLoginMail', '1'); } catch {}
   return supa().auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/' } });
 }
 export function signOut() {
   setUser(null);
   return supa().auth.signOut();
+}
+
+// ---- 利用規約・プライバシーポリシーへの同意（初めてのGoogleログインのとき） ----
+// 同意した版を Supabase に記録する。記録が無い人（または版が古い人）には確認の画面を出す
+export async function hasConsented(userId) {
+  const { data, error } = await supa().from('consents').select('version').eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  return data?.version === TERMS_VERSION;
+}
+export async function recordConsent() {
+  const { data, error } = await supa().rpc('record_consent', { v: TERMS_VERSION });
+  if (error || data !== true) throw new Error('同意を記録できませんでした。もう一度試してください');
+}
+
+// ---- ログイン・設定変更を本人にメールで知らせる（失敗しても画面は止めない） ----
+export async function notify(kind) {
+  try {
+    const { data } = await supa().auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ kind }),
+    });
+  } catch {}
 }
 
 const now = () => new Date().toISOString();
@@ -172,12 +201,14 @@ export async function createShare(folder) {
   const id = shareId();
   const { error } = await supa().from('shares').insert({ id, user_id: uid, folder });
   if (error) throw error;
+  notify('share_create');
   return id;
 }
 export async function deleteShare(folder) {
   if (!uid) return;
   const { error } = await supa().from('shares').delete().eq('user_id', uid).eq('folder', folder);
   if (error) throw error;
+  notify('share_delete');
 }
 export async function renameShare(from, to) {
   if (!uid) return;
@@ -252,6 +283,7 @@ export async function saveGuide(g) {
   };
   const { error } = await supa().from('guidebooks').upsert(row);
   if (error) throw new Error('保存できませんでした。もう一度試してください');
+  if (row.published) notify('guide_publish');
   return row;
 }
 export async function deleteGuide(id) {

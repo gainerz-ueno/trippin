@@ -14,7 +14,7 @@ export default async function Login({ searchParams }) {
         </label>
         <button className="btn" type="submit">入る</button>
         {e === '1' && <p className="err">パスワードが違います</p>}
-        {e === 'wait' && <p className="err">間違いが続いたので、5分ほど待ってからもう一度入れてください</p>}
+        {e === 'wait' && <p className="err">5回続けて間違えたので、30分ロックしました。30分たってからもう一度入れてください</p>}
       </form>
       <section className="panel">
         <h2>Tabibi（タビビ）とは</h2>

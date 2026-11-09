@@ -13,7 +13,7 @@ const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
 import { api, jaError, mapsLink } from './lib/api';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
-import { logEvent, supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
+import { hasConsented, recordConsent, notify, logEvent, supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
 import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
 import { distanceKm } from './lib/geo';
@@ -1015,9 +1015,27 @@ export default function Home() {
   useEffect(() => {
     const sb = supa();
     sb.auth.getSession().then(({ data }) => setUser(data.session?.user || null));
-    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setUser(session?.user || null));
+    const { data: sub } = sb.auth.onAuthStateChange((ev, session) => {
+      setUser(session?.user || null);
+      // ログインして戻ってきたときだけ、本人にメールで知らせる（signIn() で付けた印がある場合）
+      if (ev === 'SIGNED_IN' && session) {
+        let pending = false;
+        try { pending = localStorage.getItem('trippin.pendingLoginMail') === '1'; localStorage.removeItem('trippin.pendingLoginMail'); } catch {}
+        if (pending) notify('login');
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
+  // 初めてのGoogleログイン（または規約が新しくなったとき）は、メールアドレスの確認と規約への同意を取る
+  const [consent, setConsent] = useState(null); // null=確認不要/調べ中、'need'=同意の画面を出す
+  const [agreed, setAgreed] = useState(false);
+  const [consentErr, setConsentErr] = useState('');
+  useEffect(() => {
+    if (!user) { setConsent(null); setAgreed(false); return; }
+    let alive = true;
+    hasConsented(user.id).then((ok) => alive && setConsent(ok ? null : 'need')).catch(() => {});
+    return () => { alive = false; };
+  }, [user]);
   const settingsData = () => ({ folders, hotel, customCats, notes, prompts });
   useEffect(() => {
     if (!loaded || !user) { setCloudUser(null); synced.current = false; extraSynced.current = false; return; }
@@ -1462,6 +1480,27 @@ export default function Home() {
             : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}
         </span>
       </header>
+
+      {user && consent === 'need' && (
+        <div className="prem-back" role="dialog" aria-modal="true" aria-labelledby="consent-h">
+          <div className="prem">
+            <h2 id="consent-h">はじめに、ご確認ください</h2>
+            <p>Tabibi に、次のメールアドレスで登録します。</p>
+            <p><strong>{user.email || '（メールアドレスを取得できませんでした）'}</strong></p>
+            <p className="hint">ログインや、共有リンクの作成などの設定を変えたときは、このアドレスにお知らせのメールが届きます。</p>
+            <label className="nm-check" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+              <span><a href="/terms" target="_blank" rel="noopener noreferrer">利用規約</a>と<a href="/privacy" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>に同意します</span>
+            </label>
+            {consentErr && <p className="err">{consentErr}</p>}
+            <button type="button" className="btn" disabled={!agreed || !user.email} onClick={async () => {
+              setConsentErr('');
+              try { await recordConsent(); setConsent(null); } catch (e) { setConsentErr(jaError(e, '同意を記録できませんでした。もう一度試してください')); }
+            }}>同意して使いはじめる</button>
+            <button type="button" className="btn ghost" onClick={() => signOut()}>同意しないでログアウトする</button>
+          </div>
+        </div>
+      )}
 
       {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
       {notice && <p className="err notice" role="alert" onClick={() => setNotice('')}>{notice}</p>}
