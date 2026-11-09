@@ -1,13 +1,13 @@
 // ログイン対策の部品（画面にも Worker にも依存しない＝そのまま試験できる）
 // ・ロック：5回失敗したら30分（レジレジ kitchen-pos と同じ決まり）
 // ・メール通知：本文を作る／端末の説明を作る
-// supabase/migrations/20261109_login_safety.sql の login_gate / login_fail と同じ決まりにしてある
+// supabase/migrations/20261109_login_safety.sql の login_try（試した数を数えてロックを決める関数）と同じ決まりにしてある
 
 export const MAX_FAILS = 5;
 export const LOCK_MS = 30 * 60 * 1000;
 export const TERMS_VERSION = '2026-11-09';
 
-// state = { n: 失敗の数, last: 最後の失敗の時刻(ms), until: ロックが終わる時刻(ms) }
+// state = { n: 試した数, last: 最後の失敗の時刻(ms), until: ロックが終わる時刻(ms) }
 export function lockLeftMs(state, now = Date.now()) {
   return state && state.until > now ? state.until - now : 0;
 }
@@ -20,6 +20,13 @@ export function applyFail(state, now = Date.now()) {
   const n = base + 1;
   if (n >= MAX_FAILS) return { n: 0, last: now, until: now + LOCK_MS };
   return { n, last: now, until: 0 };
+}
+
+// 相手の特定に使うのは cf-connecting-ip だけ（Cloudflare が付ける、訪問者本人の IP）。
+// x-real-ip・x-forwarded-for は相手が自由に付けられる値なので使わない（毎回変えてロックを避けられるため）
+export function clientIp(headers) {
+  const v = headers && typeof headers.get === 'function' ? headers.get('cf-connecting-ip') : null;
+  return (v && String(v).trim().slice(0, 64)) || 'unknown';
 }
 
 // 同じ人の失敗を数えるための名前。IP をそのまま置かず、サイトのパスワードで混ぜた印にする

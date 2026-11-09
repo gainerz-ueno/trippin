@@ -1027,15 +1027,20 @@ export default function Home() {
     return () => sub.subscription.unsubscribe();
   }, []);
   // 初めてのGoogleログイン（または規約が新しくなったとき）は、メールアドレスの確認と規約への同意を取る
-  const [consent, setConsent] = useState(null); // null=確認不要/調べ中、'need'=同意の画面を出す
+  // null=同意ずみ（確認不要）、'checking'=調べ中、'need'=同意の画面を出す、'error'=同意を確かめられなかった（使えなくして、やり直しを出す）
+  const [consent, setConsent] = useState(null);
   const [agreed, setAgreed] = useState(false);
   const [consentErr, setConsentErr] = useState('');
+  const [consentTry, setConsentTry] = useState(0);
   useEffect(() => {
     if (!user) { setConsent(null); setAgreed(false); return; }
     let alive = true;
-    hasConsented(user.id).then((ok) => alive && setConsent(ok ? null : 'need')).catch(() => {});
+    setConsent('checking');
+    hasConsented(user.id)
+      .then((ok) => alive && setConsent(ok ? null : 'need'))
+      .catch(() => alive && setConsent('error')); // 握りつぶさない：確かめられないときは、同意なしでは使わせない
     return () => { alive = false; };
-  }, [user]);
+  }, [user, consentTry]);
   const settingsData = () => ({ folders, hotel, customCats, notes, prompts });
   useEffect(() => {
     if (!loaded || !user) { setCloudUser(null); synced.current = false; extraSynced.current = false; return; }
@@ -1481,13 +1486,27 @@ export default function Home() {
         </span>
       </header>
 
+      {user && (consent === 'checking' || consent === 'error') && (
+        <div className="prem-back" role="dialog" aria-modal="true" aria-labelledby="consent-h">
+          <div className="prem">
+            <h2 id="consent-h">{consent === 'error' ? '同意の状況を確かめられませんでした' : '確かめています…'}</h2>
+            {consent === 'error' && (
+              <>
+                <p>通信を確かめて、もう一度お試しください。確かめられるまで、Tabibi は使えません。</p>
+                <button type="button" className="btn" onClick={() => setConsentTry((n) => n + 1)}>もう一度確かめる</button>
+                <button type="button" className="btn ghost" onClick={() => signOut()}>ログアウトする</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {user && consent === 'need' && (
         <div className="prem-back" role="dialog" aria-modal="true" aria-labelledby="consent-h">
           <div className="prem">
             <h2 id="consent-h">はじめに、ご確認ください</h2>
             <p>Tabibi に、次のメールアドレスで登録します。</p>
             <p><strong>{user.email || '（メールアドレスを取得できませんでした）'}</strong></p>
-            <p className="hint">ログインや、共有リンクの作成などの設定を変えたときは、このアドレスにお知らせのメールが届きます。</p>
+            <p className="hint">ログインや、共有リンクの作成などの設定を変えたときは、このアドレスにお知らせのメールを送ります（同じ種類のお知らせは10分に1回までです。通信の都合などで届かないことがあります）。</p>
             <label className="nm-check" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
               <span><a href="/terms" target="_blank" rel="noopener noreferrer">利用規約</a>と<a href="/privacy" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>に同意します</span>

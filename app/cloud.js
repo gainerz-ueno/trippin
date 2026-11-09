@@ -42,6 +42,7 @@ export function signOut() {
 
 // ---- 利用規約・プライバシーポリシーへの同意（初めてのGoogleログインのとき） ----
 // 同意した版を Supabase に記録する。記録が無い人（または版が古い人）には確認の画面を出す
+// 確かめられなかったとき（通信エラー・表が無いなど）は throw する。呼ぶ側（page.js）は握りつぶさず、使えなくして「もう一度確かめる」を出す
 export async function hasConsented(userId) {
   const { data, error } = await supa().from('consents').select('version').eq('user_id', userId).maybeSingle();
   if (error) throw error;
@@ -281,9 +282,16 @@ export async function saveGuide(g) {
     cover_id: g.cover_id || null, page_ids: (g.page_ids || []).slice(0, 60), published: !!g.published,
     updated_at: new Date().toISOString(),
   };
+  // 「公開しました」のメールは、非公開→公開に変わったときだけ送る（公開ずみのガイドを直すたびには送らない）
+  // 前の状態を確かめられないときは、送る側（10分に1回まで）に任せて送る
+  let wasPublished = false;
+  if (row.published && g.id) {
+    const { data: prev, error: pe } = await supa().from('guidebooks').select('published').eq('user_id', uid).eq('id', row.id).maybeSingle();
+    wasPublished = !pe && prev?.published === true;
+  }
   const { error } = await supa().from('guidebooks').upsert(row);
   if (error) throw new Error('保存できませんでした。もう一度試してください');
-  if (row.published) notify('guide_publish');
+  if (row.published && !wasPublished) notify('guide_publish');
   return row;
 }
 export async function deleteGuide(id) {

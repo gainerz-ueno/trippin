@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { clientIp } from './app/lib/loginsafety.mjs';
 
 // サイト全体にパスワードをかける（Cloudflare のシークレット SITE_PASSWORD）
 // ・正しいパスワードを入れたら、そのスマホに1年間ログインの印（クッキー）を残す
@@ -22,7 +23,7 @@ function tooMany(ip, max = 30, bucket = '') {
   if (hits.size > 5000) hits.clear();
   return list.length > max;
 }
-const ipOf = (req) => req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+const ipOf = (req) => clientIp(req.headers); // cf-connecting-ip だけを使う（偽のヘッダーで別人にならないように）
 const LIMITED = ['/api/search', '/api/recommend', '/api/screenshot', '/api/details', '/api/localname'];
 
 export async function middleware(req) {

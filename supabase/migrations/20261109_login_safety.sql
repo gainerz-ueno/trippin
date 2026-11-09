@@ -33,7 +33,7 @@ begin
   return true;
 end;
 $$;
-revoke all on function public.record_consent(text) from public;
+revoke all on function public.record_consent(text) from public, anon;
 grant execute on function public.record_consent(text) to authenticated;
 
 -- ② 共通パスワードの失敗のロック：5回失敗したら30分
@@ -47,20 +47,16 @@ alter table public.login_fails enable row level security;
 revoke all on public.login_fails from anon, authenticated;
 -- 方針なし＝画面から直接は読み書きできない（下の関数だけ）
 
--- ロックが残っている秒数（0＝ロックなし）
-create or replace function public.login_gate(key text)
-returns int
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select coalesce((select greatest(0, ceil(extract(epoch from (f.until_at - now())))::int) from public.login_fails f where f.k = key and f.until_at is not null), 0);
-$$;
+-- 前の版（login_gate・login_fail）を流してあっても消す（判定と加算が別々で、同時に送ると5回を超えて試せたため）
+drop function if exists public.login_gate(text);
+drop function if exists public.login_fail(text);
 
--- 失敗を1回数える。返すのはロックが残っている秒数（0＝まだロックされていない）
--- 成功したときの「数え直し」は、外から呼べると悪用されるので作らない（最後の失敗から30分で自然に数え直す）
-create or replace function public.login_fail(key text)
+-- パスワードを比べる「前」に呼ぶ。判定と加算を、この1つの関数の中でやる
+--   ・ロック中なら、残りの秒数を返す（比べさせない。数え足さない）
+--   ・そうでなければ1回分を数えて 0 を返す（＝比べてよい）。5回目を数えた時点でロック（30分）を始める
+--   ・同じ key の行は for update で順番待ちになるので、同時に何通送られても比べられるのは5回まで
+--   ・最後の試行から30分あくと数え直す。1日たった行は、次にこの関数が呼ばれたときに消す
+create or replace function public.login_try(key text)
 returns int
 language plpgsql
 security definer
@@ -71,11 +67,8 @@ declare
 begin
   if key is null or char_length(key) not between 8 and 64 then return 0; end if;
   delete from public.login_fails where last_at < now() - interval '1 day';
+  insert into public.login_fails (k, n, last_at) values (key, 0, now()) on conflict (k) do nothing;
   select * into r from public.login_fails where k = key for update;
-  if not found then
-    insert into public.login_fails (k, n, last_at) values (key, 1, now());
-    return 0;
-  end if;
   if r.until_at is not null and r.until_at > now() then
     return ceil(extract(epoch from (r.until_at - now())))::int;
   end if;
@@ -83,16 +76,32 @@ begin
   r.n := r.n + 1;
   if r.n >= 5 then
     update public.login_fails set n = 0, last_at = now(), until_at = now() + interval '30 minutes' where k = key;
-    return 1800;
+  else
+    update public.login_fails set n = r.n, last_at = now(), until_at = null where k = key;
   end if;
-  update public.login_fails set n = r.n, last_at = now(), until_at = null where k = key;
   return 0;
 end;
 $$;
-revoke all on function public.login_gate(text) from public;
-revoke all on function public.login_fail(text) from public;
-grant execute on function public.login_gate(text) to anon, authenticated;
-grant execute on function public.login_fail(text) to anon, authenticated;
+
+-- パスワードが合っていたときに、数えた分を戻す（正しく入れた人が上限に近づかないように）
+-- key は Worker が「サイトのパスワードで混ぜた印」から作る値で、外の人には作れない（他人の分を戻すことはできない）
+create or replace function public.login_ok(key text)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if key is null or char_length(key) not between 8 and 64 then return 0; end if;
+  update public.login_fails set n = 0, until_at = null where k = key;
+  return 0;
+end;
+$$;
+revoke all on function public.login_try(text) from public, anon, authenticated;
+revoke all on function public.login_ok(text) from public, anon, authenticated;
+-- Worker はログイン前に、公開用の鍵（anon）でこの2つを呼ぶので、anon には実行を許す（ここだけ）
+grant execute on function public.login_try(text) to anon, authenticated;
+grant execute on function public.login_ok(text) to anon, authenticated;
 
 -- ③ ログイン・設定変更の記録（メールを送るかどうかの判断にも使う）
 create table if not exists public.security_events (
@@ -139,7 +148,7 @@ as $$
   with u as (update public.security_events set mailed = true where id = eid and user_id = auth.uid() returning 1)
   select exists (select 1 from u);
 $$;
-revoke all on function public.log_security_event(text, text) from public;
-revoke all on function public.mark_security_event_mailed(bigint) from public;
+revoke all on function public.log_security_event(text, text) from public, anon;
+revoke all on function public.mark_security_event_mailed(bigint) from public, anon;
 grant execute on function public.log_security_event(text, text) to authenticated;
 grant execute on function public.mark_security_event_mailed(bigint) to authenticated;
