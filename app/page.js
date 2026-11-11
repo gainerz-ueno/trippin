@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NaverLinks, inKorea } from './naver';
 import { CatIcon, CAT_SEARCH, IcSearch, IcBookmark, IcCheckCircle, IcCheck, IcPin, IcPen, IcHotel, IcPlane, IcUser, IcDown, IcRight, IcMore } from './icons';
 import dynamic from 'next/dynamic';
+import { createPortal } from 'react-dom';
 import MapView from './MapView';
 import PhotoThumb, { AUTO_PHOTOS, Cam } from './PhotoThumb';
 import { guessCountry } from './lib/country-guess';
@@ -17,6 +18,8 @@ import { hasConsented, recordConsent, notify, logEvent, supa, setUser as setClou
 import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
 import { distanceKm } from './lib/geo';
+import { BASE_CATS, CUSTOM_COLOR, allCats, cleanCustomCats } from './lib/cats.mjs';
+import { UNSORTED, isLegacyFolder, migrateItems, migrateFolderList, migrateSouvenirs, migrateKeyed, removeFolder } from './lib/migrate.mjs';
 
 const KEY = 'trippin.v1';
 
@@ -24,13 +27,7 @@ const COUNTRY_LIST = [
   ['TW', '台湾'], ['KR', '韓国'], ['HK', '香港'], ['CN', '中国'], ['VN', 'ベトナム'],
   ['TH', 'タイ'], ['SG', 'シンガポール'], ['MY', 'マレーシア'], ['PH', 'フィリピン'], ['JP', '日本'],
 ];
-// 基本カテゴリー（本人が決めた12個。色は地図のピンにも使う）
-const BASE_CATS = [
-  ['観光', '#2F7D6B'], ['朝市', '#C9822B'], ['夜市', '#5B4BA8'], ['朝食', '#E0A526'], ['昼食', '#D9692E'],
-  ['夕食', '#B8432F'], ['夜食', '#3F4F86'], ['おやつ', '#D45C8C'], ['カフェ', '#8A5A3C'], ['酒場', '#8E2F4F'],
-  ['買物', '#2E7FB8'], ['美容', '#C2569E'], ['マッサージ', '#4E9A5B'],
-];
-const CUSTOM_COLOR = '#6B7A8C';
+// 基本カテゴリーは ./lib/cats.mjs（色は地図のピンにも使う）
 const CATS_KEY = 'trippin.cats';
 const catColor = (c) => (BASE_CATS.find(([n]) => n === c) || [, CUSTOM_COLOR])[1];
 
@@ -40,7 +37,7 @@ function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, tit
   const [name, setName] = useState('');
   const boxRef = useRef(null);
   useEffect(() => { boxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, []);
-  const all = [...BASE_CATS.map(([n]) => n), ...customCats];
+  const all = allCats(customCats);
   function submitNew(e) {
     e.preventDefault();
     const n = name.trim();
@@ -71,42 +68,42 @@ function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, tit
   );
 }
 
-// 「候補に追加」の下に出るカテゴリーのプルダウン
+// 「候補に追加」で出るカテゴリーの選択シート（画面の下から出る。ボタンは大きく、閉じるボタンあり）
 function CategoryDropdown({ customCats, onPick, onAddCustom, onClose }) {
-  const ref = useRef(null);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
-  const all = [...BASE_CATS.map(([n]) => n), ...customCats];
+  const all = allCats(customCats);
   useEffect(() => {
-    const out = (e) => { const box = ref.current?.parentElement; if (box && !box.contains(e.target)) onClose(); };
-    document.addEventListener('pointerdown', out);
-    return () => document.removeEventListener('pointerdown', out);
+    const key = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
   }, [onClose]);
-  return (
-    <div className="dropdown" ref={ref} role="menu">
-      <p className="dd-title">カテゴリーを選んで追加</p>
-      <ul>
-        {all.map((c) => (
-          <li key={c}><button type="button" role="menuitem" onClick={() => onPick(c)}><i style={{ background: catColor(c) }} />{c}</button></li>
-        ))}
-        <li><button type="button" role="menuitem" className="dd-none" onClick={() => onPick('')}>なし</button></li>
-        <li>
-          {adding ? (
-            <form className="dd-new" onSubmit={(e) => { e.preventDefault(); const n = name.trim(); if (!n) return; if (!all.includes(n)) onAddCustom(n); onPick(n); }}>
-              <input id="ddnew" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="新しいカテゴリー" maxLength={12} />
-              <button className="btn" type="submit">追加</button>
-            </form>
-          ) : (
-            <button type="button" role="menuitem" className="dd-add" onClick={() => setAdding(true)}>＋ 新しいカテゴリー</button>
-          )}
-        </li>
-      </ul>
-    </div>
+  return createPortal(
+    <div className="sheet-back" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="カテゴリーを選んで追加" onClick={(e) => e.stopPropagation()}>
+        <p className="sheet-title">カテゴリーを選んで追加</p>
+        <ul className="sheet-list">
+          {all.map((c) => (
+            <li key={c}><button type="button" className="sheet-btn" onClick={() => onPick(c)}><i style={{ background: catColor(c) }} />{c}</button></li>
+          ))}
+          <li><button type="button" className="sheet-btn none" onClick={() => onPick('')}>カテゴリーなしで追加する</button></li>
+          <li>
+            {adding ? (
+              <form className="sheet-new" onSubmit={(e) => { e.preventDefault(); const n = name.trim(); if (!n) return; if (!all.includes(n)) onAddCustom(n); onPick(n); }}>
+                <input id="ddnew" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="新しいカテゴリー" maxLength={12} />
+                <button className="btn" type="submit">追加する</button>
+              </form>
+            ) : (
+              <button type="button" className="sheet-btn none" onClick={() => setAdding(true)}>＋ 新しいカテゴリーを作る</button>
+            )}
+          </li>
+        </ul>
+        <button type="button" className="sheet-close" onClick={onClose}>閉じる</button>
+      </div>
+    </div>,
+    document.body
   );
 }
-
-// フォルダ（旅行ごとに自分で名前を付けて分ける）
-const UNSORTED = '未分類';
 
 // フォルダの共有（リンクを作る・コピー・やめる）
 function SharePanel({ folder, user }) {
@@ -162,14 +159,14 @@ function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, 
   return (
     <div className="folderbar">
       <div className="fb-row">
-        <span className="fb-label">フォルダ</span>
+        <span className="fb-label">旅先フォルダー（行き先ごと）</span>
         <div className="fb-chips">
           {folders.map((f) => (
             <button type="button" key={f} aria-pressed={f === current} onClick={() => { onSelect(f); setMode(null); }}>
               {f}<span className="fb-count">{counts[f] || 0}</span>
             </button>
           ))}
-          <button type="button" className="fb-new" onClick={() => { setMode(mode === 'new' ? null : 'new'); setName(''); }}>＋ 新しいフォルダ</button>
+          <button type="button" className="fb-new" onClick={() => { setMode(mode === 'new' ? null : 'new'); setName(''); }}>＋ 旅先フォルダーを作る</button>
         </div>
       </div>
       {current && current !== UNSORTED && mode !== 'new' && (
@@ -181,14 +178,14 @@ function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, 
       {mode === 'share' && current !== UNSORTED && <SharePanel folder={current} user={user} />}
       {mode === 'new' && (
         <form className="new-cat" onSubmit={submitNew}>
-          <input id="newfolder" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例：台湾 2026年3月" maxLength={30} />
+          <input id="newfolder" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="行き先の名前（例：京都、沖縄）" maxLength={30} />
           <button className="btn" type="submit">作る</button>
         </form>
       )}
       {mode === 'edit' && (
         confirm ? (
-          <div className="confirm">「{current}」とその中のお店{totals[current] || 0}件（候補と行ったの両方）を削除しますか？
-            <button className="btn" type="button" onClick={() => { onDelete(current); setConfirm(false); setMode(null); }}>削除する</button>
+          <div className="confirm">「{current}」を削除しますか？中のお店{totals[current] || 0}件（候補と行ったの両方）は消さずに「未分類」へ戻します。
+            <button className="btn" type="button" onClick={() => { onDelete(current); setConfirm(false); setMode(null); }}>削除して未分類へ戻す</button>
             <button className="btn ghost" type="button" onClick={() => setConfirm(false)}>やめる</button>
           </div>
         ) : (
@@ -896,10 +893,11 @@ export default function Home() {
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
 
   useEffect(() => {
-    // フォルダが決まっていないお店は「未分類」に入れる（消えて見えないように）
-    const fixTrip = (arr) => arr.map((i) => (i.trip ? i : { ...i, trip: UNSORTED }));
+    // 昔の形（上の段＝買い物・朝ごはん等のフォルダ）を新しい形（旅先フォルダー × カテゴリー）へ自動で変換する。
+    // フォルダが決まっていないお店は「未分類」に入れる。変換で件数は変わらない（./lib/migrate.mjs・tests/migrate.test.mjs）
+    const fixTrip = (arr) => migrateItems(Array.isArray(arr) ? arr : []);
     try { const s = localStorage.getItem(KEY); if (s) setItems(fixTrip(JSON.parse(s))); } catch {}
-    try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
+    try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(cleanCustomCats(JSON.parse(c))); } catch {}
     try {
       const h = localStorage.getItem('trippin.hotel');
       if (h) setHotel(JSON.parse(h));
@@ -911,15 +909,15 @@ export default function Home() {
         if (pick) setHotel(pick);
       }
     } catch {}
-    try { const n = localStorage.getItem('trippin.notes'); if (n) setNotes(JSON.parse(n) || {}); } catch {}
+    try { const n = localStorage.getItem('trippin.notes'); if (n) setNotes(migrateKeyed(JSON.parse(n) || {})); } catch {}
     try { const pr = JSON.parse(localStorage.getItem('trippin.prompts') || '[]'); if (Array.isArray(pr)) setPrompts(pr); } catch {}
-    try { const sv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]'); if (Array.isArray(sv)) setSouvenirs(sv); } catch {}
-    try { const pl = JSON.parse(localStorage.getItem('trippin.plans') || '{}'); if (pl && typeof pl === 'object') setPlans(pl); } catch {}
+    try { const sv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]'); if (Array.isArray(sv)) setSouvenirs(migrateSouvenirs(sv)); } catch {}
+    try { const pl = JSON.parse(localStorage.getItem('trippin.plans') || '{}'); if (pl && typeof pl === 'object') setPlans(migrateKeyed(pl)); } catch {}
     try { const c = localStorage.getItem('trippin.country'); if (c && COUNTRY_LIST.some(([k]) => k === c)) setCountry(c); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
       const its = fixTrip(JSON.parse(localStorage.getItem(KEY) || '[]'));
-      const merged = [...new Set([...f, ...its.map((i) => i.trip).filter(Boolean)])];
+      const merged = migrateFolderList([...f, ...its.map((i) => i.trip)]);
       setFolders(merged);
       const cur = localStorage.getItem('trippin.folder');
       setTrip(cur && (cur === UNSORTED || merged.includes(cur)) ? cur : UNSORTED);
@@ -955,13 +953,21 @@ export default function Home() {
   const addSouvenir = (sv) => { logEvent('souvenir_add'); setSouvenirs((prev) => [...prev, { ...sv, addedAt: Date.now(), updatedAt: Date.now() }]); };
   const updateSouvenir = (id, patch) => setSouvenirs((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)));
   const removeSouvenir = (id) => setSouvenirs((prev) => prev.filter((x) => x.id !== id));
+  // 「買い物」「朝ごはん」などはカテゴリーの名前。旅先フォルダーの名前には使わない（昔の形と混ざらないように）
+  const folderNameNg = (n) => {
+    if (!isLegacyFolder(n)) return false;
+    setNotice(`「${n}」はカテゴリーの名前です。旅先フォルダーには行き先の名前（例：京都、沖縄）を付けてください。`);
+    return true;
+  };
   function createFolder(n) {
     if (n === UNSORTED) { setTrip(UNSORTED); return; }
+    if (folderNameNg(n)) return;
     setFolders((prev) => (prev.includes(n) ? prev : [...prev, n]));
     setTrip(n);
   }
   function renameFolder(from, to) {
     if (from === UNSORTED || to === UNSORTED) return;
+    if (folderNameNg(to)) return;
     renameShare(from, to).catch(() => {});
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
     setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to, updatedAt: Date.now() } : i)));
@@ -972,14 +978,14 @@ export default function Home() {
   }
   function deleteFolder(name) {
     deleteShare(name).catch(() => {});
-    const gone = items.filter((i) => i.trip === name).map((i) => i.id);
-    setItems((prev) => prev.filter((i) => i.trip !== name));
-    gone.forEach((id) => deletePhotosOf(id).catch(() => {}));
-    const rest = allFolders.filter((f) => f !== name);
-    setFolders(rest);
-    setNotes((prev) => { const { [name]: _, ...rest2 } = prev; return rest2; });
-    setPlans((prev) => { const { [name]: _, ...rest3 } = prev; return rest3; });
-    setSouvenirs((prev) => prev.filter((x) => x.trip !== name));
+    // 中のお店・お土産は消さず「未分類」へ戻す（写真もそのまま残る）
+    if (name === UNSORTED) return;
+    const moved = removeFolder({ items, souvenirs, notes, plans }, name);
+    setItems(moved.items);
+    setSouvenirs(moved.souvenirs);
+    setNotes(moved.notes);
+    setPlans(moved.plans);
+    setFolders(allFolders.filter((f) => f !== name && f !== UNSORTED));
     setTrip(UNSORTED);
   }
   // ---- ログインとクラウド保存 ----
@@ -996,16 +1002,21 @@ export default function Home() {
     const known = (k) => { try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch { return new Set(); } };
     const [cloudSv, cloudPl] = await Promise.all([pullSouvenirs(), pullPlans()]);
     if (!alive()) return;
-    const localSv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]');
-    const localPlObj = JSON.parse(localStorage.getItem('trippin.plans') || '{}');
+    // 昔の形（旅の名前が「買い物」など）で入っているお土産・回る順番も、新しい形へ変換してからそろえる
+    const localSv = migrateSouvenirs(JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]'));
+    const localPlObj = migrateKeyed(JSON.parse(localStorage.getItem('trippin.plans') || '{}'));
     const localPl = Object.entries(localPlObj).map(([id, v]) => ({ ...v, id }));
-    const sv = mergeItems(localSv, cloudSv, known(svKey));
-    const pl = mergeItems(localPl, cloudPl, known(plKey));
+    const cloudPlObj = migrateKeyed(Object.fromEntries(cloudPl.map(({ id, ...v }) => [id, v])));
+    const sv = mergeItems(localSv, migrateSouvenirs(cloudSv), known(svKey));
+    const pl = mergeItems(localPl, Object.entries(cloudPlObj).map(([id, v]) => ({ ...v, id })), known(plKey));
     await upsertSouvenirs(sv.toUpload);
     await upsertPlans(pl.toUpload);
     const svList = sv.merged.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
     const plObj = Object.fromEntries(pl.merged.map(({ id, ...v }) => [id, v]));
-    pushedSv.current = new Map(svList.map((x) => [x.id, JSON.stringify(x)]));
+    // クラウドに入っている形を「送りずみ」の基準にする（変換したお土産は、変わった分として送り直される）
+    const svRaw = new Map(cloudSv.map((x) => [x.id, JSON.stringify(x)]));
+    const svUp = new Set(sv.toUpload.map((x) => x.id));
+    pushedSv.current = new Map(svList.map((x) => [x.id, svUp.has(x.id) ? JSON.stringify(x) : (svRaw.get(x.id) ?? JSON.stringify(x))]));
     pushedPl.current = new Map(Object.entries(plObj).map(([k, v]) => [k, JSON.stringify(v)]));
     setSouvenirs(svList);
     setPlans(plObj);
@@ -1054,25 +1065,29 @@ export default function Home() {
         try { known = new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch {}
         const [cloudItems, cloudSettings] = await Promise.all([pullItems(), pullSettings(), pullPhotoRows()]);
         if (!alive) return;
-        const localItems = JSON.parse(localStorage.getItem(KEY) || '[]');
-        const { merged, toUpload, removed } = mergeItems(localItems, cloudItems, known);
+        // クラウドに昔の形で入っているお店も、読み込むときに新しい形へ変換する（件数は変わらない）。変わったお店は下で送り直される
+        const localItems = migrateItems(JSON.parse(localStorage.getItem(KEY) || '[]'));
+        const { merged, toUpload, removed } = mergeItems(localItems, migrateItems(cloudItems), known);
         removed.forEach((id) => deletePhotosOf(id).catch(() => {}));
         await upsertItems(toUpload);
         if (cloudSettings) {
-          setFolders((prev) => [...new Set([...(cloudSettings.folders || []), ...prev])]);
-          setCustomCats((prev) => [...new Set([...(cloudSettings.customCats || []), ...prev])]);
+          setFolders((prev) => migrateFolderList([...(cloudSettings.folders || []), ...prev]));
+          setCustomCats((prev) => cleanCustomCats([...(cloudSettings.customCats || []), ...prev]));
           if (cloudSettings.hotel !== undefined) setHotel(cloudSettings.hotel || null);
           // eタビセツはフォルダごとに新しいほうを使う
           if (Array.isArray(cloudSettings.prompts)) setPrompts((prev) => [...prev, ...cloudSettings.prompts.filter((c) => !prev.some((p) => p.name === c.name))].slice(0, 20));
           if (cloudSettings.notes) setNotes((prev) => {
             const out = { ...prev };
             for (const [k, v] of Object.entries(cloudSettings.notes)) if (!out[k] || (v?.updatedAt || 0) > (out[k].updatedAt || 0)) out[k] = v;
-            return out;
+            return migrateKeyed(out);
           });
         } else {
           await pushSettings(settingsData());
         }
-        pushed.current = new Map(merged.map((it) => [it.id, JSON.stringify(it)]));
+        // クラウドに入っている形を「送りずみ」の基準にする（昔の形から変換したお店は、変わった分として送り直される）
+        const cloudRaw = new Map(cloudItems.map((it) => [it.id, JSON.stringify(it)]));
+        const upIds = new Set(toUpload.map((it) => it.id));
+        pushed.current = new Map(merged.map((it) => [it.id, upIds.has(it.id) ? JSON.stringify(it) : (cloudRaw.get(it.id) ?? JSON.stringify(it))]));
         setItems(merged);
         try { localStorage.setItem(key, JSON.stringify(merged.map((it) => it.id))); } catch {}
         synced.current = true;
@@ -1392,12 +1407,12 @@ export default function Home() {
                 <button type="button" className="pill pill-btn" onClick={() => setMoveFor(moveFor === it.id ? null : it.id)}>{it.trip} ▾</button>
                 {moveFor === it.id && (
                   <div className="dropdown move-dd">
-                    <p className="dd-title">別のフォルダに移す</p>
+                    <p className="dd-title">別の旅先フォルダーに移す</p>
                     <ul>
                       {allFolders.filter((f) => f !== it.trip).map((f) => (
                         <li key={f}><button type="button" onClick={() => { update(it.id, { trip: f }); setMoveFor(null); }}>{f}</button></li>
                       ))}
-                      {allFolders.length < 2 && <li><p className="dd-title">ほかのフォルダがありません</p></li>}
+                      {allFolders.length < 2 && <li><p className="dd-title">ほかの旅先フォルダーがありません</p></li>}
                     </ul>
                   </div>
                 )}
@@ -1527,7 +1542,7 @@ export default function Home() {
         {tab === 'search' && (
         <label className="ctx-chip trip">
           <IcPlane size={15} />
-          <span className="sr">旅（フォルダ）</span>
+          <span className="sr">旅先フォルダー</span>
           <select value={trip} onChange={(e) => { setTrip(e.target.value); setCatFilter('すべて'); }}>
             {allFolders.map((f) => <option key={f} value={f}>{f === UNSORTED ? f : `${f}の旅`}</option>)}
           </select>

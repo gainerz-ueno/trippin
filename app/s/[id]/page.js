@@ -11,7 +11,7 @@ import { totals } from '../../lib/money';
 import { mapsLink } from '../../lib/api';
 
 const BASE_CATS = {
-  観光: '#2F7D6B', 朝市: '#C9822B', 夜市: '#5B4BA8', 朝食: '#E0A526', 昼食: '#D9692E', 夕食: '#B8432F', 夜食: '#3F4F86',
+  観光: '#2F7D6B', 遊ぶ: '#9AAE1C', 朝市: '#C9822B', 夜市: '#5B4BA8', 朝食: '#E0A526', 昼食: '#D9692E', 夕食: '#B8432F', 夜食: '#3F4F86',
   おやつ: '#D45C8C', カフェ: '#8A5A3C', 酒場: '#8E2F4F', 買物: '#2E7FB8', 美容: '#C2569E', マッサージ: '#4E9A5B',
 };
 const catColor = (c) => BASE_CATS[c] || '#6B7A8C';
