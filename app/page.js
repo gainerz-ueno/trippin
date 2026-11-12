@@ -31,12 +31,25 @@ const COUNTRY_LIST = [
 const CATS_KEY = 'trippin.cats';
 const catColor = (c) => (BASE_CATS.find(([n]) => n === c) || [, CUSTOM_COLOR])[1];
 
+// 画面下に固定のタブ（さがす・候補・行った）の上までを「見える範囲」とする（2026-11-12）
+function visibleBottom() {
+  if (typeof document === 'undefined') return 0;
+  const nav = [...document.querySelectorAll('[role="tablist"]')].map((el) => el.getBoundingClientRect()).find((b) => b.bottom >= window.innerHeight - 2 && b.top > window.innerHeight / 2);
+  return (nav ? nav.top : window.innerHeight) - 12;
+}
+// 開いた枠の下が見切れるときは、全部見えるところまで画面を動かす
+function keepVisible(el) {
+  if (!el) return;
+  const r = el.getBoundingClientRect(), limit = visibleBottom();
+  if (r.bottom > limit) window.scrollBy({ top: Math.min(r.bottom - limit, r.top - 70), behavior: 'smooth' });
+}
+
 // カテゴリーを選ぶ（＋ 新しいカテゴリー）
 function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, title }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const boxRef = useRef(null);
-  useEffect(() => { boxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, []);
+  useEffect(() => { const el = boxRef.current; requestAnimationFrame(() => keepVisible(el)); }, []);
   const all = allCats(customCats);
   function submitNew(e) {
     e.preventDefault();
@@ -791,6 +804,29 @@ function Rating({ p }) {
 }
 
 export default function Home() {
+  // プルダウン（.dropdown）が画面の下で見切れないようにする（2026-11-12 社長：未分類のお店を分類するときに下で切れて選べない）。
+  // 開いたときに下に入りきらなければ、上に余裕があれば上向きに出し、なければ画面を動かして全部見えるようにする
+  useEffect(() => {
+    const fit = (dd) => {
+      if (!(dd instanceof HTMLElement) || dd.dataset.fit) return;
+      dd.dataset.fit = '1';
+      requestAnimationFrame(() => {
+        const limit = visibleBottom();
+        const r = dd.getBoundingClientRect();
+        if (r.bottom <= limit) return;
+        const anchor = dd.parentElement ? dd.parentElement.getBoundingClientRect() : r;
+        if (anchor.top - r.height - 12 > 0) { dd.classList.add('up'); return; }
+        window.scrollBy({ top: r.bottom - limit, behavior: 'smooth' });
+      });
+    };
+    const mo = new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
+      if (!(n instanceof HTMLElement)) return;
+      if (n.classList.contains('dropdown')) fit(n);
+      n.querySelectorAll && n.querySelectorAll('.dropdown').forEach(fit);
+    })));
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, []);
   const [tab, setTab] = useState('search');
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
