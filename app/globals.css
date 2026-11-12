@@ -400,6 +400,11 @@ h1.logo img{height:30px}
 .act{font:inherit;font-size:13px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:40px;padding:0 12px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;white-space:nowrap}
 .act.primary{flex:1;border-color:var(--accent);background:var(--accent);color:var(--accent-ink)}
 .act.icon{width:40px;padding:0}
+.shopinfo{display:flex;flex-direction:column;gap:8px;margin:0 0 8px}
+.shopinfo .price{margin:0;font-size:13px;font-weight:600;color:var(--sub)}
+.shopinfo .actrow .act{flex:1}
+.shopinfo .hoursbtn{width:100%}
+.weekhours{margin:0;padding:8px 12px;list-style:none;font-size:12px;line-height:1.7;color:var(--ink);background:var(--bg);border-radius:12px;overflow-wrap:anywhere}
 .act.added{flex:1;color:var(--sub);background:var(--bg);cursor:default}
 .dd-wrap{position:relative;display:inline-flex}
 .dd-wrap.grow{flex:1}

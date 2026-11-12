@@ -803,6 +803,33 @@ function Rating({ p }) {
   );
 }
 
+// 検索結果の各お店の情報（電話・ホームページ・値段の目安・曜日ごとの営業時間）。取れなかった項目は何も出さない
+function ShopInfo({ p }) {
+  const [openHours, setOpenHours] = useState(false);
+  const week = Array.isArray(p.weekHours) ? p.weekHours.filter(Boolean) : [];
+  const tel = String(p.phoneTel || p.phone || '').replace(/[^\d+]/g, '');
+  if (!p.phone && !p.website && !p.priceText && !week.length) return null;
+  return (
+    <div className="shopinfo">
+      {p.priceText && <p className="price">値段の目安：{p.priceText}</p>}
+      {(p.phone || p.website) && (
+        <div className="actrow">
+          {p.phone && tel && <a className="act" href={`tel:${tel}`}>電話する {p.phone}</a>}
+          {p.website && <a className="act" href={p.website} target="_blank" rel="noopener noreferrer">ホームページを開く</a>}
+        </div>
+      )}
+      {week.length > 0 && (
+        <>
+          <button type="button" className="act hoursbtn" aria-expanded={openHours} onClick={() => setOpenHours((v) => !v)}>
+            {openHours ? '営業時間を閉じる' : '営業時間を見る'}
+          </button>
+          {openHours && <ul className="weekhours">{week.map((w, i) => <li key={i}>{w}</li>)}</ul>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   // プルダウン（.dropdown）が画面の下で見切れないようにする（2026-11-12 社長：未分類のお店を分類するときに下で切れて選べない）。
   // 開いたときに下に入りきらなければ、上に余裕があれば上向きに出し、なければ画面を動かして全部見えるようにする
@@ -1738,6 +1765,7 @@ export default function Home() {
                     {fromHotel(hotel, p) && <p className="fromhotel">{fromHotel(hotel, p)}</p>}
                   </div>
                 </div>
+                <ShopInfo p={p} />
                 <div className="actrow">
                   {savedIds.has(p.placeId)
                     ? (snsUrl && items.find((i) => i.placeId === p.placeId)?.srcUrl !== snsUrl

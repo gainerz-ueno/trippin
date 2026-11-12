@@ -16,6 +16,13 @@ const FIELDS = [
   // 営業時間も検索と同じ料金区分で一緒に取れる（候補に入れたあと別に取りに行かなくていい）
   'places.regularOpeningHours.periods',
   'places.utcOffsetMinutes',
+  // 検索結果に出すお店の情報（営業時間・電話・ホームページ・値段の目安）。どれも検索と同じ料金区分
+  'places.regularOpeningHours.weekdayDescriptions',
+  'places.nationalPhoneNumber',
+  'places.internationalPhoneNumber',
+  'places.websiteUri',
+  'places.priceLevel',
+  'places.priceRange',
   'nextPageToken',
 ].join(',');
 
@@ -176,6 +183,29 @@ function hoursOf(p) {
   return { hours, periods, offset, at: Date.now() };
 }
 
+// 値段の目安（金額の幅があればそれ、無ければ priceLevel を日本語に。どちらも無ければ空）
+const PRICE_LEVEL_JA = {
+  PRICE_LEVEL_INEXPENSIVE: '安め',
+  PRICE_LEVEL_MODERATE: 'ふつう',
+  PRICE_LEVEL_EXPENSIVE: '高め',
+  PRICE_LEVEL_VERY_EXPENSIVE: 'とても高め',
+};
+const money = (m) => {
+  if (!m || m.units == null) return '';
+  const n = Number(m.units) + (m.nanos || 0) / 1e9;
+  return Number.isFinite(n) ? n.toLocaleString('ja-JP') : '';
+};
+function priceOf(p) {
+  const r = p.priceRange;
+  const a = money(r?.startPrice);
+  const b = money(r?.endPrice);
+  const cur = r?.startPrice?.currencyCode || r?.endPrice?.currencyCode || '';
+  if (a && b) return `${a}〜${b} ${cur}`.trim();
+  if (a) return `${a}〜 ${cur}`.trim();
+  if (b) return `〜${b} ${cur}`.trim();
+  return PRICE_LEVEL_JA[p.priceLevel] || '';
+}
+
 // jaKnown=false：日本語の表記を取っていない（現地の言語1回だけで検索したとき）
 function shape(p, lp, lang, jaKnown = true) {
   const jaName = jaKnown ? p.displayName?.text || '' : '';
@@ -200,6 +230,12 @@ function shape(p, lp, lang, jaKnown = true) {
     type: p.primaryTypeDisplayName?.text || '',
     country: countryOf(p),
     hoursInfo: hoursOf(p),
+    // 検索結果に出す情報（取れなかった項目は空。古い保存データには無いので、画面側で無くても落ちないようにしてある）
+    phone: p.nationalPhoneNumber || p.internationalPhoneNumber || '',
+    phoneTel: p.internationalPhoneNumber || p.nationalPhoneNumber || '',
+    website: p.websiteUri || '',
+    priceText: priceOf(p),
+    weekHours: Array.isArray(p.regularOpeningHours?.weekdayDescriptions) ? p.regularOpeningHours.weekdayDescriptions : [],
   };
 }
 
