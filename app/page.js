@@ -1729,7 +1729,7 @@ export default function Home() {
               <article className="item" key={p.placeId}>
                 <div className="item-top">
                   <div className="thumbwrap">
-                    <PhotoThumb name={p.photo} auto={autoPhotoIds.has(p.placeId)} onOpen={() => toggleDetail('s:' + p.placeId)} />
+                    <PhotoThumb name={p.photo} auto={autoPhotoIds.has(p.placeId)} />
                   </div>
                   <div className="body">
                     <NameBlock p={p} />
@@ -1752,13 +1752,9 @@ export default function Home() {
                         )}
                       </span>
                     )}
-                  <a className="act" href={mapsLink(p)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
+                  <a className="act primary" href={mapsLink(p)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />Googleマップを開く</a>
                   <NaverLinks place={p} route={false} />
                 </div>
-                <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
-                  {openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細を開く'}
-                </button>
-                {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
               </article>
             ))}
             {nextToken && (
