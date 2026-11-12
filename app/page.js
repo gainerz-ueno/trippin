@@ -1756,7 +1756,7 @@ export default function Home() {
               <article className="item" key={p.placeId}>
                 <div className="item-top">
                   <div className="thumbwrap">
-                    <PhotoThumb name={p.photo} auto={autoPhotoIds.has(p.placeId)} />
+                    <PhotoThumb name={p.photo} auto={autoPhotoIds.has(p.placeId)} mapsHref={mapsLink(p)} />
                   </div>
                   <div className="body">
                     <NameBlock p={p} />
