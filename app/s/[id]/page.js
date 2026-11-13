@@ -86,7 +86,7 @@ export default function SharedFolder() {
       {data && (
         <>
           <h2 className="share-title">{data.folder}</h2>
-          <div className="tabs" role="tablist">
+          <div className="tabs two" role="tablist">
             <button role="tab" aria-selected={tab === 'cand'} onClick={() => setTab('cand')}>候補 <span className="count">{cand.length}</span></button>
             <button role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>行った <span className="count">{done.length}</span></button>
           </div>
