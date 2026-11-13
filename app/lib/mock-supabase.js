@@ -6,7 +6,7 @@
 
 const DB_KEY = 'tabibi.mockdb';
 const SES_KEY = 'tabibi.mocksession';
-const PK = { items: ['user_id', 'id'], settings: ['user_id'], photos: ['id'], shares: ['id'], note_pages: ['id'], guidebooks: ['id'], souvenirs: ['user_id', 'id'], trip_plans: ['user_id', 'trip'] };
+const PK = { items: ['user_id', 'id'], settings: ['user_id'], photos: ['id'], shares: ['id'], note_pages: ['id'], guidebooks: ['id'], souvenirs: ['user_id', 'id'], trip_plans: ['user_id', 'trip'], consents: ['user_id'] };
 const files = new Map(); // storage（このページを開いている間だけ）
 // 記録してよい出来事の名前（本物は supabase/migrations/20261027_premium.sql の log_event と同じ一覧）
 export const EVENTS = new Set(['search', 'add_place', 'localname', 'ai_recommend', 'ai_quota_hit', 'prem_sheet', 'prem_interest', 'guide_paid_set', 'guide_locked_view', 'guide_buy_interest', 'tpl_pick', 'share_create', 'souvenir_add', 'sv_cap_hit', 'sv_mark']);
@@ -97,7 +97,7 @@ export function mockClient() {
         // ?mockuser=premium… で開くとプレミアム（月払い）、premiumyear… で年払いとして動く（回数の数え方は /api/noteai のにせ物）
         const raw = (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mockuser')) || '';
         const name = raw.replace(/[^\w-]/g, '').slice(0, 40) || 'mock-user';
-        setSession({ access_token: 'mock-token:' + name, user: { id: name } });
+        setSession({ access_token: 'mock-token:' + name, user: { id: name, email: name + '@example.test' } });
         return { data: {}, error: null };
       },
       async signOut() { setSession(null); return { error: null }; },
@@ -131,6 +131,16 @@ export function mockClient() {
         const owner = uidNow() === g.user_id;
         const show = price > 0 && !owner ? all.slice(0, g.free_pages || 0) : all;
         return { data: { title: g.title, author: g.author, description: g.description, price, free_pages: g.free_pages || 0, total_pages: all.length, locked: show.length < all.length, cover: pathOf(g.cover_id), pages: show }, error: null };
+      }
+      if (fn === 'record_consent') {
+        // 本物（supabase/migrations/20261109_login_safety.sql）と同じ：ログインしている本人の分だけ記録する
+        const uid = uidNow();
+        const v = String(args.v || '');
+        if (!uid || v.length < 1 || v.length > 20) return { data: false, error: null };
+        const rows = (db.consents || []).filter((r) => r.user_id !== uid);
+        rows.push({ user_id: uid, version: v, email: session()?.user?.email || '', accepted_at: new Date().toISOString() });
+        db.consents = rows; store(db);
+        return { data: true, error: null };
       }
       if (fn === 'log_event') {
         // 本物と同じ：決まった名前だけ。ログインしている人は1日1回まで数える

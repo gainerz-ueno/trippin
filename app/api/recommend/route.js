@@ -8,13 +8,14 @@ const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
 
 const MODEL = 'gemini-3.8-flash';
 
-async function gemini(prompt) {
+// maxTokens：出力の上限（考える分も込み）。考える量は最小（gemini-3.8-flash は low が最小。考えた分も出力の料金になる）
+async function gemini(prompt, maxTokens = 3072) {
   const res = await gfetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GKEY() },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.4 },
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.4, maxOutputTokens: maxTokens, thinkingConfig: { thinkingLevel: 'low' } },
     }),
     cache: 'no-store',
   }, 20000);
@@ -65,7 +66,8 @@ export async function POST(req) {
             `旅行先: ${trip || '不明'} / 現地の時刻: ${localTime || '不明'}`,
             `質問: ${q}`,
             '{"searchQuery":"..."} のJSONだけを返す。',
-          ].join('\n')
+          ].join('\n'),
+          1024
         );
         if (k?.searchQuery) searchQuery = String(k.searchQuery).slice(0, 40);
       } catch {}

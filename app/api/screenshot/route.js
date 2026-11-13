@@ -30,7 +30,8 @@ export async function POST(req) {
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ inline_data: { mime_type: mimeType, data: image } }, { text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0 },
+          // 考える量は最小（gemini-3.8-flash は low が最小）。出力の上限は考える分も込み
+          generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 2048, thinkingConfig: { thinkingLevel: 'low' } },
         }),
         cache: 'no-store',
       },

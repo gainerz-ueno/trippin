@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { clientIp } from './app/lib/loginsafety.mjs';
 
 // サイト全体にパスワードをかける（Cloudflare のシークレット SITE_PASSWORD）
 // ・正しいパスワードを入れたら、そのスマホに1年間ログインの印（クッキー）を残す
@@ -22,14 +23,14 @@ function tooMany(ip, max = 30, bucket = '') {
   if (hits.size > 5000) hits.clear();
   return list.length > max;
 }
-const ipOf = (req) => req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+const ipOf = (req) => clientIp(req.headers); // cf-connecting-ip だけを使う（偽のヘッダーで別人にならないように）
 const LIMITED = ['/api/search', '/api/recommend', '/api/screenshot', '/api/details', '/api/localname'];
 
 export async function middleware(req) {
   const { pathname } = req.nextUrl;
   if (pathname === '/login' || pathname === '/api/login') return NextResponse.next();
   // 特定商取引法に基づく表記は、決済の審査・購入前の確認のため誰でも見られるようにする
-  if (pathname === '/tokushoho') return NextResponse.next();
+  if (pathname === '/tokushoho' || pathname === '/privacy' || pathname === '/terms') return NextResponse.next();
   // 共有リンク（/s/...）は、パスワードなしで誰でも見られる。見るのに使う地図の鍵とお店の写真も同じ
   if (pathname.startsWith('/s/') || pathname.startsWith('/g/') || pathname === '/api/mapkey') return NextResponse.next();
   if (pathname === '/api/photo') {
@@ -38,7 +39,8 @@ export async function middleware(req) {
     const ref = req.headers.get('referer');
     let refHost = '';
     try { refHost = ref ? new URL(ref).host : ''; } catch {}
-    const own = site ? site === 'same-origin' || site === 'none' : !ref || refHost === req.nextUrl.host;
+    // sec-fetch-site も referer も無い呼び出し（プログラムからの直接の呼び出し）は通さない
+    const own = site ? site === 'same-origin' || site === 'none' : refHost === req.nextUrl.host;
     if (!own) return new NextResponse('forbidden', { status: 403 });
     if (tooMany(ipOf(req), 200, 'photo:')) return new NextResponse('too many', { status: 429 });
     return NextResponse.next();

@@ -6,7 +6,6 @@ import { jaError } from '../lib/api';
 import CoverCanvas from './CoverCanvas';
 import { TEMPLATES, SIZES, sizeOf, SouvenirPage } from './NoteCanvas';
 import { totals } from '../lib/money';
-import { PLAN, guideSplit, validGuidePrice, yen } from '../lib/plan';
 import { logEvent } from '../cloud';
 import { shopName } from '../Souvenirs';
 import { FONTS, loadFont, fontOf } from './fonts';
@@ -15,7 +14,7 @@ import { listPhotos } from '../photos';
 import { ensurePhotos, listPages, deletePage, guideUrls, listGuides, saveGuide, deleteGuide, savePage } from '../cloud';
 
 const keyOf = (p) => p.cloudId || 'L' + p.id;
-const blank = (author = '') => ({ id: null, title: '', author, description: '', page_ids: [], cover_id: null, published: true, price: 0, free_pages: 0 });
+const blank = (author = '') => ({ id: null, title: '', author, description: '', page_ids: [], cover_id: null, published: true });
 
 export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn, onClose, unsorted, souvenirs = [] }) {
   const [pages, setPages] = useState(null); // 保存したeタビセツ・表紙
@@ -168,10 +167,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
     try {
       if (!g.title.trim()) throw new Error('eガイドブックの名前を入れてください');
       if (!sel.length) throw new Error('ページを1つ以上えらんでください');
-      const price = g.paid ? Number(String(g.priceText ?? g.price).replace(/[,，\s円]/g, '')) : 0;
-      if (g.paid && !validGuidePrice(price)) throw new Error(`値段は${yen(PLAN.GUIDE_MIN)}〜${yen(PLAN.GUIDE_MAX)}の整数で入れてください`);
-      const row = await saveGuide({ ...g, page_ids: sel, price, free_pages: g.paid ? Math.min(g.free_pages || 0, sel.length) : 0 });
-      if (price > 0) logEvent('guide_paid_set', String(price));
+      const row = await saveGuide({ ...g, page_ids: sel });
       setG((x) => ({ ...x, id: row.id }));
       setMsg(row.id);
       await reload();
@@ -179,7 +175,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
     setBusy('');
   }
   function edit(x) {
-    setG({ id: x.id, title: x.title, author: x.author, description: x.description, page_ids: x.page_ids || [], cover_id: x.cover_id, published: x.published, price: x.price || 0, free_pages: x.free_pages || 0, paid: (x.price || 0) > 0, priceText: x.price ? String(x.price) : '' });
+    setG({ id: x.id, title: x.title, author: x.author, description: x.description, page_ids: x.page_ids || [], cover_id: x.cover_id, published: x.published });
     setMsg(''); setErr('');
     setTimeout(() => document.getElementById('gm-edit')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }
@@ -206,7 +202,7 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
                   {c && urls[c.path] ? <img src={urls[c.path]} alt="" /> : <span className="ph0" />}
                   <div className="gm-li">
                     <b>{x.title}</b>
-                    <small>{(x.page_ids || []).length}ページ・{x.published ? 'リンクで公開中' : '非公開'}{x.price > 0 ? `・有料 ${yen(x.price)}` : x.published ? '・無料' : ''}</small>
+                    <small>{(x.page_ids || []).length}ページ・{x.published ? 'リンクで公開中' : '非公開'}</small>
                     <div className="gm-li-acts">
                       {x.published && <a href={`/g/${x.id}`} target="_blank" rel="noopener noreferrer">見る</a>}
                       {x.published && <button type="button" onClick={() => copy(x.id)}>リンクをコピー</button>}
@@ -232,7 +228,6 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
         <label className="nm-check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={g.published} onChange={(e) => setG({ ...g, published: e.target.checked })} />リンクで公開する</label>
       </div>
       <label className="nm-field">紹介文<textarea value={g.description} maxLength={300} placeholder="例：はじめての台北で、朝ごはんと夜市を食べ歩いた3日間。" onChange={(e) => setG({ ...g, description: e.target.value })} /></label>
-      {g.published && <PaidChoice g={g} setG={setG} pages={sel.length} />}
 
       <p className="nm-step">② ページをえらぶ<small>えらんだ順に並びます（{sel.length}ページ）</small></p>
       {notes.length === 0 ? (
@@ -364,10 +359,9 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
       )}
       <div className="nm-acts">
         <button type="button" className={cv.mode === 'ai' ? 'nm-ai-btn' : ''} onClick={makeCover} disabled={!!busy || (cv.mode === 'ai' && left === 0)} style={{ gridColumn: '1 / -1' }}>
-          {busy === 'cover' ? (cv.mode === 'ai' ? 'AIが描いています…（30秒ほど）' : '表紙を作っています…') : cv.mode === 'ai' && left === 0 ? '回数を使い切りました' : 'この表紙を作る'}
-          {cv.mode === 'ai' && busy !== 'cover' && left != null && left > 0 && <small>{left >= 999 ? '回数の制限なし（運営者）' : `あと${left}回`}</small>}
+          {busy === 'cover' ? (cv.mode === 'ai' ? 'AIが描いています…（30秒ほど）' : '表紙を作っています…') : cv.mode === 'ai' && left === 0 ? '今日の回数を使い切りました' : 'この表紙を作る'}
+          {cv.mode === 'ai' && busy !== 'cover' && left != null && left > 0 && <small>{left >= 999 ? '回数の制限なし（運営者）' : `今日あと${left}回`}</small>}
         </button>
-        {cv.mode === 'ai' && left === 0 && <button type="button" className="prem-link" style={{ gridColumn: '1 / -1' }} onClick={() => window.dispatchEvent(new Event('tabibi:premium'))}>プレミアムなら月{PLAN.AI_MONTH}回使えます（見る）</button>}
       </div>
 
       <p className="nm-step">④ 保存する</p>
@@ -390,31 +384,3 @@ export default function GuideMaker({ items, folders, trip: trip0, user, onSignIn
   );
 }
 
-// 公開のしかた：無料／有料（作り手が決める）。決済はまだ作っていないので、有料のeガイドブックは「買いたい」の数を記録するだけ
-function PaidChoice({ g, setG, pages }) {
-  const price = Number(String(g.priceText ?? g.price ?? '').replace(/[,，\s円]/g, ''));
-  const ok = validGuidePrice(price) && price > 0;
-  const sp = ok ? guideSplit(price) : null;
-  return (
-    <div className="gm-paid">
-      <div className="nm-seg-row" role="radiogroup" aria-label="公開のしかた">
-        <button type="button" className="nm-seg" aria-pressed={!g.paid} onClick={() => setG({ ...g, paid: false })}>無料で公開</button>
-        <button type="button" className="nm-seg" aria-pressed={!!g.paid} onClick={() => setG({ ...g, paid: true, priceText: g.priceText || '' })}>有料で公開</button>
-      </div>
-      {g.paid && (
-        <>
-          <div className="nm-2">
-            <label className="nm-field">値段（円）<input inputMode="numeric" value={g.priceText ?? ''} placeholder={`${PLAN.GUIDE_MIN}〜${PLAN.GUIDE_MAX}`} onChange={(e) => setG({ ...g, priceText: e.target.value })} /></label>
-            <label className="nm-field">無料で見せるページ
-              <select value={Math.min(g.free_pages || 0, pages)} onChange={(e) => setG({ ...g, free_pages: Number(e.target.value) })}>
-                {Array.from({ length: Math.max(1, pages) }, (_, i) => i).map((n) => <option key={n} value={n}>{n === 0 ? '表紙だけ' : `はじめの${n}ページ`}</option>)}
-              </select>
-            </label>
-          </div>
-          {sp && <p className="nm-hint">1冊売れると：{yen(sp.price)} − カード手数料 {yen(sp.card)} − Tabibi {yen(sp.platform)}（10%）＝ <b>あなたに {yen(sp.creator)}</b></p>}
-          <p className="nm-hint">お支払いの仕組みはまだ準備中です。いまは読んだ人が「買いたい」を押した数を記録して、決済を作るときの判断に使います。</p>
-        </>
-      )}
-    </div>
-  );
-}

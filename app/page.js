@@ -3,7 +3,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NaverLinks, inKorea } from './naver';
 import { CatIcon, CAT_SEARCH, IcSearch, IcBookmark, IcCheckCircle, IcCheck, IcPin, IcPen, IcHotel, IcPlane, IcUser, IcDown, IcRight, IcMore } from './icons';
 import dynamic from 'next/dynamic';
+import { createPortal } from 'react-dom';
 import MapView from './MapView';
+import PhotoThumb, { AUTO_PHOTOS, Cam } from './PhotoThumb';
+import { guessCountry } from './lib/country-guess';
 // eタビセツ（開いたときだけ読み込む）
 const NoteMaker = dynamic(() => import('./note/NoteMaker'), { ssr: false });
 const GuideMaker = dynamic(() => import('./note/GuideMaker'), { ssr: false });
@@ -11,12 +14,14 @@ const NoteShelf = dynamic(() => import('./note/NoteShelf'), { ssr: false });
 import { safeUrl } from './lib/safeurl';
 import { api, jaError, mapsLink } from './lib/api';
 import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
-import { logEvent, supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
+import { hasConsented, recordConsent, notify, logEvent, supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
 import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
+import FxPanel from './FxPanel';
 import { distanceKm } from './lib/geo';
-const PremiumSheet = dynamic(() => import('./Premium'), { ssr: false });
 const CallSheet = dynamic(() => import('./CallSheet'), { ssr: false });
+import { BASE_CATS, CUSTOM_COLOR, allCats, cleanCustomCats } from './lib/cats.mjs';
+import { UNSORTED, isLegacyFolder, migrateItems, migrateFolderList, migrateSouvenirs, migrateKeyed, removeFolder } from './lib/migrate.mjs';
 
 const KEY = 'trippin.v1';
 
@@ -24,24 +29,30 @@ const COUNTRY_LIST = [
   ['TW', '台湾'], ['KR', '韓国'], ['HK', '香港'], ['CN', '中国'], ['VN', 'ベトナム'],
   ['TH', 'タイ'], ['SG', 'シンガポール'], ['MY', 'マレーシア'], ['PH', 'フィリピン'], ['JP', '日本'],
 ];
-// 基本カテゴリー（本人が決めた12個。色は地図のピンにも使う）
-// 「マッサージ」は本人の一覧にないので基本から外した。前に「マッサージ」で登録したお店は、自分で作ったカテゴリーとして残る
-const BASE_CATS = [
-  ['観光', '#2F7D6B'], ['朝市', '#C9822B'], ['夜市', '#5B4BA8'], ['朝食', '#E0A526'], ['昼食', '#D9692E'],
-  ['夕食', '#B8432F'], ['夜食', '#3F4F86'], ['おやつ', '#D45C8C'], ['カフェ', '#8A5A3C'], ['酒場', '#8E2F4F'],
-  ['買物', '#2E7FB8'], ['美容', '#C2569E'],
-];
-const CUSTOM_COLOR = '#6B7A8C';
+// 基本カテゴリーは ./lib/cats.mjs（色は地図のピンにも使う）
 const CATS_KEY = 'trippin.cats';
 const catColor = (c) => (BASE_CATS.find(([n]) => n === c) || [, CUSTOM_COLOR])[1];
+
+// 画面下に固定のタブ（さがす・候補・行った）の上までを「見える範囲」とする（2026-11-12）
+function visibleBottom() {
+  if (typeof document === 'undefined') return 0;
+  const nav = [...document.querySelectorAll('[role="tablist"]')].map((el) => el.getBoundingClientRect()).find((b) => b.bottom >= window.innerHeight - 2 && b.top > window.innerHeight / 2);
+  return (nav ? nav.top : window.innerHeight) - 12;
+}
+// 開いた枠の下が見切れるときは、全部見えるところまで画面を動かす
+function keepVisible(el) {
+  if (!el) return;
+  const r = el.getBoundingClientRect(), limit = visibleBottom();
+  if (r.bottom > limit) window.scrollBy({ top: Math.min(r.bottom - limit, r.top - 70), behavior: 'smooth' });
+}
 
 // カテゴリーを選ぶ（＋ 新しいカテゴリー）
 function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, title }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const boxRef = useRef(null);
-  useEffect(() => { boxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, []);
-  const all = [...BASE_CATS.map(([n]) => n), ...customCats];
+  useEffect(() => { const el = boxRef.current; requestAnimationFrame(() => keepVisible(el)); }, []);
+  const all = allCats(customCats);
   function submitNew(e) {
     e.preventDefault();
     const n = name.trim();
@@ -72,42 +83,42 @@ function CategoryPicker({ customCats, current, onPick, onAddCustom, onClose, tit
   );
 }
 
-// 「候補に追加」の下に出るカテゴリーのプルダウン
+// 「候補に追加」で出るカテゴリーの選択シート（画面の下から出る。ボタンは大きく、閉じるボタンあり）
 function CategoryDropdown({ customCats, onPick, onAddCustom, onClose }) {
-  const ref = useRef(null);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
-  const all = [...BASE_CATS.map(([n]) => n), ...customCats];
+  const all = allCats(customCats);
   useEffect(() => {
-    const out = (e) => { const box = ref.current?.parentElement; if (box && !box.contains(e.target)) onClose(); };
-    document.addEventListener('pointerdown', out);
-    return () => document.removeEventListener('pointerdown', out);
+    const key = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', key);
+    return () => document.removeEventListener('keydown', key);
   }, [onClose]);
-  return (
-    <div className="dropdown" ref={ref} role="menu">
-      <p className="dd-title">カテゴリーを選んで追加</p>
-      <ul>
-        {all.map((c) => (
-          <li key={c}><button type="button" role="menuitem" onClick={() => onPick(c)}><i style={{ background: catColor(c) }} />{c}</button></li>
-        ))}
-        <li><button type="button" role="menuitem" className="dd-none" onClick={() => onPick('')}>なし</button></li>
-        <li>
-          {adding ? (
-            <form className="dd-new" onSubmit={(e) => { e.preventDefault(); const n = name.trim(); if (!n) return; if (!all.includes(n)) onAddCustom(n); onPick(n); }}>
-              <input id="ddnew" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="新しいカテゴリー" maxLength={12} />
-              <button className="btn" type="submit">追加</button>
-            </form>
-          ) : (
-            <button type="button" role="menuitem" className="dd-add" onClick={() => setAdding(true)}>＋ 新しいカテゴリー</button>
-          )}
-        </li>
-      </ul>
-    </div>
+  return createPortal(
+    <div className="sheet-back" onClick={onClose}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="カテゴリーを選んで追加" onClick={(e) => e.stopPropagation()}>
+        <p className="sheet-title">カテゴリーを選んで追加</p>
+        <ul className="sheet-list">
+          {all.map((c) => (
+            <li key={c}><button type="button" className="sheet-btn" onClick={() => onPick(c)}><i style={{ background: catColor(c) }} />{c}</button></li>
+          ))}
+          <li><button type="button" className="sheet-btn none" onClick={() => onPick('')}>カテゴリーなしで追加する</button></li>
+          <li>
+            {adding ? (
+              <form className="sheet-new" onSubmit={(e) => { e.preventDefault(); const n = name.trim(); if (!n) return; if (!all.includes(n)) onAddCustom(n); onPick(n); }}>
+                <input id="ddnew" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="新しいカテゴリー" maxLength={12} />
+                <button className="btn" type="submit">追加する</button>
+              </form>
+            ) : (
+              <button type="button" className="sheet-btn none" onClick={() => setAdding(true)}>＋ 新しいカテゴリーを作る</button>
+            )}
+          </li>
+        </ul>
+        <button type="button" className="sheet-close" onClick={onClose}>閉じる</button>
+      </div>
+    </div>,
+    document.body
   );
 }
-
-// フォルダ（旅行ごとに自分で名前を付けて分ける）
-const UNSORTED = '未分類';
 
 // フォルダの共有（リンクを作る・コピー・やめる）
 function SharePanel({ folder, user }) {
@@ -163,14 +174,14 @@ function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, 
   return (
     <div className="folderbar">
       <div className="fb-row">
-        <span className="fb-label">フォルダ</span>
+        <span className="fb-label">旅先フォルダー（行き先ごと）</span>
         <div className="fb-chips">
           {folders.map((f) => (
             <button type="button" key={f} aria-pressed={f === current} onClick={() => { onSelect(f); setMode(null); }}>
               {f}<span className="fb-count">{counts[f] || 0}</span>
             </button>
           ))}
-          <button type="button" className="fb-new" onClick={() => { setMode(mode === 'new' ? null : 'new'); setName(''); }}>＋ 新しいフォルダ</button>
+          <button type="button" className="fb-new" onClick={() => { setMode(mode === 'new' ? null : 'new'); setName(''); }}>＋ 旅先フォルダーを作る</button>
         </div>
       </div>
       {current && current !== UNSORTED && mode !== 'new' && (
@@ -182,14 +193,14 @@ function FolderBar({ folders, current, counts, totals = {}, onSelect, onCreate, 
       {mode === 'share' && current !== UNSORTED && <SharePanel folder={current} user={user} />}
       {mode === 'new' && (
         <form className="new-cat" onSubmit={submitNew}>
-          <input id="newfolder" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="例：台湾 2026年3月" maxLength={30} />
+          <input id="newfolder" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="行き先の名前（例：京都、沖縄）" maxLength={30} />
           <button className="btn" type="submit">作る</button>
         </form>
       )}
       {mode === 'edit' && (
         confirm ? (
-          <div className="confirm">「{current}」とその中のお店{totals[current] || 0}件（候補と行ったの両方）を削除しますか？
-            <button className="btn" type="button" onClick={() => { onDelete(current); setConfirm(false); setMode(null); }}>削除する</button>
+          <div className="confirm">「{current}」を削除しますか？中のお店{totals[current] || 0}件（候補と行ったの両方）は消さずに「未分類」へ戻します。
+            <button className="btn" type="button" onClick={() => { onDelete(current); setConfirm(false); setMode(null); }}>削除して未分類へ戻す</button>
             <button className="btn ghost" type="button" onClick={() => setConfirm(false)}>やめる</button>
           </div>
         ) : (
@@ -334,6 +345,26 @@ function Stars({ n }) {
 function DetailPanel({ id, onCall }) {
   const [d, setD] = useState(detailCache.get(id) || null);
   const [err, setErr] = useState('');
+  // 写真は1枚だけ自動で出す（1枚ごとに料金がかかるため）。残りは「写真をもっと見る」を押したときだけ
+  const [allPhotos, setAllPhotos] = useState(false);
+  // 口コミは料金の高い区分なので、「口コミを見る」を押したときだけ取りに行く（このページを開いている間は覚えておく）
+  const [rv, setRv] = useState(detailCache.get('rv:' + id) || null);
+  const [rvBusy, setRvBusy] = useState(false);
+  const [rvErr, setRvErr] = useState('');
+  async function loadReviews() {
+    if (rvBusy) return;
+    setRvBusy(true); setRvErr('');
+    try {
+      const x = await api(`/api/details?id=${encodeURIComponent(id)}&reviews=1`, { fallback: '口コミを取得できませんでした' });
+      const list = Array.isArray(x.reviews) ? x.reviews : [];
+      detailCache.set('rv:' + id, list);
+      setRv(list);
+    } catch (e) {
+      setRvErr(e.message);
+    } finally {
+      setRvBusy(false);
+    }
+  }
   useEffect(() => {
     if (detailCache.has(id)) return;
     let alive = true;
@@ -354,12 +385,17 @@ function DetailPanel({ id, onCall }) {
     <div className="detail">
       {d.photos.length > 0 && (
         <div className="photos">
-          {d.photos.slice(0, 3).map((ph) => (
+          {d.photos.slice(0, allPhotos ? 3 : 1).map((ph) => (
             <figure key={ph.name}>
               <img src={photoSrc(ph.name)} alt="" loading="lazy" />
               {ph.by && <figcaption>写真: {ph.by}</figcaption>}
             </figure>
           ))}
+          {!allPhotos && d.photos.length > 1 && (
+            <button type="button" className="more-photos" onClick={() => setAllPhotos(true)}>
+              <Cam size={26} />写真をもっと見る
+            </button>
+          )}
         </div>
       )}
       {/* 写真は3枚まで（1枚ごとに費用がかかるため）。続きはGoogleマップのお店情報で見る */}
@@ -385,11 +421,20 @@ function DetailPanel({ id, onCall }) {
         </section>
       )}
 
-      {d.reviews.length > 0 && (
+      {!rv && (
+        <section>
+          <button type="button" className="btn rv-open" disabled={rvBusy} onClick={loadReviews}>
+            {rvBusy ? '口コミを読み込んでいます…' : '口コミを見る'}
+          </button>
+          {rvErr && <p className="err">{rvErr}</p>}
+        </section>
+      )}
+      {rv && rv.length === 0 && <p className="hint">このお店の口コミはありませんでした。</p>}
+      {rv && rv.length > 0 && (
         <section>
           <h3>口コミ</h3>
           <ul className="reviews">
-            {d.reviews.map((r, i) => (
+            {rv.map((r, i) => (
               <li key={i}>
                 <p className="rv-head"><Stars n={r.rating} /> <span className="addr">{r.when}{r.author ? `・${r.author}` : ''}</span></p>
                 <p className="rv-text">{r.text}</p>
@@ -441,6 +486,19 @@ function fromHotel(h, it) {
   return `ホテルから約${dist}・車で約${Math.max(5, Math.round((road / 25) * 60))}分`;
 }
 
+// 国がわからないときに出す「国をえらぶ」ボタン（Googleへの検索を1回で済ませるため、国を決めてからさがす）
+function NeedCountry({ onPick }) {
+  return (
+    <div className="need-country" role="alert">
+      <b>どの国でさがしますか？</b>
+      <p className="hint">国をえらぶと、すぐにさがします。</p>
+      <div className="cat-chips">
+        {COUNTRY_LIST.map(([k, v]) => <button type="button" key={k} onClick={() => onPick(k)}>{v}でさがす</button>)}
+      </div>
+    </div>
+  );
+}
+
 // 泊まるホテルをGoogleマップから選ぶ
 function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
   const [country, setCountry] = useState(country0 || '');
@@ -448,13 +506,18 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
   const [list, setList] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  async function search(e) {
-    e.preventDefault();
+  const [askCountry, setAskCountry] = useState(false);
+  async function search(e, c0) {
+    e?.preventDefault?.();
     if (!q.trim()) return;
+    const c = c0 || country || guessCountry('', q.trim());
+    // 国がわからないときは、先に国をえらんでもらう（Googleへの検索を1回で済ませるため）
+    if (!c) { setAskCountry(true); setErr(''); return; }
+    setAskCountry(false);
     setBusy(true); setErr('');
     try {
       // Grab・Uberでホテルに帰るときに貼れるよう、現地の表記（と日本語）も取る
-      const d = await api('/api/search', { method: 'POST', body: { keyword: q.trim(), country }, timeout: 30000, fallback: '検索に失敗しました' });
+      const d = await api('/api/search', { method: 'POST', body: { keyword: q.trim(), country: c }, timeout: 30000, fallback: '検索に失敗しました' });
       setList(d.places.slice(0, 8));
       if (!d.places.length) setErr('見つかりませんでした。ホテル名を変えて試してください。');
     } catch (e2) {
@@ -489,8 +552,8 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
           <NameBlock p={current} />
         </div>
       )}
-      <label htmlFor="hotelct">国（えらばなくても探せます）
-        <select id="hotelct" value={country} onChange={(e) => setCountry(e.target.value)}>
+      <label htmlFor="hotelct">国
+        <select id="hotelct" value={country} onChange={(e) => { setCountry(e.target.value); if (e.target.value) setAskCountry(false); }}>
           <option value="">指定なし</option>
           {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
@@ -499,6 +562,7 @@ function HotelPicker({ country: country0, current, onPick, onClear, onClose }) {
         <input id="hotelq" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="ホテル名（例：シェラトン）" />
         <button className="btn" type="submit" disabled={busy}>{busy ? 'さがしています…' : 'さがす'}</button>
       </form>
+      {askCountry && <NeedCountry onPick={(k) => { setCountry(k); search(null, k); }} />}
       {err && <p className="err">{err}</p>}
       {list.length > 0 && (
         <ul className="hotel-list">
@@ -744,7 +808,57 @@ function Rating({ p }) {
   );
 }
 
+// 検索結果の各お店の情報（電話・ホームページ・値段の目安・曜日ごとの営業時間）。取れなかった項目は何も出さない
+function ShopInfo({ p }) {
+  const [openHours, setOpenHours] = useState(false);
+  const week = Array.isArray(p.weekHours) ? p.weekHours.filter(Boolean) : [];
+  const tel = String(p.phoneTel || p.phone || '').replace(/[^\d+]/g, '');
+  if (!p.phone && !p.website && !p.priceText && !week.length) return null;
+  return (
+    <div className="shopinfo">
+      {p.priceText && <p className="price">値段の目安：{p.priceText}</p>}
+      {(p.phone || p.website) && (
+        <div className="actrow">
+          {p.phone && tel && <a className="act" href={`tel:${tel}`}>電話する {p.phone}</a>}
+          {p.website && <a className="act" href={p.website} target="_blank" rel="noopener noreferrer">ホームページを開く</a>}
+        </div>
+      )}
+      {week.length > 0 && (
+        <>
+          <button type="button" className="act hoursbtn" aria-expanded={openHours} onClick={() => setOpenHours((v) => !v)}>
+            {openHours ? '営業時間を閉じる' : '営業時間を見る'}
+          </button>
+          {openHours && <ul className="weekhours">{week.map((w, i) => <li key={i}>{w}</li>)}</ul>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
+  // プルダウン（.dropdown）が画面の下で見切れないようにする（2026-11-12 社長：未分類のお店を分類するときに下で切れて選べない）。
+  // 開いたときに下に入りきらなければ、上に余裕があれば上向きに出し、なければ画面を動かして全部見えるようにする
+  useEffect(() => {
+    const fit = (dd) => {
+      if (!(dd instanceof HTMLElement) || dd.dataset.fit) return;
+      dd.dataset.fit = '1';
+      requestAnimationFrame(() => {
+        const limit = visibleBottom();
+        const r = dd.getBoundingClientRect();
+        if (r.bottom <= limit) return;
+        const anchor = dd.parentElement ? dd.parentElement.getBoundingClientRect() : r;
+        if (anchor.top - r.height - 12 > 0) { dd.classList.add('up'); return; }
+        window.scrollBy({ top: r.bottom - limit, behavior: 'smooth' });
+      });
+    };
+    const mo = new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => {
+      if (!(n instanceof HTMLElement)) return;
+      if (n.classList.contains('dropdown')) fit(n);
+      n.querySelectorAll && n.querySelectorAll('.dropdown').forEach(fit);
+    })));
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, []);
   const [tab, setTab] = useState('search');
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
@@ -776,6 +890,16 @@ export default function Home() {
   const [error, setError] = useState('');
   const [searched, setSearched] = useState(false);
   const lastQuery = useRef(null);
+  const pendingQuery = useRef(null); // 国をえらぶのを待っている検索
+  const [needCountry, setNeedCountry] = useState(false);
+  function pickCountry(k) {
+    setCountry(k);
+    try { localStorage.setItem('trippin.country', k); } catch {}
+    setNeedCountry(false);
+    const q = pendingQuery.current;
+    pendingQuery.current = null;
+    if (q) runSearch(false, { ...q, country: k });
+  }
   const resultsTop = useRef(null);
   const [searchSeq, setSearchSeq] = useState(0);
   const [moreBusy, setMoreBusy] = useState(false);
@@ -815,13 +939,7 @@ export default function Home() {
   const [photoVer, setPhotoVer] = useState(0);
   const [notes, setNotes] = useState({}); // フォルダごとのeタビセツ
   const [noteOpen, setNoteOpen] = useState(false); // false / 'note' / 'guide'
-  const [premOpen, setPremOpen] = useState(false); // プレミアムの案内
   const [callFor, setCallFor] = useState(null); // タビビコール（予約の電話）をかけるお店
-  useEffect(() => {
-    const open = () => setPremOpen(true);
-    window.addEventListener('tabibi:premium', open);
-    return () => window.removeEventListener('tabibi:premium', open);
-  }, []);
   const [shelfKey, setShelfKey] = useState(0); // わたしのeタビセツを読み直す合図
   const saveNote = useCallback((t, n) => setNotes((prev) => ({ ...prev, [t]: n })), []);
   const [prompts, setPrompts] = useState([]); // マイプロンプト（AIで作る）
@@ -844,10 +962,11 @@ export default function Home() {
   const toggleDetail = (k) => setOpenDetail((cur) => (cur === k ? null : k));
 
   useEffect(() => {
-    // フォルダが決まっていないお店は「未分類」に入れる（消えて見えないように）
-    const fixTrip = (arr) => arr.map((i) => (i.trip ? i : { ...i, trip: UNSORTED }));
+    // 昔の形（上の段＝買い物・朝ごはん等のフォルダ）を新しい形（旅先フォルダー × カテゴリー）へ自動で変換する。
+    // フォルダが決まっていないお店は「未分類」に入れる。変換で件数は変わらない（./lib/migrate.mjs・tests/migrate.test.mjs）
+    const fixTrip = (arr) => migrateItems(Array.isArray(arr) ? arr : []);
     try { const s = localStorage.getItem(KEY); if (s) setItems(fixTrip(JSON.parse(s))); } catch {}
-    try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(JSON.parse(c)); } catch {}
+    try { const c = localStorage.getItem(CATS_KEY); if (c) setCustomCats(cleanCustomCats(JSON.parse(c))); } catch {}
     try {
       const h = localStorage.getItem('trippin.hotel');
       if (h) setHotel(JSON.parse(h));
@@ -859,15 +978,15 @@ export default function Home() {
         if (pick) setHotel(pick);
       }
     } catch {}
-    try { const n = localStorage.getItem('trippin.notes'); if (n) setNotes(JSON.parse(n) || {}); } catch {}
+    try { const n = localStorage.getItem('trippin.notes'); if (n) setNotes(migrateKeyed(JSON.parse(n) || {})); } catch {}
     try { const pr = JSON.parse(localStorage.getItem('trippin.prompts') || '[]'); if (Array.isArray(pr)) setPrompts(pr); } catch {}
-    try { const sv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]'); if (Array.isArray(sv)) setSouvenirs(sv); } catch {}
-    try { const pl = JSON.parse(localStorage.getItem('trippin.plans') || '{}'); if (pl && typeof pl === 'object') setPlans(pl); } catch {}
+    try { const sv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]'); if (Array.isArray(sv)) setSouvenirs(migrateSouvenirs(sv)); } catch {}
+    try { const pl = JSON.parse(localStorage.getItem('trippin.plans') || '{}'); if (pl && typeof pl === 'object') setPlans(migrateKeyed(pl)); } catch {}
     try { const c = localStorage.getItem('trippin.country'); if (c && COUNTRY_LIST.some(([k]) => k === c)) setCountry(c); } catch {}
     try {
       const f = JSON.parse(localStorage.getItem('trippin.folders') || '[]');
       const its = fixTrip(JSON.parse(localStorage.getItem(KEY) || '[]'));
-      const merged = [...new Set([...f, ...its.map((i) => i.trip).filter(Boolean)])];
+      const merged = migrateFolderList([...f, ...its.map((i) => i.trip)]);
       setFolders(merged);
       const cur = localStorage.getItem('trippin.folder');
       setTrip(cur && (cur === UNSORTED || merged.includes(cur)) ? cur : UNSORTED);
@@ -903,13 +1022,21 @@ export default function Home() {
   const addSouvenir = (sv) => { logEvent('souvenir_add'); setSouvenirs((prev) => [...prev, { ...sv, addedAt: Date.now(), updatedAt: Date.now() }]); };
   const updateSouvenir = (id, patch) => setSouvenirs((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch, updatedAt: Date.now() } : x)));
   const removeSouvenir = (id) => setSouvenirs((prev) => prev.filter((x) => x.id !== id));
+  // 「買い物」「朝ごはん」などはカテゴリーの名前。旅先フォルダーの名前には使わない（昔の形と混ざらないように）
+  const folderNameNg = (n) => {
+    if (!isLegacyFolder(n)) return false;
+    setNotice(`「${n}」はカテゴリーの名前です。旅先フォルダーには行き先の名前（例：京都、沖縄）を付けてください。`);
+    return true;
+  };
   function createFolder(n) {
     if (n === UNSORTED) { setTrip(UNSORTED); return; }
+    if (folderNameNg(n)) return;
     setFolders((prev) => (prev.includes(n) ? prev : [...prev, n]));
     setTrip(n);
   }
   function renameFolder(from, to) {
     if (from === UNSORTED || to === UNSORTED) return;
+    if (folderNameNg(to)) return;
     renameShare(from, to).catch(() => {});
     setFolders((prev) => prev.map((f) => (f === from ? to : f)).filter((f, i, a) => a.indexOf(f) === i));
     setItems((prev) => prev.map((i) => (i.trip === from ? { ...i, trip: to, updatedAt: Date.now() } : i)));
@@ -920,14 +1047,14 @@ export default function Home() {
   }
   function deleteFolder(name) {
     deleteShare(name).catch(() => {});
-    const gone = items.filter((i) => i.trip === name).map((i) => i.id);
-    setItems((prev) => prev.filter((i) => i.trip !== name));
-    gone.forEach((id) => deletePhotosOf(id).catch(() => {}));
-    const rest = allFolders.filter((f) => f !== name);
-    setFolders(rest);
-    setNotes((prev) => { const { [name]: _, ...rest2 } = prev; return rest2; });
-    setPlans((prev) => { const { [name]: _, ...rest3 } = prev; return rest3; });
-    setSouvenirs((prev) => prev.filter((x) => x.trip !== name));
+    // 中のお店・お土産は消さず「未分類」へ戻す（写真もそのまま残る）
+    if (name === UNSORTED) return;
+    const moved = removeFolder({ items, souvenirs, notes, plans }, name);
+    setItems(moved.items);
+    setSouvenirs(moved.souvenirs);
+    setNotes(moved.notes);
+    setPlans(moved.plans);
+    setFolders(allFolders.filter((f) => f !== name && f !== UNSORTED));
     setTrip(UNSORTED);
   }
   // ---- ログインとクラウド保存 ----
@@ -944,16 +1071,21 @@ export default function Home() {
     const known = (k) => { try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch { return new Set(); } };
     const [cloudSv, cloudPl] = await Promise.all([pullSouvenirs(), pullPlans()]);
     if (!alive()) return;
-    const localSv = JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]');
-    const localPlObj = JSON.parse(localStorage.getItem('trippin.plans') || '{}');
+    // 昔の形（旅の名前が「買い物」など）で入っているお土産・回る順番も、新しい形へ変換してからそろえる
+    const localSv = migrateSouvenirs(JSON.parse(localStorage.getItem('trippin.souvenirs') || '[]'));
+    const localPlObj = migrateKeyed(JSON.parse(localStorage.getItem('trippin.plans') || '{}'));
     const localPl = Object.entries(localPlObj).map(([id, v]) => ({ ...v, id }));
-    const sv = mergeItems(localSv, cloudSv, known(svKey));
-    const pl = mergeItems(localPl, cloudPl, known(plKey));
+    const cloudPlObj = migrateKeyed(Object.fromEntries(cloudPl.map(({ id, ...v }) => [id, v])));
+    const sv = mergeItems(localSv, migrateSouvenirs(cloudSv), known(svKey));
+    const pl = mergeItems(localPl, Object.entries(cloudPlObj).map(([id, v]) => ({ ...v, id })), known(plKey));
     await upsertSouvenirs(sv.toUpload);
     await upsertPlans(pl.toUpload);
     const svList = sv.merged.sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
     const plObj = Object.fromEntries(pl.merged.map(({ id, ...v }) => [id, v]));
-    pushedSv.current = new Map(svList.map((x) => [x.id, JSON.stringify(x)]));
+    // クラウドに入っている形を「送りずみ」の基準にする（変換したお土産は、変わった分として送り直される）
+    const svRaw = new Map(cloudSv.map((x) => [x.id, JSON.stringify(x)]));
+    const svUp = new Set(sv.toUpload.map((x) => x.id));
+    pushedSv.current = new Map(svList.map((x) => [x.id, svUp.has(x.id) ? JSON.stringify(x) : (svRaw.get(x.id) ?? JSON.stringify(x))]));
     pushedPl.current = new Map(Object.entries(plObj).map(([k, v]) => [k, JSON.stringify(v)]));
     setSouvenirs(svList);
     setPlans(plObj);
@@ -963,9 +1095,32 @@ export default function Home() {
   useEffect(() => {
     const sb = supa();
     sb.auth.getSession().then(({ data }) => setUser(data.session?.user || null));
-    const { data: sub } = sb.auth.onAuthStateChange((_e, session) => setUser(session?.user || null));
+    const { data: sub } = sb.auth.onAuthStateChange((ev, session) => {
+      setUser(session?.user || null);
+      // ログインして戻ってきたときだけ、本人にメールで知らせる（signIn() で付けた印がある場合）
+      if (ev === 'SIGNED_IN' && session) {
+        let pending = false;
+        try { pending = localStorage.getItem('trippin.pendingLoginMail') === '1'; localStorage.removeItem('trippin.pendingLoginMail'); } catch {}
+        if (pending) notify('login');
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
+  // 初めてのGoogleログイン（または規約が新しくなったとき）は、メールアドレスの確認と規約への同意を取る
+  // null=同意ずみ（確認不要）、'checking'=調べ中、'need'=同意の画面を出す、'error'=同意を確かめられなかった（使えなくして、やり直しを出す）
+  const [consent, setConsent] = useState(null);
+  const [agreed, setAgreed] = useState(false);
+  const [consentErr, setConsentErr] = useState('');
+  const [consentTry, setConsentTry] = useState(0);
+  useEffect(() => {
+    if (!user) { setConsent(null); setAgreed(false); return; }
+    let alive = true;
+    setConsent('checking');
+    hasConsented(user.id)
+      .then((ok) => alive && setConsent(ok ? null : 'need'))
+      .catch(() => alive && setConsent('error')); // 握りつぶさない：確かめられないときは、同意なしでは使わせない
+    return () => { alive = false; };
+  }, [user, consentTry]);
   const settingsData = () => ({ folders, hotel, customCats, notes, prompts });
   useEffect(() => {
     if (!loaded || !user) { setCloudUser(null); synced.current = false; extraSynced.current = false; return; }
@@ -979,25 +1134,29 @@ export default function Home() {
         try { known = new Set(JSON.parse(localStorage.getItem(key) || '[]')); } catch {}
         const [cloudItems, cloudSettings] = await Promise.all([pullItems(), pullSettings(), pullPhotoRows()]);
         if (!alive) return;
-        const localItems = JSON.parse(localStorage.getItem(KEY) || '[]');
-        const { merged, toUpload, removed } = mergeItems(localItems, cloudItems, known);
+        // クラウドに昔の形で入っているお店も、読み込むときに新しい形へ変換する（件数は変わらない）。変わったお店は下で送り直される
+        const localItems = migrateItems(JSON.parse(localStorage.getItem(KEY) || '[]'));
+        const { merged, toUpload, removed } = mergeItems(localItems, migrateItems(cloudItems), known);
         removed.forEach((id) => deletePhotosOf(id).catch(() => {}));
         await upsertItems(toUpload);
         if (cloudSettings) {
-          setFolders((prev) => [...new Set([...(cloudSettings.folders || []), ...prev])]);
-          setCustomCats((prev) => [...new Set([...(cloudSettings.customCats || []), ...prev])]);
+          setFolders((prev) => migrateFolderList([...(cloudSettings.folders || []), ...prev]));
+          setCustomCats((prev) => cleanCustomCats([...(cloudSettings.customCats || []), ...prev]));
           if (cloudSettings.hotel !== undefined) setHotel(cloudSettings.hotel || null);
           // eタビセツはフォルダごとに新しいほうを使う
           if (Array.isArray(cloudSettings.prompts)) setPrompts((prev) => [...prev, ...cloudSettings.prompts.filter((c) => !prev.some((p) => p.name === c.name))].slice(0, 20));
           if (cloudSettings.notes) setNotes((prev) => {
             const out = { ...prev };
             for (const [k, v] of Object.entries(cloudSettings.notes)) if (!out[k] || (v?.updatedAt || 0) > (out[k].updatedAt || 0)) out[k] = v;
-            return out;
+            return migrateKeyed(out);
           });
         } else {
           await pushSettings(settingsData());
         }
-        pushed.current = new Map(merged.map((it) => [it.id, JSON.stringify(it)]));
+        // クラウドに入っている形を「送りずみ」の基準にする（昔の形から変換したお店は、変わった分として送り直される）
+        const cloudRaw = new Map(cloudItems.map((it) => [it.id, JSON.stringify(it)]));
+        const upIds = new Set(toUpload.map((it) => it.id));
+        pushed.current = new Map(merged.map((it) => [it.id, upIds.has(it.id) ? JSON.stringify(it) : (cloudRaw.get(it.id) ?? JSON.stringify(it))]));
         setItems(merged);
         try { localStorage.setItem(key, JSON.stringify(merged.map((it) => it.id))); } catch {}
         synced.current = true;
@@ -1078,6 +1237,13 @@ export default function Home() {
     const base = useNear ? { area: '', country: hotel.country || country } : { area, country };
     const q = more ? lastQuery.current : { keyword, ...base, minRating: Number(minRating), minReviews: Number(minReviews), near, ...(override || {}) };
     if (!more && !String(q.keyword).trim() && !String(q.area).trim()) { setError('キーワードか場所を入力してください'); return; }
+    // 国がわからないときは、先に国をえらんでもらう（Googleへの検索は国を決めて1回だけ。宿泊先の近くでさがすときは不要）
+    if (!more && !q.near && !q.country && !guessCountry(q.area, q.keyword)) {
+      pendingQuery.current = q;
+      setNeedCountry(true); setError('');
+      return;
+    }
+    setNeedCountry(false);
     searching.current = true;
     setBusy(true); setMoreBusy(more); setError('');
     try {
@@ -1155,6 +1321,8 @@ export default function Home() {
 
 
   const sorted = [...results];
+  // 写真を自動で出すのは、検索で上に出た5件だけ（並び替えても増やさない）
+  const autoPhotoIds = new Set(results.slice(0, AUTO_PHOTOS).map((p) => p.placeId));
   if (sort === 'rating') sorted.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
   if (sort === 'reviews') sorted.sort((a, b) => b.reviews - a.reviews);
   if (sort === 'hotel' && hotel?.lat != null) sorted.sort((a, b) => (a.lat == null ? 1e9 : distanceKm(hotel, a)) - (b.lat == null ? 1e9 : distanceKm(hotel, b)));
@@ -1285,9 +1453,7 @@ export default function Home() {
       <article key={it.id} id={'item-' + it.id} className={'item' + (it.done ? ' done' : '')}>
         <div className="item-top">
           <div className="thumbwrap">
-            <button type="button" className="thumbbtn" onClick={() => toggleDetail('l:' + it.id)} aria-label="詳細を見る">
-              {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" onError={() => refreshPhoto(it)} /> : <div className="thumb" />}
-            </button>
+            <PhotoThumb name={it.photo} auto={no <= AUTO_PHOTOS} onOpen={() => toggleDetail('l:' + it.id)} onError={() => refreshPhoto(it)} />
             <span className="no" style={{ '--c': catColor(it.category) }}>{no}</span>
             {it.done && (
               <button className={'star photo-star' + (it.rec ? ' on' : '')} aria-label="おすすめマーク" aria-pressed={!!it.rec} onClick={() => update(it.id, { rec: !it.rec })}>★</button>
@@ -1310,12 +1476,12 @@ export default function Home() {
                 <button type="button" className="pill pill-btn" onClick={() => setMoveFor(moveFor === it.id ? null : it.id)}>{it.trip} ▾</button>
                 {moveFor === it.id && (
                   <div className="dropdown move-dd">
-                    <p className="dd-title">別のフォルダに移す</p>
+                    <p className="dd-title">別の旅先フォルダーに移す</p>
                     <ul>
                       {allFolders.filter((f) => f !== it.trip).map((f) => (
                         <li key={f}><button type="button" onClick={() => { update(it.id, { trip: f }); setMoveFor(null); }}>{f}</button></li>
                       ))}
-                      {allFolders.length < 2 && <li><p className="dd-title">ほかのフォルダがありません</p></li>}
+                      {allFolders.length < 2 && <li><p className="dd-title">ほかの旅先フォルダーがありません</p></li>}
                     </ul>
                   </div>
                 )}
@@ -1398,14 +1564,47 @@ export default function Home() {
       <header className="apphead">
         <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
         <span className="head-btns">
-          <button type="button" className="login-btn prem-btn" onClick={() => setPremOpen(true)}><i aria-hidden="true">★</i>プレミアム</button>
           {user
             ? <button type="button" className="login-btn" onClick={() => signOut()}><IcUser size={16} />ログアウト</button>
             : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}
         </span>
       </header>
-      {premOpen && <PremiumSheet user={user} onSignIn={() => signIn()} onClose={() => setPremOpen(false)} />}
       {callFor && <CallSheet place={callFor} user={user} onSignIn={() => signIn()} onClose={() => setCallFor(null)} />}
+
+      {user && (consent === 'checking' || consent === 'error') && (
+        <div className="prem-back" role="dialog" aria-modal="true" aria-labelledby="consent-h">
+          <div className="prem">
+            <h2 id="consent-h">{consent === 'error' ? '同意の状況を確かめられませんでした' : '確かめています…'}</h2>
+            {consent === 'error' && (
+              <>
+                <p>通信を確かめて、もう一度お試しください。確かめられるまで、Tabibi は使えません。</p>
+                <button type="button" className="btn" onClick={() => setConsentTry((n) => n + 1)}>もう一度確かめる</button>
+                <button type="button" className="btn ghost" onClick={() => signOut()}>ログアウトする</button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+      {user && consent === 'need' && (
+        <div className="prem-back" role="dialog" aria-modal="true" aria-labelledby="consent-h">
+          <div className="prem">
+            <h2 id="consent-h">はじめに、ご確認ください</h2>
+            <p>Tabibi に、次のメールアドレスで登録します。</p>
+            <p><strong>{user.email || '（メールアドレスを取得できませんでした）'}</strong></p>
+            <p className="hint">ログインや、共有リンクの作成などの設定を変えたときは、このアドレスにお知らせのメールを送ります（同じ種類のお知らせは10分に1回までです。通信の都合などで届かないことがあります）。</p>
+            <label className="nm-check" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14 }}>
+              <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} />
+              <span><a href="/terms" target="_blank" rel="noopener noreferrer">利用規約</a>と<a href="/privacy" target="_blank" rel="noopener noreferrer">プライバシーポリシー</a>に同意します</span>
+            </label>
+            {consentErr && <p className="err">{consentErr}</p>}
+            <button type="button" className="btn" disabled={!agreed || !user.email} onClick={async () => {
+              setConsentErr('');
+              try { await recordConsent(); setConsent(null); } catch (e) { setConsentErr(jaError(e, '同意を記録できませんでした。もう一度試してください')); }
+            }}>同意して使いはじめる</button>
+            <button type="button" className="btn ghost" onClick={() => signOut()}>同意しないでログアウトする</button>
+          </div>
+        </div>
+      )}
 
       {syncMsg && <p className="hint sync-msg">{syncMsg}</p>}
       {notice && <p className="err notice" role="alert" onClick={() => setNotice('')}>{notice}</p>}
@@ -1413,7 +1612,7 @@ export default function Home() {
         {tab === 'search' && (
         <label className="ctx-chip trip">
           <IcPlane size={15} />
-          <span className="sr">旅（フォルダ）</span>
+          <span className="sr">旅先フォルダー</span>
           <select value={trip} onChange={(e) => { setTrip(e.target.value); setCatFilter('すべて'); }}>
             {allFolders.map((f) => <option key={f} value={f}>{f === UNSORTED ? f : `${f}の旅`}</option>)}
           </select>
@@ -1462,7 +1661,7 @@ export default function Home() {
             </div>
             <div className="row">
               <label htmlFor="ct">国
-                <select id="ct" value={useNear ? hotel.country || country : country} disabled={useNear} onChange={(e) => { setCountry(e.target.value); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
+                <select id="ct" value={useNear ? hotel.country || country : country} disabled={useNear} onChange={(e) => { setCountry(e.target.value); if (e.target.value) setNeedCountry(false); try { localStorage.setItem('trippin.country', e.target.value); } catch {} }}>
                   <option value="">指定なし</option>
                   {COUNTRY_LIST.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
@@ -1490,6 +1689,7 @@ export default function Home() {
               </label>
             </div>
             <button className="btn search-go" type="submit" disabled={busy}>{busy && !moreBusy ? 'さがしています…' : 'さがす'}</button>
+            {needCountry && <NeedCountry onPick={pickCountry} />}
             {error && <p className="err">{error}</p>}
             <div className="shot">
               <input ref={shotInput} id="shot" type="file" accept="image/*" hidden onChange={(e) => readShot(e.target.files?.[0])} />
@@ -1533,7 +1733,7 @@ export default function Home() {
                 </div>
               )}
             </div>
-            <p className="hint">国はえらばなくても探せます（例：キーワード「魯肉飯」＋場所「台北」）。えらぶと、その国の中だけを探します。</p>
+            <p className="hint">国をえらぶと、その国の中だけを探します。えらばなくても、場所に街の名前（例：台北）を入れれば国がわかります。</p>
           </form>
 
           <div className="list" ref={resultsTop} style={{ scrollMarginTop: '72px' }}>
@@ -1563,9 +1763,7 @@ export default function Home() {
               <article className="item" key={p.placeId}>
                 <div className="item-top">
                   <div className="thumbwrap">
-                    <button type="button" className="thumbbtn" onClick={() => toggleDetail('s:' + p.placeId)} aria-label="詳細を見る">
-                      {p.photo ? <img className="thumb" src={photoSrc(p.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
-                    </button>
+                    <PhotoThumb name={p.photo} auto={autoPhotoIds.has(p.placeId)} mapsHref={mapsLink(p)} />
                   </div>
                   <div className="body">
                     <NameBlock p={p} />
@@ -1574,6 +1772,7 @@ export default function Home() {
                     {fromHotel(hotel, p) && <p className="fromhotel">{fromHotel(hotel, p)}</p>}
                   </div>
                 </div>
+                <ShopInfo p={p} />
                 <div className="actrow">
                   {savedIds.has(p.placeId)
                     ? (snsUrl && items.find((i) => i.placeId === p.placeId)?.srcUrl !== snsUrl
@@ -1588,13 +1787,9 @@ export default function Home() {
                         )}
                       </span>
                     )}
-                  <a className="act" href={mapsLink(p)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />地図</a>
+                  <a className="act primary" href={mapsLink(p)} target="_blank" rel="noopener noreferrer"><IcPin size={16} />Googleマップを開く</a>
                   <NaverLinks place={p} route={false} />
                 </div>
-                <button type="button" className={'detailbar' + (openDetail === 's:' + p.placeId ? ' on' : '')} onClick={() => toggleDetail('s:' + p.placeId)}>
-                  {openDetail === 's:' + p.placeId ? '詳細を閉じる' : '詳細を開く'}
-                </button>
-                {openDetail === 's:' + p.placeId && <DetailPanel id={p.placeId} />}
               </article>
             ))}
             {nextToken && (
@@ -1644,6 +1839,7 @@ export default function Home() {
             <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
             <button role="tab" aria-selected={view === 'plan'} onClick={() => setView('plan')}>回る順番</button>
             <button role="tab" aria-selected={view === 'souvenir'} onClick={() => setView('souvenir')}>お土産{tripSouvenirs.length ? <span className="count">{tripSouvenirs.length}</span> : null}</button>
+            <button role="tab" aria-selected={view === 'fx'} onClick={() => setView('fx')}>為替</button>
           </div>
           {view === 'map' && planDays.length > 0 && (
             <div className="chips map-days" aria-label="地図に出すもの">
@@ -1660,6 +1856,7 @@ export default function Home() {
             <SouvenirPanel trip={trip} items={folderItems} list={tripSouvenirs} country={hotel?.country || country}
               onAdd={addSouvenir} onUpdate={updateSouvenir} onDelete={removeSouvenir} />
           )}
+          {view === 'fx' && <FxPanel key={trip} country={hotel?.country || country} />}
           {editCats && (
             <div className="panel">
               <h2>自分で作ったカテゴリー</h2>

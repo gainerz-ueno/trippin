@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import MapView from '../../MapView';
+import PhotoThumb, { AUTO_PHOTOS } from '../../PhotoThumb';
 import { fetchShared, fetchSharedExtras } from '../../cloud';
 import PlanView, { dayStops, dayLabel } from '../../PlanView';
 import { SouvenirCard } from '../../Souvenirs';
@@ -10,7 +11,7 @@ import { totals } from '../../lib/money';
 import { mapsLink } from '../../lib/api';
 
 const BASE_CATS = {
-  観光: '#2F7D6B', 朝市: '#C9822B', 夜市: '#5B4BA8', 朝食: '#E0A526', 昼食: '#D9692E', 夕食: '#B8432F', 夜食: '#3F4F86',
+  観光: '#2F7D6B', 遊ぶ: '#9AAE1C', 朝市: '#C9822B', 夜市: '#5B4BA8', 朝食: '#E0A526', 昼食: '#D9692E', 夕食: '#B8432F', 夜食: '#3F4F86',
   おやつ: '#D45C8C', カフェ: '#8A5A3C', 酒場: '#8E2F4F', 買物: '#2E7FB8', 美容: '#C2569E', マッサージ: '#4E9A5B',
 };
 const catColor = (c) => BASE_CATS[c] || '#6B7A8C';
@@ -85,11 +86,11 @@ export default function SharedFolder() {
       {data && (
         <>
           <h2 className="share-title">{data.folder}</h2>
-          <div className="tabs" role="tablist">
+          <div className="tabs two" role="tablist">
             <button role="tab" aria-selected={tab === 'cand'} onClick={() => setTab('cand')}>候補 <span className="count">{cand.length}</span></button>
             <button role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>行った <span className="count">{done.length}</span></button>
           </div>
-          <div className={'viewtoggle' + (days.length || souvenirs.length ? ' four' : '')} role="tablist" aria-label="表示の切り替え">
+          <div className="viewtoggle four" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
             <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
             {days.length > 0 && <button role="tab" aria-selected={view === 'plan'} onClick={() => setView('plan')}>回る順番</button>}
@@ -118,7 +119,7 @@ export default function SharedFolder() {
               <article key={it.id} className={'item' + (it.done ? ' done' : '')}>
                 <div className="item-top">
                   <div className="thumbwrap side">
-                    {it.photo ? <img className="thumb" src={photoSrc(it.photo)} alt="" loading="lazy" /> : <div className="thumb" />}
+                    <PhotoThumb name={it.photo} auto={i < AUTO_PHOTOS} />
                     <span className="no" style={{ '--c': catColor(it.category) }}>{i + 1}</span>
                     <div className="side-acts">
                       <a href={mapsLink(it)} target="_blank" rel="noopener noreferrer">Googleマップ</a>

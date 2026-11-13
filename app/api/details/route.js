@@ -14,7 +14,6 @@ const FIELDS = [
   'websiteUri',
   'priceLevel',
   'priceRange',
-  'reviews',
   'googleMapsUri',
 ].join(',');
 
@@ -31,6 +30,22 @@ function money(m) {
   return `${Number(m.units).toLocaleString('ja-JP')} ${m.currencyCode || ''}`.trim();
 }
 
+// 口コミは料金の高い区分（Enterprise + Atmosphere）になるので、ふだんの詳細では取らない。
+// 「口コミを見る」を押したときだけ reviews=1 で口コミだけを取る
+const REVIEWS = 'reviews';
+
+const shapeReviews = (p) => (p.reviews || []).slice(0, 5).map((r) => {
+  const text = r.text?.text || '';
+  const original = r.originalText?.text || '';
+  return {
+    rating: r.rating ?? null,
+    when: r.relativePublishTimeDescription || '',
+    author: r.authorAttribution?.displayName || '',
+    text,
+    original: original && original !== text ? original : '',
+  };
+});
+
 // lite=1：営業時間だけ（写真・口コミを取らないので安い料金区分になる）
 const LITE = ['id', 'regularOpeningHours.weekdayDescriptions', 'regularOpeningHours.periods', 'utcOffsetMinutes'].join(',');
 
@@ -38,12 +53,13 @@ export async function GET(req) {
   const u = new URL(req.url);
   const id = u.searchParams.get('id') || '';
   const lite = u.searchParams.get('lite') === '1';
+  const onlyReviews = u.searchParams.get('reviews') === '1';
   if (id.length > 300 || !/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'お店の指定が正しくありません' }, { status: 400 });
   if (!KEY()) return Response.json({ error: '詳細の設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
 
   try {
     const res = await gfetch(`https://places.googleapis.com/v1/places/${id}?languageCode=ja`, {
-      headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': lite ? LITE : FIELDS },
+      headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': onlyReviews ? REVIEWS : lite ? LITE : FIELDS },
       cache: 'no-store',
     }, 10000);
     const p = await res.json().catch(() => ({}));
@@ -51,6 +67,8 @@ export async function GET(req) {
       console.error('[tabibi] details', res.status, p?.error?.message);
       throw new Error(res.status === 404 ? 'このお店の情報がGoogleマップで見つかりませんでした（閉店した可能性があります）' : '詳細を取得できませんでした。少し待ってからもう一度開いてください');
     }
+
+    if (onlyReviews) return Response.json({ reviews: shapeReviews(p) });
 
     // お店の現地時間での今日の曜日（Googleの曜日一覧は月曜始まり）
     const offset = p.utcOffsetMinutes ?? 0;
@@ -74,17 +92,6 @@ export async function GET(req) {
       website: p.websiteUri || '',
       price: PRICE[p.priceLevel] || '',
       priceRange: range,
-      reviews: (p.reviews || []).slice(0, 5).map((r) => {
-        const text = r.text?.text || '';
-        const original = r.originalText?.text || '';
-        return {
-          rating: r.rating ?? null,
-          when: r.relativePublishTimeDescription || '',
-          author: r.authorAttribution?.displayName || '',
-          text,
-          original: original && original !== text ? original : '',
-        };
-      }),
       mapsUrl: p.googleMapsUri || '',
     });
   } catch (e) {

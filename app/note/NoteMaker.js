@@ -11,7 +11,6 @@ import ChatFlow, { aiOptions } from './AiChat';
 import { addPhotos, listPhotos } from '../photos';
 import { ensurePhotos, savePage } from '../cloud';
 import { money } from '../lib/money';
-import { PLAN } from '../lib/plan';
 import { logEvent } from '../cloud';
 
 const MAX = 6;
@@ -28,7 +27,7 @@ export function defaultNote(trip, items, unsorted) {
 }
 
 // AIで作るときの雰囲気の見本（テンプレートの背景の絵）
-const AI_NOTE = `写真と文字をAIがまとめて、1枚のイラストに描きます（無料は合計${PLAN.AI_FREE_TOTAL}回・プレミアムは月${PLAN.AI_MONTH}回）`;
+const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
 
 export const MAX_SV = 4; // eタビセツに入れるお土産の数（NoteCanvas の SouvenirBand が横4列の帯。note.css の .nt-sv-row）
 
