@@ -134,7 +134,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 
 /* 地図 */
 .viewtoggle{display:grid;grid-template-columns:1fr 1fr;background:var(--chip);border-radius:10px;padding:3px;max-width:240px}
-.viewtoggle button{font:inherit;font-size:13px;font-weight:700;border:0;background:none;color:var(--sub);padding:6px;border-radius:8px;cursor:pointer}
+.viewtoggle button{font:inherit;font-size:13px;font-weight:700;border:0;background:none;color:var(--sub);padding:11px 6px;min-height:44px;border-radius:8px;cursor:pointer}
 .viewtoggle button[aria-selected="true"]{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .mapwrap{display:flex;flex-direction:column;gap:6px}
 .map{width:100%;height:62vh;min-height:320px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:var(--chip)}
@@ -164,7 +164,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .thumbwrap.side{width:104px;flex:none}
 .thumbwrap.side .thumb{width:104px;height:104px}
 .side-acts{display:flex;flex-direction:column;gap:6px}
-.side-acts > *{font:inherit;font-size:12px;font-weight:700;text-align:center;text-decoration:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 4px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.side-acts > *{font:inherit;font-size:12px;font-weight:700;text-align:center;text-decoration:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:11px 4px;min-height:44px;display:flex;align-items:center;justify-content:center;border-radius:999px;cursor:pointer;white-space:nowrap}
 .side-acts .on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .side-acts .add{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .side-acts .added{color:var(--sub);cursor:default}
@@ -214,7 +214,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .fromhotel{margin:0;font-size:12px;font-weight:700;color:var(--copybtn)}
 
 /* 自分の写真 */
-.side-acts .photo-add{font:inherit;font-size:12px;font-weight:700;text-align:center;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 4px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.side-acts .photo-add{font:inherit;font-size:12px;font-weight:700;text-align:center;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:11px 4px;min-height:44px;border-radius:999px;cursor:pointer;white-space:nowrap}
 .myphotos{display:flex;flex-direction:column;gap:6px}
 .mp-title{margin:0;font-size:12px;font-weight:700;color:var(--sub)}
 .mp-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
@@ -244,7 +244,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .photo-star.on{background:var(--star);color:#fff}
 .line{padding:6px 6px 6px 10px}
 .line .name{font-size:16px;overflow-wrap:break-word;word-break:normal}
-.copy{padding:4px 8px;font-size:11px}
+.copy{padding:11px 11px;font-size:13px;min-height:44px}
 
 /* 店名のコピー欄も1行だけ表示（コピーは全文） */
 .line .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -438,7 +438,7 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .fb-chips button{flex:none;height:34px;border:1.5px solid var(--line)}
 .fb-chips button[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:#fff}
 .fb-links{justify-content:flex-start}
-.chips button{height:36px;padding:0 13px;border:1.5px solid var(--line);font-weight:500}
+.chips button{height:auto;min-height:44px;padding:10px 13px;border:1.5px solid var(--line);font-weight:500}
 .chips button[aria-pressed="true"]{font-weight:700}
 .viewtoggle{border-radius:999px;max-width:200px}
 .viewtoggle button{border-radius:999px}
