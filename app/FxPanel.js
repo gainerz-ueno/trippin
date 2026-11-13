@@ -1,6 +1,6 @@
 'use client';
 // 為替レート：①相場 ②現地の銀行の現金 ③カード を並べて見せ、両替の電卓を付ける
-// ・相場だけが本物の数字（無料の取得元）。現金・カードは「相場＋上乗せ幅（％）」の目安で、幅は自分で変えられる（銀行・カード会社ごとに違うため）
+// ・相場だけが本物の数字（外部の取得元）。現金・カードは「相場＋上乗せ幅（％）」の目安で、幅は自分で変えられる（銀行・カード会社ごとに違うため）
 import { useEffect, useState } from 'react';
 import { CURRENCIES, currencyOf } from './lib/money';
 import { DEFAULT_CASH_PCT, DEFAULT_CARD_PCT, rows, toYen, fromYen, parseAmount } from './lib/fx.mjs';
@@ -63,7 +63,7 @@ export default function FxPanel({ country }) {
             <label>現金の上乗せ（％）<input id="fxcash" inputMode="decimal" value={cashS} onChange={(e) => setCashS(e.target.value)} /></label>
             <label>カードの上乗せ（％）<input id="fxcard" inputMode="decimal" value={cardS} onChange={(e) => setCardS(e.target.value)} /></label>
           </div>
-          <p className="hint">相場は無料の取得元の数字（1日1回の更新{updatedText ? `・${updatedText}分` : ''}）です。現金・カードは目安で、実際のレートは銀行・両替所・カード会社で変わります。上乗せの％は、お手持ちの明細や両替所の掲示に合わせて直せます。</p>
+          <p className="hint">相場は外部の取得元の数字（1日1回の更新{updatedText ? `・${updatedText}分` : ''}）です。現金・カードは目安で、実際のレートは銀行・両替所・カード会社で変わります。上乗せの％は、お手持ちの明細や両替所の掲示に合わせて直せます。</p>
 
           <div className="fx-calc">
             <h3>両替の電卓</h3>

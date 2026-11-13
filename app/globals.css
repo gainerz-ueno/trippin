@@ -469,7 +469,7 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .notice{background:var(--card);border:1px solid var(--accent);border-radius:12px;padding:10px 12px;cursor:pointer}
 
 /* ===== 表示の切り替え（4つ） ===== */
-.viewtoggle.four{grid-template-columns:repeat(5,minmax(0,1fr));max-width:none}
+.viewtoggle.four{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);max-width:none}
 .viewtoggle.four button{padding:7px 1px;font-size:12px;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:3px}
 .viewtoggle .count{font-size:10.5px;background:var(--accent);color:#fff;border-radius:999px;padding:0 6px;line-height:1.5}
 .map-days{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
