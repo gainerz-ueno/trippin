@@ -90,7 +90,7 @@ export default function SharedFolder() {
             <button role="tab" aria-selected={tab === 'cand'} onClick={() => setTab('cand')}>候補 <span className="count">{cand.length}</span></button>
             <button role="tab" aria-selected={tab === 'done'} onClick={() => setTab('done')}>行った <span className="count">{done.length}</span></button>
           </div>
-          <div className={'viewtoggle' + (days.length || souvenirs.length ? ' four' : '')} role="tablist" aria-label="表示の切り替え">
+          <div className="viewtoggle four" role="tablist" aria-label="表示の切り替え">
             <button role="tab" aria-selected={view === 'list'} onClick={() => setView('list')}>リスト</button>
             <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
             {days.length > 0 && <button role="tab" aria-selected={view === 'plan'} onClick={() => setView('plan')}>回る順番</button>}
