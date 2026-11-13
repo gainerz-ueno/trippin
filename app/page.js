@@ -17,6 +17,7 @@ import { addPhotos, listPhotos, deletePhoto, deletePhotosOf } from './photos';
 import { hasConsented, recordConsent, notify, logEvent, supa, setUser as setCloudUser, signIn, signOut, pullItems, upsertItems, deleteItems, pullSettings, pushSettings, pullPhotoRows, ensurePhotos, uploadMissingPhotos, mergeItems, getShare, createShare, deleteShare, renameShare, pullSouvenirs, upsertSouvenirs, deleteSouvenirs, pullPlans, upsertPlans, deletePlans } from './cloud';
 import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
+import FxPanel from './FxPanel';
 import { distanceKm } from './lib/geo';
 import { BASE_CATS, CUSTOM_COLOR, allCats, cleanCustomCats } from './lib/cats.mjs';
 import { UNSORTED, isLegacyFolder, migrateItems, migrateFolderList, migrateSouvenirs, migrateKeyed, removeFolder } from './lib/migrate.mjs';
@@ -1832,6 +1833,7 @@ export default function Home() {
             <button role="tab" aria-selected={view === 'map'} onClick={() => setView('map')}>地図</button>
             <button role="tab" aria-selected={view === 'plan'} onClick={() => setView('plan')}>回る順番</button>
             <button role="tab" aria-selected={view === 'souvenir'} onClick={() => setView('souvenir')}>お土産{tripSouvenirs.length ? <span className="count">{tripSouvenirs.length}</span> : null}</button>
+            <button role="tab" aria-selected={view === 'fx'} onClick={() => setView('fx')}>為替</button>
           </div>
           {view === 'map' && planDays.length > 0 && (
             <div className="chips map-days" aria-label="地図に出すもの">
@@ -1848,6 +1850,7 @@ export default function Home() {
             <SouvenirPanel trip={trip} items={folderItems} list={tripSouvenirs} country={hotel?.country || country}
               onAdd={addSouvenir} onUpdate={updateSouvenir} onDelete={removeSouvenir} />
           )}
+          {view === 'fx' && <FxPanel key={trip} country={hotel?.country || country} />}
           {editCats && (
             <div className="panel">
               <h2>自分で作ったカテゴリー</h2>
