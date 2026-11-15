@@ -208,7 +208,7 @@ input:focus-visible,select:focus-visible,button:focus-visible,a:focus-visible{ou
 .hotelbar button{font:inherit;font-size:12px;font-weight:700;border:1px solid var(--line);background:none;color:var(--ink);padding:4px 12px;border-radius:999px;cursor:pointer}
 .hotelbar .hb-set{background:var(--copybtn);border-color:var(--copybtn);color:var(--copybtn-ink)}
 .hotel-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
-.hotel-list button{font:inherit;text-align:left;width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.hotel-list button{font:inherit;text-align:left;width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-height:44px;color:var(--ink);cursor:pointer;display:flex;flex-direction:column;justify-content:center;gap:2px}
 .hotel-list b{font-size:14px}
 .hotel-list span{font-size:12px}
 .fromhotel{margin:0;font-size:12px;font-weight:700;color:var(--copybtn)}
@@ -348,7 +348,7 @@ header{align-items:center}
 h1.logo img{height:30px}
 .login-btn,.login-btn.on{display:inline-flex;align-items:center;gap:6px;font-size:13px;height:36px;padding:0 14px;border:1.5px solid var(--line);background:var(--card);color:var(--ink)}
 .ctxrow{display:flex;gap:8px;flex-wrap:wrap}
-.ctx-chip{position:relative;font:inherit;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:999px;cursor:pointer;max-width:100%;color:var(--sub);background:transparent;border:1.5px dashed var(--line)}
+.ctx-chip{position:relative;font:inherit;font-size:13px;font-weight:700;display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 14px;border-radius:999px;cursor:pointer;max-width:100%;color:var(--sub);background:transparent;border:1.5px dashed var(--line)}
 .ctx-chip.trip{background:var(--ink);color:var(--bg);border:0;flex-direction:row}
 .ctx-chip.trip select{font:inherit;font-weight:700;color:inherit;background:transparent;border:0;padding:0 18px 0 0;margin-right:-14px;appearance:none;-webkit-appearance:none;width:auto;max-width:44vw;cursor:pointer;position:relative;z-index:1}
 .ctx-chip.trip select option{color:#1E2633}
@@ -607,8 +607,8 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .nm-seg-row{display:flex;gap:8px;flex-wrap:wrap}
 .apphead{gap:8px}
 .head-btns{flex:none}
-.head-btns .login-btn{white-space:nowrap;padding:0 10px;gap:4px}
-@media (max-width:400px){h1.logo img{height:26px}.head-btns .login-btn{font-size:12px;height:34px}}
+.head-btns .login-btn{white-space:nowrap;padding:0 10px;gap:4px;height:44px}
+@media (max-width:400px){h1.logo img{height:26px}.head-btns .login-btn{font-size:12px;height:44px}}
 
 /* 特定商取引法に基づく表記・ログイン画面の下の案内 */
 .legal-h{font-family:var(--display);font-size:20px;margin:0}
