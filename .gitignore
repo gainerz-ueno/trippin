@@ -12,3 +12,4 @@ node_modules
 .dev.vars*
 # 画面確認の撮影画像・試験用HTML
 shots/
+.claude/settings.local.json
