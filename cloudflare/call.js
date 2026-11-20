@@ -111,7 +111,7 @@ export class CallSession {
         if (this.ending || this.finished || this.greeted) return;
         const g = GREETING[this.brief.lang];
         this.greeted = true;
-        this.send({ type: 'text', token: g, last: true });
+        this.send({ type: 'text', token: g, last: true, interruptible: false }); // お店が「喂/您好」と言っても、あいさつは最後まで言う
         this.history.push({ role: 'user', content: '(The call has connected.)' }, { role: 'assistant', content: g });
         this.transcript.push({ who: 'ai', text: g });
         this.armAfterSpeaking(g);
@@ -123,6 +123,11 @@ export class CallSession {
       this.heard = true;
       if (this.silenceTimer) clearTimeout(this.silenceTimer);
       this.transcript.push({ who: 'shop', text: said });
+      if (this.greeted && this.history.length === 2) {
+        // あいさつの最中・直後にお店が話した：あいさつは言い終えている前提で、その言葉に自然に続ける
+        this.reply(`${said}\n(You already finished your introduction. If they only said hello, do not introduce yourself again; go straight to the booking request.)`);
+        return;
+      }
       if (!this.greeted) {
         // お店が先に話した：決まったあいさつはやめ、返事の頭で名乗る
         clearTimeout(this.hello);
