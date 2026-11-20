@@ -105,9 +105,12 @@ export class CallSession {
     try { m = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
     if (m.type === 'setup') {
       this.ctx.waitUntil(callUpdate(this.p.c, this.p.k, { status: 'talking', call_sid: m.callSid }));
+      this.armSilence(15000);
     } else if (m.type === 'prompt' && m.last !== false) {
       const said = String(m.voicePrompt || '').trim();
       if (!said || this.ending) return;
+      this.heard = true;
+      this.armSilence(20000);
       this.transcript.push({ who: 'shop', text: said });
       this.reply(said);
     } else if (m.type === 'interrupt') {
@@ -117,6 +120,7 @@ export class CallSession {
       if (last?.role === 'assistant' && m.utteranceUntilInterrupt) last.content = m.utteranceUntilInterrupt;
     } else if (m.type === 'error') {
       console.error('[tabibi] relay error', m.description);
+      (this.relayErrors ||= []).push(String(m.description || '').slice(0, 200));
     }
   }
 
@@ -180,6 +184,20 @@ export class CallSession {
     this.reply('');
   }
 
+  // お店の声が文字にならないまま黙りが続いたら、AIからもう一度話しかける（無言のまま待ち続けないように）
+  armSilence(ms) {
+    if (this.silenceTimer) clearTimeout(this.silenceTimer);
+    this.silenceTimer = setTimeout(() => {
+      if (this.ending || this.finished || this.busy) return;
+      this.silentCount = (this.silentCount || 0) + 1;
+      if (this.silentCount >= 3) { this.sayGoodbye(); return; }
+      this.history.push({ role: 'user', content: '(No reply was heard for a while. Briefly check that they can hear you, then repeat your last question once, slowly. If you already did this, say goodbye and end with [END].)' });
+      this.reply('');
+      this.armSilence(15000);
+    }, ms);
+    this.timers.push(this.silenceTimer);
+  }
+
   // 時間切れ：AIの返事を止めて、決まったあいさつを言ってから切る（何も言わずに切れないように）
   sayGoodbye() {
     if (this.finished) return;
@@ -207,7 +225,8 @@ export class CallSession {
 
   async summarize() {
     const talked = this.transcript.some((t) => t.who === 'shop');
-    let result = { summary_ja: 'お店の人と話す前に電話が切れました。', notes_ja: '' }, outcome = 'unclear';
+    const errs = (this.relayErrors || []).length ? `（仕組みのエラー：${this.relayErrors.join(' / ')}）` : '';
+    let result = { summary_ja: 'お店の人と話す前に電話が切れました。' + (this.heard ? '' : 'お店の声を聞き取れませんでした。'), notes_ja: errs }, outcome = 'unclear';
     if (talked) {
       const lines = this.transcript.map((t) => `${t.who === 'ai' ? 'AI' : 'SHOP'}: ${t.text}`).join('\n');
       try {
