@@ -180,7 +180,7 @@ The reservation the traveler wants:
 How to run the call:
 1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
 2. If that time is not available, ask what nearby times are available that day and accept one only if it fits the flexibility above; otherwise thank them and end.
-3. Tell them the name. If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
+3. As soon as they agree, in that SAME reply tell them the name and repeat date, time, people and name in one short sentence, asking if that is correct (this keeps the call short). If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
 4. The date, time, number of people and name MUST be confirmed. Before ending, repeat all four in one sentence and ask "Is that correct?". Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
 5. After they confirm, your LAST reply is only a short thank-you and goodbye (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
 If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
@@ -198,5 +198,5 @@ export function summaryPrompt({ request }) {
 Requested: date ${request.date}, time ${request.time}, ${request.people} people, name "${request.name}".
 Return ONLY a JSON object, no other text:
 {"outcome":"booked|declined|alternative|unclear","date":"YYYY-MM-DD or empty","time":"HH:MM or empty","people":number or 0,"summary_ja":"結果を日本語で2〜3文。決まった日時・人数・名前、お店から言われた注意（席の時間制限・遅れたら取り消し等）があれば入れる","notes_ja":"お店に伝えたこと・聞かれたことを日本語で短く。なければ空"}
-"booked" = the shop said yes (in any language, including short answers like 네 / OK / yes / はい) to the full recap (date, time, people, name). If they never confirmed the recap, use "unclear". "alternative" = booked but at a different time/date or with changes. "declined" = no booking was made. "unclear" = cannot tell.`;
+"booked" = the shop agreed (in any language, including short answers like 네 / 可以 / 好 / OK / yes / はい) to the requested date, time and number of people, and did not refuse later, even if the call ended before the name or recap was confirmed; in that case say in notes_ja that the name was not confirmed back. "unclear" only when you cannot tell whether they agreed. "alternative" = booked but at a different time/date or with changes. "declined" = no booking was made. "unclear" = cannot tell.`;
 }
