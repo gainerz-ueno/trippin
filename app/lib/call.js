@@ -76,6 +76,23 @@ export const GREETING = {
 };
 GREETING['en-AU'] = GREETING['en-GB'] = GREETING['en-US'];
 
+// 時間切れで切るときの最後のあいさつ（AIの返事が間に合わないときもこれを言ってから切る）
+export const GOODBYE = {
+  'ko-KR': '시간 관계상 이만 통화를 마치겠습니다. 감사합니다. 안녕히 계세요.',
+  'cmn-TW': '因為時間關係，今天先到這裡。謝謝您，再見。',
+  'yue-HK': '因為時間關係，今日講到呢度先。多謝你，拜拜。',
+  'vi-VN': 'Vì hết thời gian, tôi xin phép kết thúc cuộc gọi. Cảm ơn anh chị, chào anh chị.',
+  'th-TH': 'ขอบคุณมากค่ะ ขออนุญาตวางสายก่อนนะคะ สวัสดีค่ะ',
+  'id-ID': 'Karena waktunya habis, saya akhiri teleponnya. Terima kasih, selamat siang.',
+  'fr-FR': 'Je dois raccrocher, merci beaucoup et au revoir.',
+  'it-IT': 'Devo chiudere la chiamata, grazie mille e arrivederci.',
+  'es-ES': 'Tengo que colgar, muchas gracias y hasta luego.',
+  'de-DE': 'Ich muss jetzt leider auflegen. Vielen Dank und auf Wiederhören.',
+  'ja-JP': 'お時間となりましたので、これで失礼いたします。ありがとうございました。',
+  'en-US': 'I have to end the call now. Thank you very much, goodbye.',
+};
+GOODBYE['en-AU'] = GOODBYE['en-GB'] = GOODBYE['en-US'];
+
 // 読み上げ・聞き取りの設定（Twilio ConversationRelay）
 export const VOICE = {
   'ko-KR': { language: 'ko-KR' },

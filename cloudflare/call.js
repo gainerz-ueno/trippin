@@ -2,7 +2,7 @@
 // ・/call/ws     … お店が話したこと（文字）が届く → Claude が現地語で返事 → Twilio が読み上げる
 // ・/call/status … Twilio から「呼び出し中・出た・切れた・出なかった」が届く
 // どちらも、電話を始めたときに作った合言葉（k）が合うときだけ動く。サイトのパスワードはかけない（Twilio が来るため）
-import { CALL_BLOCK_SEC, GREETING, callSystemPrompt, summaryPrompt } from '../app/lib/call.js';
+import { CALL_BLOCK_SEC, GREETING, GOODBYE, callSystemPrompt, summaryPrompt } from '../app/lib/call.js';
 import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from '../app/lib/call-server.js';
 
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
@@ -161,15 +161,26 @@ export class CallSession {
     this.timers.push(setTimeout(async () => {
       if (this.ending || this.finished) return;
       if (await extend(this.p, true)) this.block(n + 1);
-      else this.send({ type: 'end', handoffData: '{"reason":"no_tickets"}' });
+      else this.sayGoodbye();
     }, wait(end)));
   }
 
   // 締めくくり（チケットの残りがないとき、3分の区切りの少し手前）：お礼を言って切る
   wrapUp() {
     if (this.ending || this.finished) return;
-    this.history.push({ role: 'user', content: '(The call is about to reach its time limit. Confirm what was agreed in one short sentence, thank them, and end with [END].)' });
+    this.wrapping = true;
+    this.history.push({ role: 'user', content: '(The call is about to reach its time limit. Confirm what was agreed in one short sentence, thank them, say goodbye, and end with [END].)' });
     this.reply('');
+  }
+
+  // 時間切れ：AIの返事を止めて、決まったあいさつを言ってから切る（何も言わずに切れないように）
+  sayGoodbye() {
+    if (this.finished) return;
+    if (this.busy) this.busy.abort();
+    const bye = GOODBYE[this.brief.lang] || GOODBYE['en-US'];
+    this.send({ type: 'text', token: bye, last: true });
+    this.transcript.push({ who: 'ai', text: bye });
+    this.hangUpAfter(bye);
   }
 
   // 最後のひとことを読み終わるくらいまで待ってから切る
