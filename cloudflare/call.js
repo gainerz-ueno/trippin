@@ -84,9 +84,10 @@ export class CallSession {
     this.p = p;
     this.brief = brief;
     this.system = callSystemPrompt({ lang: brief.lang, placeName: brief.place_name, request: brief.request });
-    // 最初のあいさつは Twilio が読み上げ済み
-    this.history = [{ role: 'assistant', content: GREETING[brief.lang] }];
-    this.transcript = [{ who: 'ai', text: GREETING[brief.lang] }];
+    // 最初のあいさつは、つながって少し待ってから言う（お店が先に話したら、名乗りを返事の頭に入れる）
+    this.history = [];
+    this.transcript = [];
+    this.greeted = false;
     this.start = Date.now();
     this.busy = null; // 返事を作っている途中（話をさえぎられたら止める）
     this.ending = false;
@@ -106,17 +107,29 @@ export class CallSession {
     if (m.type === 'setup') {
       this.ctx.waitUntil(callUpdate(this.p.c, this.p.k, { status: 'talking', call_sid: m.callSid }));
       // つながった直後の「ピピッ」と重ならないよう、1.5秒待ってからあいさつ
-      const hello = setTimeout(() => {
-        if (!this.ending && !this.finished && !this.heard) this.send({ type: 'text', token: GREETING[this.brief.lang], last: true });
+      this.hello = setTimeout(() => {
+        if (this.ending || this.finished || this.greeted) return;
+        const g = GREETING[this.brief.lang];
+        this.greeted = true;
+        this.send({ type: 'text', token: g, last: true });
+        this.history.push({ role: 'user', content: '(The call has connected.)' }, { role: 'assistant', content: g });
+        this.transcript.push({ who: 'ai', text: g });
+        this.armAfterSpeaking(g);
       }, 1500);
-      this.timers.push(hello);
-      this.armSilence(16500);
+      this.timers.push(this.hello);
     } else if (m.type === 'prompt' && m.last !== false) {
       const said = String(m.voicePrompt || '').trim();
       if (!said || this.ending) return;
       this.heard = true;
-      this.armSilence(20000);
+      if (this.silenceTimer) clearTimeout(this.silenceTimer);
       this.transcript.push({ who: 'shop', text: said });
+      if (!this.greeted) {
+        // お店が先に話した：決まったあいさつはやめ、返事の頭で名乗る
+        clearTimeout(this.hello);
+        this.greeted = true;
+        this.reply(`${said}\n(The shop answered first. You have not introduced yourself yet. Start your reply with a short version of this introduction: "${GREETING[this.brief.lang]}")`);
+        return;
+      }
       this.reply(said);
     } else if (m.type === 'interrupt') {
       // お店の人が話し始めたら、言いかけの返事は止める（言えたところまでを記録）
@@ -164,6 +177,12 @@ export class CallSession {
       this.transcript.push({ who: 'ai', text: spoken });
     }
     if (done) this.hangUpAfter(spoken);
+    else if (spoken) this.armAfterSpeaking(spoken);
+  }
+
+  // AIが言い終わるころから数えて、お店の返事が無いまま12秒たったら話しかけ直す
+  armAfterSpeaking(spoken) {
+    this.armSilence(Math.min(30000, spoken.length * 250) + 12000);
   }
 
   // n 枚目の3分の区切り
@@ -196,9 +215,8 @@ export class CallSession {
       if (this.ending || this.finished || this.busy) return;
       this.silentCount = (this.silentCount || 0) + 1;
       if (this.silentCount >= 3) { this.sayGoodbye(); return; }
-      this.history.push({ role: 'user', content: '(No reply was heard for a while. Briefly check that they can hear you, then repeat your last question once, slowly. If you already did this, say goodbye and end with [END].)' });
+      this.history.push({ role: 'user', content: '(No reply was heard for a while. If the booking was already agreed, just thank them, say goodbye and end with [END]. Otherwise briefly check that they can hear you and repeat only your last question, slowly. If you already did this once, say goodbye and end with [END].)' });
       this.reply('');
-      this.armSilence(15000);
     }, ms);
     this.timers.push(this.silenceTimer);
   }
