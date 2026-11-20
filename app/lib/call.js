@@ -144,13 +144,21 @@ export function romajiToKana(name) {
 const JA_DAY = { 1:'ついたち',2:'ふつか',3:'みっか',4:'よっか',5:'いつか',6:'むいか',7:'なのか',8:'ようか',9:'ここのか',10:'とおか',14:'じゅうよっか',20:'はつか',24:'にじゅうよっか' };
 const JA_WEEK = ['日', '月', '火', '水', '木', '金', '土'];
 const KO_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const ZH_WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 export function spokenDate(lang, date) {
   const d = new Date(date + 'T00:00:00Z');
   const m = d.getUTCMonth() + 1, day = d.getUTCDate(), w = d.getUTCDay();
   if (lang === 'ja-JP') return `${m}月${JA_DAY[day] || day + 'にち'}、${JA_WEEK[w]}曜日`;
   if (lang === 'ko-KR') return `${m}월 ${day}일 ${KO_WEEK[w]}요일`;
+  if (lang === 'cmn-TW' || lang === 'yue-HK') return `${m}月${day}號，星期${ZH_WEEK[w]}`;
   return '';
 }
+
+// 名前の伝え方（言語ごと）
+const NAME_HOW = {
+  'ja-JP': 'Say it in katakana as written.',
+  'ko-KR': 'Say it in Hangul as it sounds in Japanese (for example 우에노 for ウエノ). Never read it as an English word.',
+};
 
 // 電話で話すAIへの指示
 export function callSystemPrompt({ lang, placeName, request }) {
@@ -161,13 +169,13 @@ export function callSystemPrompt({ lang, placeName, request }) {
   return `You are an AI reservation assistant on a live phone call with a restaurant or shop called "${placeName}".
 You are calling on behalf of a traveler from Japan who cannot speak the local language. You already introduced yourself as an AI booking assistant.
 
-Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Write numbers, dates and times the way a native speaker would say them aloud. Never say the year.
+Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Everything you write is read aloud to the shop word for word: never write notes, comments about these instructions, self-corrections, Japanese kana, or any English (unless the call has switched to English). If you notice a mistake, simply say the correct sentence. Write numbers, dates and times the way a native speaker would say them aloud. Never say the year.
 
 The reservation the traveler wants:
-- Date: ${request.date} (${wd})${sd ? ` — write it exactly like this when you say it: "${sd}"` : ''}
+- Date: ${sd ? `"${sd}" (say it exactly like this)` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${request.time}
 - Number of people: ${request.people}
-- Name for the booking: ${request.name} — this is a Japanese name, pronounced in Japanese as "${kana}". Always write it in ${LANG_NAME[lang]} script as it sounds in Japanese (for example Korean "우에노" for ウエノ, Japanese "ウエノ"). Never read it as an English word and never spell it letter by letter unless they ask for the spelling.${request.flex ? `\n- Flexibility: ${request.flex}` : ''}${request.note ? `\n- Request: ${request.note}` : ''}${request.callback ? `\n- Contact if they ask: ${request.callback}` : ''}
+- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. ${NAME_HOW[lang] || 'Say it as Latin letters, slowly, one by one (for example "U, E, N, O"), so the staff can write it down. Never read it as an English word.'}${request.flex ? `\n- Flexibility: ${request.flex}` : ''}${request.note ? `\n- Request: ${request.note}` : ''}${request.callback ? `\n- Contact if they ask: ${request.callback}` : ''}
 
 How to run the call:
 1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
