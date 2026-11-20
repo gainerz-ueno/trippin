@@ -84,8 +84,10 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
   const [err, setErr] = useState('');
   const [form, setForm] = useState(() => {
     let name = '';
-    try { name = localStorage.getItem(NAME_KEY) || ''; } catch {}
-    return { date: todayLocal(), time: '19:00', people: 2, name, flex: '', note: '', testPhone: '', testLang: 'ko-KR' };
+    let gender = 'm';
+    try { name = localStorage.getItem(NAME_KEY) || ''; gender = localStorage.getItem(NAME_KEY + '.g') || 'm'; } catch {}
+    const L = langOfPhone(toE164(place.phone));
+    return { date: todayLocal(), time: '19:00', people: 2, name, gender, flex: '', note: '', testPhone: '', testLang: L && !L.testOnly ? L.lang : 'ko-KR' };
   });
   const [sending, setSending] = useState(false);
   const [call, setCall] = useState(null);
@@ -117,8 +119,8 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
     if (!form.name.trim()) { setErr('予約の名前を入れてください（ローマ字かカタカナ）'); return; }
     setSending(true);
     try {
-      try { localStorage.setItem(NAME_KEY, form.name.trim()); } catch {}
-      const request = { date: form.date, time: form.time, people: Number(form.people), name: form.name.trim(), flex: form.flex.trim(), note: form.note.trim() };
+      try { localStorage.setItem(NAME_KEY, form.name.trim()); localStorage.setItem(NAME_KEY + '.g', form.gender); } catch {}
+      const request = { date: form.date, time: form.time, people: Number(form.people), name: form.name.trim(), gender: form.gender, flex: form.flex.trim(), note: form.note.trim() };
       const body = { placeId: place.placeId, placeName: place.altName || place.name, request };
       if (me?.owner && form.testPhone.trim()) { body.testPhone = form.testPhone.trim(); body.testLang = form.testLang; }
       const d = await callApi('/api/call', { method: 'POST', body: JSON.stringify(body) });
@@ -166,6 +168,12 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
                   </select>
                 </label>
                 <label className="wide">予約の名前（ローマ字かカタカナ）<input value={form.name} maxLength={40} placeholder="例：UENO" onChange={set('name')} /></label>
+                <label>呼び方
+                  <select value={form.gender} onChange={set('gender')}>
+                    <option value="m">男性（〇〇先生など）</option>
+                    <option value="f">女性（〇〇小姐など）</option>
+                  </select>
+                </label>
                 <label className="wide">時間がずれてもいい範囲（任意）<input value={form.flex} maxLength={60} placeholder="例：18時〜20時ならOK" onChange={set('flex')} /></label>
                 <label className="wide">お店に伝えたいこと（任意）<input value={form.note} maxLength={120} placeholder="例：子ども1人います" onChange={set('note')} /></label>
                 {me?.owner && (

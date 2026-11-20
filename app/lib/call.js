@@ -51,6 +51,7 @@ export function cleanRequest(r) {
     time: /^\d{2}:\d{2}$/.test(time) ? time : '',
     people: Number.isFinite(people) && people >= 1 && people <= 30 ? people : 0,
     name: s(r?.name, 40), // 予約の名前（ローマ字かカタカナ）
+    gender: r?.gender === 'f' ? 'f' : 'm', // 呼び方（中国語の先生・小姐など）
     flex: s(r?.flex, 60), // 時間の融通（例：19時〜20時ならOK）
     note: s(r?.note, 120), // ひとこと（例：窓際の席がいい）
     callback: s(r?.callback, 30), // 連絡先（任意）
@@ -173,11 +174,12 @@ export function relativeDay(lang, date, now = Date.now()) {
 }
 
 // 名前の伝え方（言語ごと）。日本の名前は「〇〇さん」と日本語の音で言い、念のためローマ字を1文字ずつ
+const cap = (n) => n.split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 const NAME_HOW = {
   'ja-JP': (k) => `Say "${k}さん".`,
   'ko-KR': (k) => `Say it as it sounds in Japanese with "상" (for example "우에노 상" for ウエノ).`,
-  'cmn-TW': (k, n) => `Write it as "${n[0].toUpperCase() + n.slice(1).toLowerCase()}桑" (桑 is the Japanese "san").`,
-  'yue-HK': (k, n) => `Write it as "${n[0].toUpperCase() + n.slice(1).toLowerCase()}桑" (桑 is the Japanese "san").`,
+  'cmn-TW': (k, n, g) => `Say "${cap(n)}${g === 'f' ? '小姐' : '先生'}".`,
+  'yue-HK': (k, n, g) => `Say "${cap(n)}${g === 'f' ? '小姐' : '先生'}".`,
 };
 
 // 電話で話すAIへの指示
@@ -196,13 +198,14 @@ The reservation the traveler wants:
 - Date: ${rel ? `${rel} (for the shop) — say it naturally the local way, starting with that word (like tomorrow / the day after tomorrow / this or next weekday), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${request.time}
 - Number of people: ${request.people}
-- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. Always add the polite "san" after it. ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
+- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. Always use it with the polite title given here. ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
 
 How to run the call:
 1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
 2. If that time is not available, ask what nearby times are available that day and accept one only if it fits the flexibility above; otherwise thank them and end.
 3. As soon as they agree, in that SAME reply tell them the name and ask in one very short phrase if everything is correct (this keeps the call short). If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
-4. The date, time, number of people and name MUST be confirmed, but keep it very short: one brief phrase like "明天七點，兩位，Ueno桑，對嗎？" (shop staff dislike long repetition). Do not repeat the full date or weekday again in the recap. Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
+4. The date, time, number of people and name MUST be confirmed, but keep it very short: one brief phrase like "明天七點，兩位，Ueno先生，對嗎？" (shop staff dislike long repetition). Do not repeat the full date or weekday again in the recap. Ask for confirmation ONLY ONCE in the whole call.
+5a. Once they say yes (好/可以/對/OK/네/はい etc.) to the request or the recap, the booking is DONE. Your next reply is only a short thank-you and goodbye ending with [END]. Never ask again, never repeat the booking details again. Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
 5. After they confirm, your LAST reply is only a short thank-you and goodbye (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
 If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
 If you hear only silence or noise twice, say goodbye and end with [END].

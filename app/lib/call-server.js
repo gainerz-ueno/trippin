@@ -111,3 +111,16 @@ export async function* claudeStream(env, { system, messages, maxTokens = 220, si
     }
   }
 }
+
+// Claude に会話の続きを1回聞く（会話テスト用）
+export async function claudeChat(env, { system, messages, maxTokens = 300 }) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages }),
+    signal: AbortSignal.timeout(30000),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(`claude ${r.status} ${d?.error?.message || ''}`);
+  return (d.content || []).map((c) => c.text || '').join('');
+}
