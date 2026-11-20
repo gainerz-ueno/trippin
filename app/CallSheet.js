@@ -84,10 +84,10 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
   const [err, setErr] = useState('');
   const [form, setForm] = useState(() => {
     let name = '';
-    let gender = 'm';
-    try { name = localStorage.getItem(NAME_KEY) || ''; gender = localStorage.getItem(NAME_KEY + '.g') || 'm'; } catch {}
+    let gender = 'm', callback = '';
+    try { name = localStorage.getItem(NAME_KEY) || ''; gender = localStorage.getItem(NAME_KEY + '.g') || 'm'; callback = localStorage.getItem(NAME_KEY + '.tel') || ''; } catch {}
     const L = langOfPhone(toE164(place.phone));
-    return { date: todayLocal(), time: '19:00', people: 2, name, gender, flex: '', note: '', testPhone: '', testLang: L && !L.testOnly ? L.lang : 'ko-KR' };
+    return { date: todayLocal(), time: '19:00', people: 2, name, gender, callback, flex: '', note: '', testPhone: '', testLang: L && !L.testOnly ? L.lang : 'ko-KR' };
   });
   const [sending, setSending] = useState(false);
   const [call, setCall] = useState(null);
@@ -119,8 +119,8 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
     if (!form.name.trim()) { setErr('予約の名前を入れてください（ローマ字かカタカナ）'); return; }
     setSending(true);
     try {
-      try { localStorage.setItem(NAME_KEY, form.name.trim()); localStorage.setItem(NAME_KEY + '.g', form.gender); } catch {}
-      const request = { date: form.date, time: form.time, people: Number(form.people), name: form.name.trim(), gender: form.gender, flex: form.flex.trim(), note: form.note.trim() };
+      try { localStorage.setItem(NAME_KEY, form.name.trim()); localStorage.setItem(NAME_KEY + '.g', form.gender); localStorage.setItem(NAME_KEY + '.tel', form.callback.trim()); } catch {}
+      const request = { date: form.date, time: form.time, people: Number(form.people), name: form.name.trim(), gender: form.gender, callback: form.callback.trim(), flex: form.flex.trim(), note: form.note.trim() };
       const body = { placeId: place.placeId, placeName: place.altName || place.name, request };
       if (me?.owner && form.testPhone.trim()) { body.testPhone = form.testPhone.trim(); body.testLang = form.testLang; }
       const d = await callApi('/api/call', { method: 'POST', body: JSON.stringify(body) });
@@ -174,6 +174,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
                     <option value="f">女性（〇〇小姐など）</option>
                   </select>
                 </label>
+                <label className="wide">連絡先の電話番号（任意・お店に聞かれたときだけ伝えます）<input value={form.callback} maxLength={30} inputMode="tel" placeholder="例：+81 90-1234-5678" onChange={set('callback')} /></label>
                 <label className="wide">時間がずれてもいい範囲（任意）<input value={form.flex} maxLength={60} placeholder="例：18時〜20時ならOK" onChange={set('flex')} /></label>
                 <label className="wide">お店に伝えたいこと（任意）<input value={form.note} maxLength={120} placeholder="例：子ども1人います" onChange={set('note')} /></label>
                 {me?.owner && (
