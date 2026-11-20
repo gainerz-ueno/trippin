@@ -253,8 +253,13 @@ export class CallSession {
     if (talked) {
       const lines = this.transcript.map((t) => `${t.who === 'ai' ? 'AI' : 'SHOP'}: ${t.text}`).join('\n');
       try {
-        const out = await claudeOnce(this.env, { system: summaryPrompt({ request: this.brief.request }), user: lines });
-        const j = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
+        // まとめは長くなることがあるので余裕を持たせ、読めなければ1回だけやり直す
+        let j = null;
+        for (let i = 0; i < 2 && !j; i++) {
+          const out = await claudeOnce(this.env, { system: summaryPrompt({ request: this.brief.request }), user: lines, maxTokens: 1500 });
+          try { j = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1)); } catch { j = null; }
+        }
+        if (!j) throw new Error('summary json');
         outcome = ['booked', 'declined', 'alternative', 'unclear'].includes(j.outcome) ? j.outcome : 'unclear';
         result = {
           summary_ja: String(j.summary_ja || '').slice(0, 600),
