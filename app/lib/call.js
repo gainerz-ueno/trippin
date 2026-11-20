@@ -148,16 +148,34 @@ const ZH_WEEK = ['日', '一', '二', '三', '四', '五', '六'];
 export function spokenDate(lang, date) {
   const d = new Date(date + 'T00:00:00Z');
   const m = d.getUTCMonth() + 1, day = d.getUTCDate(), w = d.getUTCDay();
-  if (lang === 'ja-JP') return `${m}月${JA_DAY[day] || day + 'にち'}、${JA_WEEK[w]}曜日`;
+  if (lang === 'ja-JP') return `${m}月${JA_DAY[day] || day + '日'}、${JA_WEEK[w]}曜日`;
   if (lang === 'ko-KR') return `${m}월 ${day}일 ${KO_WEEK[w]}요일`;
   if (lang === 'cmn-TW' || lang === 'yue-HK') return `${m}月${day}號，星期${ZH_WEEK[w]}`;
   return '';
 }
 
-// 名前の伝え方（言語ごと）
+// お店の国の今日から見た言い方（明日・明後日・今週〇曜・来週〇曜）
+const TZ = { 'ko-KR': 9, 'ja-JP': 9, 'cmn-TW': 8, 'yue-HK': 8, 'vi-VN': 7, 'th-TH': 7, 'id-ID': 7, 'fr-FR': 1, 'it-IT': 1, 'es-ES': 1, 'de-DE': 1, 'en-GB': 0, 'en-US': -5, 'en-AU': 10 };
+export function relativeDay(lang, date, now = Date.now()) {
+  const local = new Date(now + (TZ[lang] ?? 9) * 3600000);
+  const today = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+  const d = Date.parse(date + 'T00:00:00Z');
+  const diff = Math.round((d - today) / 86400000);
+  const wd = WEEK[new Date(d).getUTCDay()];
+  if (diff === 0) return 'today';
+  if (diff === 1) return 'tomorrow';
+  if (diff === 2) return 'the day after tomorrow';
+  const mon = (t) => t - ((new Date(t).getUTCDay() + 6) % 7) * 86400000; // その週の月曜
+  const weeks = Math.round((mon(d) - mon(today)) / (7 * 86400000));
+  if (weeks === 0) return `this ${wd}`;
+  if (weeks === 1) return `next ${wd}`;
+  return '';
+}
+
+// 名前の伝え方（言語ごと）。日本の名前は「〇〇さん」と日本語の音で言い、念のためローマ字を1文字ずつ
 const NAME_HOW = {
-  'ja-JP': 'Say it in katakana as written.',
-  'ko-KR': 'Say it in Hangul as it sounds in Japanese (for example 우에노 for ウエノ). Never read it as an English word.',
+  'ja-JP': (k, n) => `Say "${k}さん" and then, just in case, spell the letters: ${n.toUpperCase().split('').join(', ')}.`,
+  'ko-KR': (k, n) => `Say it as it sounds in Japanese with "상" (for example "우에노 상" for ウエノ), then, just in case, spell the Latin letters one by one: ${n.toUpperCase().split('').join(', ')}.`,
 };
 
 // 電話で話すAIへの指示
@@ -166,16 +184,17 @@ export function callSystemPrompt({ lang, placeName, request }) {
   const wd = WEEK[d.getUTCDay()];
   const kana = romajiToKana(request.name);
   const sd = spokenDate(lang, request.date);
+  const rel = relativeDay(lang, request.date);
   return `You are an AI reservation assistant on a live phone call with a restaurant or shop called "${placeName}".
 You are calling on behalf of a traveler from Japan who cannot speak the local language. You already introduced yourself as an AI booking assistant.
 
 Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Everything you write is read aloud to the shop word for word: never write notes, comments about these instructions, self-corrections, Japanese kana, or any English (unless the call has switched to English). If you notice a mistake, simply say the correct sentence. Write numbers, dates and times the way a native speaker would say them aloud. Never say the year.
 
 The reservation the traveler wants:
-- Date: ${sd ? `"${sd}" (say it exactly like this)` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
+- Date: ${rel ? `${rel} (for the shop) — say it naturally the local way, starting with that word (like tomorrow / the day after tomorrow / this or next weekday), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${request.time}
 - Number of people: ${request.people}
-- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. ${NAME_HOW[lang] || 'Say it as Latin letters, slowly, one by one (for example "U, E, N, O"), so the staff can write it down. Never read it as an English word.'}${request.flex ? `\n- Flexibility: ${request.flex}` : ''}${request.note ? `\n- Request: ${request.note}` : ''}${request.callback ? `\n- Contact if they ask: ${request.callback}` : ''}
+- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. Always add the polite "san" after it. ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"), then, just in case, spell the Latin letters one by one: ${request.name.toUpperCase().split('').join(', ')}. Never read it as an English word.`}${request.flex ? `\n- Flexibility: ${request.flex}` : ''}${request.note ? `\n- Request: ${request.note}` : ''}${request.callback ? `\n- Contact if they ask: ${request.callback}` : ''}
 
 How to run the call:
 1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
