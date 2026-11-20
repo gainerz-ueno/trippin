@@ -4,7 +4,13 @@
 // ・回数券（1回300円）を1つ使う。お店が出なかった・話し中だったときは回数を戻す
 import { useEffect, useRef, useState } from 'react';
 import { accessToken } from './note/util';
-import { CALL_PRICE, CALL_BLOCK_SEC, CALL_LANGS } from './lib/call';
+import { CALL_PRICE, CALL_BLOCK_SEC, CALL_LANGS, langOfPhone, toE164 } from './lib/call';
+
+// お店の国の言葉（例：現地の言葉（韓国語））
+function localLang(phone) {
+  const L = langOfPhone(toE164(phone));
+  return L && !L.testOnly ? `現地の言葉（${L.name}）` : '現地の言葉';
+}
 
 // テストで話す言語（重ならないように）
 const TEST_LANGS = [...new Map(Object.values(CALL_LANGS).map((x) => [x.lang, x.name])).entries()];
@@ -136,7 +142,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
           <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
         </header>
         <p className="call-shop"><b>{place.name}</b>{place.altName && place.altName !== place.name ? <span>{place.altName}</span> : null}</p>
-        <p className="prem-now">AIがお店の言葉で予約の電話をかけて、結果を日本語でお知らせします。チケット1枚（{CALL_PRICE}円）で{CALL_BLOCK_SEC / 60}分。{CALL_BLOCK_SEC / 60}分を超えると、{CALL_BLOCK_SEC / 60}分ごとに1枚ずつ使い、チケットがなくなると電話は切れます。お店が出なかったときや話し中のときは、チケットを戻します。</p>
+        <p className="prem-now">AIが{localLang(place.phone)}で予約の電話をかけて、結果を日本語でお知らせします。チケット1枚（{CALL_PRICE}円）で{CALL_BLOCK_SEC / 60}分。{CALL_BLOCK_SEC / 60}分を超えると、{CALL_BLOCK_SEC / 60}分ごとに1枚ずつ使い、チケットがなくなると電話は切れます。お店が出なかったときや話し中のときは、チケットを戻します。</p>
 
         {!user ? (
           <p className="prem-now">使うには <button type="button" className="linkbtn" onClick={onSignIn}>Googleでログイン</button> してください。</p>

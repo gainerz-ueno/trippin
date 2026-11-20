@@ -414,7 +414,7 @@ function DetailPanel({ id, onCall }) {
         <section className="facts">
           {d.phone && <p><b>電話</b><a href={`tel:${d.phone.replace(/\s/g, '')}`}>{d.phone}</a></p>}
           {d.phone && onCall && (
-            <button type="button" className="btn call-btn" onClick={onCall}>AIに予約の電話をしてもらう（タビビコール）</button>
+            <button type="button" className="btn call-btn" onClick={() => onCall(d.phone)}>AIに予約の電話をしてもらう（タビビコール）</button>
           )}
           {d.website && <p><b>ホームページ</b><a href={safeUrl(d.website)} target="_blank" rel="noopener noreferrer">{d.website.replace(/^https?:\/\//, '').replace(/\/$/, '')}</a></p>}
           {(d.price || d.priceRange) && <p><b>価格帯</b><span>{[d.price, d.priceRange].filter(Boolean).join('　')}</span></p>}
@@ -1554,7 +1554,7 @@ export default function Home() {
         <button type="button" className={'detailbar' + (openDetail === 'l:' + it.id ? ' on' : '')} onClick={() => toggleDetail('l:' + it.id)}>
           {openDetail === 'l:' + it.id ? '詳細を閉じる' : '詳細を開く'}
         </button>
-        {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} onCall={() => setCallFor({ placeId: it.placeId || it.id, name: it.name, altName: it.altName })} />}
+        {openDetail === 'l:' + it.id && <DetailPanel id={it.placeId || it.id} onCall={(phone) => setCallFor({ placeId: it.placeId || it.id, name: it.name, altName: it.altName, phone })} />}
       </article>
     );
   }
