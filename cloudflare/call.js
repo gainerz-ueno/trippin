@@ -40,6 +40,13 @@ export async function handleStatus(request, env) {
     const b = await rpcJson('call_brief', { cid: p.c, secret: p.k });
     if (b.ok && b.data && (b.data.status === 'calling' || b.data.status === 'ringing')) {
       await callUpdate(p.c, p.k, { status: 'done', outcome: 'unclear', result: { summary_ja: 'お店とお話しできないまま電話が切れました。' } });
+    } else if (b.ok && b.data && b.data.status === 'talking') {
+      // 会話の仕組みが途中で止まったとき（読み上げ・聞き取りの設定エラー等）、「話しています」のまま残らないようにする
+      await new Promise((r) => setTimeout(r, 10000));
+      const b2 = await rpcJson('call_brief', { cid: p.c, secret: p.k });
+      if (b2.ok && b2.data && b2.data.status === 'talking') {
+        await callUpdate(p.c, p.k, { status: 'done', outcome: 'unclear', result: { summary_ja: '会話の途中で電話が切れました（仕組みの不具合の可能性があります）。' } });
+      }
     }
   }
   return new Response('ok');

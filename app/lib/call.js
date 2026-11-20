@@ -107,9 +107,9 @@ export const VOICE = {
   'en-AU': { language: 'en-AU' },
   'en-GB': { language: 'en-GB' },
   'ja-JP': { language: 'ja-JP' },
-  // 台湾の中国語・香港の広東語は既定の声がないので Google の声と聞き取りを使う
-  'cmn-TW': { ttsLanguage: 'cmn-TW', transcriptionLanguage: 'cmn-Hant-TW', ttsProvider: 'Google', voice: 'cmn-TW-Wavenet-A', transcriptionProvider: 'Google' },
-  'yue-HK': { ttsLanguage: 'yue-HK', transcriptionLanguage: 'yue-Hant-HK', ttsProvider: 'Google', voice: 'yue-HK-Standard-A', transcriptionProvider: 'Google' },
+  // 台湾の中国語・香港の広東語：声は Google。聞き取りは Deepgram（Google の電話向けの聞き取りは台湾・香港の言葉に対応していないため。2026-11-20 テストで切れた）
+  'cmn-TW': { ttsLanguage: 'cmn-TW', ttsProvider: 'Google', voice: 'cmn-TW-Wavenet-A', transcriptionProvider: 'Deepgram', transcriptionLanguage: 'zh-TW', speechModel: 'nova-2-general' },
+  'yue-HK': { ttsLanguage: 'yue-HK', ttsProvider: 'Google', voice: 'yue-HK-Standard-A', transcriptionProvider: 'Deepgram', transcriptionLanguage: 'zh-HK', speechModel: 'nova-2-general' },
 };
 
 const LANG_NAME = {
