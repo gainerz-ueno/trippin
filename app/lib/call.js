@@ -103,28 +103,62 @@ const LANG_NAME = {
 
 const WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// ローマ字の名前をカタカナに（UENO → ウエノ。英語読みされないように）
+const KANA = { a:'ア',i:'イ',u:'ウ',e:'エ',o:'オ',ka:'カ',ki:'キ',ku:'ク',ke:'ケ',ko:'コ',sa:'サ',shi:'シ',si:'シ',su:'ス',se:'セ',so:'ソ',ta:'タ',chi:'チ',ti:'チ',tsu:'ツ',tu:'ツ',te:'テ',to:'ト',na:'ナ',ni:'ニ',nu:'ヌ',ne:'ネ',no:'ノ',ha:'ハ',hi:'ヒ',fu:'フ',hu:'フ',he:'ヘ',ho:'ホ',ma:'マ',mi:'ミ',mu:'ム',me:'メ',mo:'モ',ya:'ヤ',yu:'ユ',yo:'ヨ',ra:'ラ',ri:'リ',ru:'ル',re:'レ',ro:'ロ',wa:'ワ',wo:'ヲ',ga:'ガ',gi:'ギ',gu:'グ',ge:'ゲ',go:'ゴ',za:'ザ',ji:'ジ',zi:'ジ',zu:'ズ',ze:'ゼ',zo:'ゾ',da:'ダ',de:'デ',do:'ド',ba:'バ',bi:'ビ',bu:'ブ',be:'ベ',bo:'ボ',pa:'パ',pi:'ピ',pu:'プ',pe:'ペ',po:'ポ',
+  kya:'キャ',kyu:'キュ',kyo:'キョ',sha:'シャ',shu:'シュ',sho:'ショ',cha:'チャ',chu:'チュ',cho:'チョ',nya:'ニャ',nyu:'ニュ',nyo:'ニョ',hya:'ヒャ',hyu:'ヒュ',hyo:'ヒョ',mya:'ミャ',myu:'ミュ',myo:'ミョ',rya:'リャ',ryu:'リュ',ryo:'リョ',gya:'ギャ',gyu:'ギュ',gyo:'ギョ',ja:'ジャ',ju:'ジュ',jo:'ジョ',bya:'ビャ',byu:'ビュ',byo:'ビョ',pya:'ピャ',pyu:'ピュ',pyo:'ピョ' };
+export function romajiToKana(name) {
+  const t = String(name || '').trim();
+  if (!/^[A-Za-z\s\-']+$/.test(t)) return t; // すでにカタカナ等ならそのまま
+  return t.toLowerCase().split(/[\s\-]+/).map((w) => {
+    let out = '', i = 0;
+    while (i < w.length) {
+      if (w[i] === 'n' && (i + 1 === w.length || !'aiueoy'.includes(w[i + 1]))) { out += 'ン'; i += 1; continue; }
+      if (i + 1 < w.length && w[i] === w[i + 1] && !'aiueon'.includes(w[i])) { out += 'ッ'; i += 1; continue; }
+      if ('aiueo'.includes(w[i]) && i > 0 && w[i] === 'u' && 'o'.includes(w[i - 1])) { out += 'ウ'; i += 1; continue; }
+      const k = [3, 2, 1].map((n) => w.slice(i, i + n)).find((x) => KANA[x]);
+      if (!k) return null;
+      out += KANA[k]; i += k.length;
+    }
+    return out;
+  }).reduce((a, b) => (a === null || b === null ? null : a + (a ? '・' : '') + b), '') ?? t;
+}
+
+// 日にちを、その国の人が声に出す形で（年は言わない。日本語の日にちは読みをかなで）
+const JA_DAY = { 1:'ついたち',2:'ふつか',3:'みっか',4:'よっか',5:'いつか',6:'むいか',7:'なのか',8:'ようか',9:'ここのか',10:'とおか',14:'じゅうよっか',20:'はつか',24:'にじゅうよっか' };
+const JA_WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+const KO_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+export function spokenDate(lang, date) {
+  const d = new Date(date + 'T00:00:00Z');
+  const m = d.getUTCMonth() + 1, day = d.getUTCDate(), w = d.getUTCDay();
+  if (lang === 'ja-JP') return `${m}月${JA_DAY[day] || day + 'にち'}、${JA_WEEK[w]}曜日`;
+  if (lang === 'ko-KR') return `${m}월 ${day}일 ${KO_WEEK[w]}요일`;
+  return '';
+}
+
 // 電話で話すAIへの指示
 export function callSystemPrompt({ lang, placeName, request }) {
   const d = new Date(request.date + 'T00:00:00Z');
   const wd = WEEK[d.getUTCDay()];
+  const kana = romajiToKana(request.name);
+  const sd = spokenDate(lang, request.date);
   return `You are an AI reservation assistant on a live phone call with a restaurant or shop called "${placeName}".
 You are calling on behalf of a traveler from Japan who cannot speak the local language. You already introduced yourself as an AI booking assistant.
 
-Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Write numbers, dates and times the way a native speaker would say them aloud.
+Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Write numbers, dates and times the way a native speaker would say them aloud. Never say the year.
 
 The reservation the traveler wants:
-- Date: ${request.date} (${wd})
+- Date: ${request.date} (${wd})${sd ? ` — write it exactly like this when you say it: "${sd}"` : ''}
 - Time: ${request.time}
 - Number of people: ${request.people}
-- Name for the booking: ${request.name}${request.flex ? `\n- Flexibility: ${request.flex}` : ''}${request.note ? `\n- Request: ${request.note}` : ''}${request.callback ? `\n- Contact if they ask: ${request.callback}` : ''}
+- Name for the booking: ${request.name} — this is a Japanese name, pronounced in Japanese as "${kana}". Always write it in ${LANG_NAME[lang]} script as it sounds in Japanese (for example Korean "우에노" for ウエノ, Japanese "ウエノ"). Never read it as an English word and never spell it letter by letter unless they ask for the spelling.${request.flex ? `\n- Flexibility: ${request.flex}` : ''}${request.note ? `\n- Request: ${request.note}` : ''}${request.callback ? `\n- Contact if they ask: ${request.callback}` : ''}
 
 How to run the call:
-1. Ask whether you can book a table for the date, time and number of people above.
+1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
 2. If that time is not available, ask what nearby times are available that day and accept one only if it fits the flexibility above; otherwise thank them and end.
-3. If they ask for the name, spell it slowly. If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
-4. Before ending, repeat the final booking (date, time, people, name) once to confirm.
-5. End politely. When the conversation is finished, put the marker [END] at the very end of your last reply.
-If they say they do not take reservations, are closed, or will not talk to an AI, thank them politely and end with [END].
+3. Tell them the name. If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
+4. The date, time, number of people and name MUST be confirmed. Before ending, repeat all four in one sentence and ask "Is that correct?". Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
+5. After they confirm, your LAST reply is only a short thank-you and goodbye (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
+If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
 If you hear only silence or noise twice, say goodbye and end with [END].
 Never invent details. Never agree to pay anything.`;
 }
@@ -135,5 +169,5 @@ export function summaryPrompt({ request }) {
 Requested: date ${request.date}, time ${request.time}, ${request.people} people, name "${request.name}".
 Return ONLY a JSON object, no other text:
 {"outcome":"booked|declined|alternative|unclear","date":"YYYY-MM-DD or empty","time":"HH:MM or empty","people":number or 0,"summary_ja":"結果を日本語で2〜3文。決まった日時・人数・名前、お店から言われた注意（席の時間制限・遅れたら取り消し等）があれば入れる","notes_ja":"お店に伝えたこと・聞かれたことを日本語で短く。なければ空"}
-"booked" = the shop confirmed the requested booking. "alternative" = booked but at a different time/date or with changes. "declined" = no booking was made. "unclear" = cannot tell.`;
+"booked" = the shop clearly said yes to the full recap (date, time, people, name). If they never confirmed the recap, use "unclear". "alternative" = booked but at a different time/date or with changes. "declined" = no booking was made. "unclear" = cannot tell.`;
 }

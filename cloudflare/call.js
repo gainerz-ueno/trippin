@@ -175,7 +175,7 @@ export class CallSession {
   // 最後のひとことを読み終わるくらいまで待ってから切る
   hangUpAfter(spoken) {
     this.ending = true;
-    const ms = Math.min(12000, 1500 + spoken.length * 120);
+    const ms = Math.min(25000, 3000 + spoken.length * 220); // 最後のあいさつを言い切ってから切る
     this.ctx.waitUntil(new Promise((r) => setTimeout(() => { this.send({ type: 'end', handoffData: '{"reason":"done"}' }); r(); }, ms)));
   }
 
