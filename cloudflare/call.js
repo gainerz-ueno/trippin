@@ -105,7 +105,12 @@ export class CallSession {
     try { m = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
     if (m.type === 'setup') {
       this.ctx.waitUntil(callUpdate(this.p.c, this.p.k, { status: 'talking', call_sid: m.callSid }));
-      this.armSilence(15000);
+      // つながった直後の「ピピッ」と重ならないよう、1.5秒待ってからあいさつ
+      const hello = setTimeout(() => {
+        if (!this.ending && !this.finished && !this.heard) this.send({ type: 'text', token: GREETING[this.brief.lang], last: true });
+      }, 1500);
+      this.timers.push(hello);
+      this.armSilence(16500);
     } else if (m.type === 'prompt' && m.last !== false) {
       const said = String(m.voicePrompt || '').trim();
       if (!said || this.ending) return;

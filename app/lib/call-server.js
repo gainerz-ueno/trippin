@@ -32,7 +32,8 @@ export function randomSecret() {
 const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export function relayTwiml({ wsUrl, greeting, voice }) {
-  const attrs = { url: wsUrl, welcomeGreeting: greeting, interruptible: 'speech', welcomeGreetingInterruptible: 'none', ...voice };
+  const attrs = { url: wsUrl, interruptible: 'speech', ...voice };
+  if (greeting) Object.assign(attrs, { welcomeGreeting: greeting, welcomeGreetingInterruptible: 'none' });
   const a = Object.entries(attrs).map(([k, v]) => `${k}="${xml(v)}"`).join(' ');
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><ConversationRelay ${a}/></Connect><Hangup/></Response>`;
 }
