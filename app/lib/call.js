@@ -174,8 +174,10 @@ export function relativeDay(lang, date, now = Date.now()) {
 
 // 名前の伝え方（言語ごと）。日本の名前は「〇〇さん」と日本語の音で言い、念のためローマ字を1文字ずつ
 const NAME_HOW = {
-  'ja-JP': (k, n) => `Say "${k}さん" and then, just in case, spell the letters: ${n.toUpperCase().split('').join(', ')}.`,
-  'ko-KR': (k, n) => `Say it as it sounds in Japanese with "상" (for example "우에노 상" for ウエノ), then, just in case, spell the Latin letters one by one: ${n.toUpperCase().split('').join(', ')}.`,
+  'ja-JP': (k) => `Say "${k}さん".`,
+  'ko-KR': (k) => `Say it as it sounds in Japanese with "상" (for example "우에노 상" for ウエノ).`,
+  'cmn-TW': (k, n) => `Write it as "${n[0].toUpperCase() + n.slice(1).toLowerCase()}桑" (桑 is the Japanese "san").`,
+  'yue-HK': (k, n) => `Write it as "${n[0].toUpperCase() + n.slice(1).toLowerCase()}桑" (桑 is the Japanese "san").`,
 };
 
 // 電話で話すAIへの指示
@@ -194,13 +196,13 @@ The reservation the traveler wants:
 - Date: ${rel ? `${rel} (for the shop) — say it naturally the local way, starting with that word (like tomorrow / the day after tomorrow / this or next weekday), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${request.time}
 - Number of people: ${request.people}
-- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. Always add the polite "san" after it. ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"), then, just in case, spell the Latin letters one by one: ${request.name.toUpperCase().split('').join(', ')}. Never read it as an English word.`}${request.flex ? `\n- Flexibility: ${request.flex}` : ''}${request.note ? `\n- Request: ${request.note}` : ''}${request.callback ? `\n- Contact if they ask: ${request.callback}` : ''}
+- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. Always add the polite "san" after it. ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
 
 How to run the call:
 1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
 2. If that time is not available, ask what nearby times are available that day and accept one only if it fits the flexibility above; otherwise thank them and end.
-3. As soon as they agree, in that SAME reply tell them the name and repeat date, time, people and name in one short sentence, asking if that is correct (this keeps the call short). If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
-4. The date, time, number of people and name MUST be confirmed. Before ending, repeat all four in one sentence and ask "Is that correct?". Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
+3. As soon as they agree, in that SAME reply tell them the name and ask in one very short phrase if everything is correct (this keeps the call short). If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
+4. The date, time, number of people and name MUST be confirmed, but keep it very short: one brief phrase like "明天七點，兩位，Ueno桑，對嗎？" (shop staff dislike long repetition). Do not repeat the full date or weekday again in the recap. Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
 5. After they confirm, your LAST reply is only a short thank-you and goodbye (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
 If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
 If you hear only silence or noise twice, say goodbye and end with [END].
