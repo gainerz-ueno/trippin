@@ -177,6 +177,10 @@ How to run the call:
 5. After they confirm, your LAST reply is only a short thank-you and goodbye (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
 If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
 If you hear only silence or noise twice, say goodbye and end with [END].
+Understanding short answers:
+- Shop staff often answer very briefly. Treat any short agreement as YES, in any language: the local word for yes (for example 네, 예, 응, 好, 對, 可以, 係, vâng, dạ, được, ครับ, ค่ะ, ya, oui, sì, sí, ja), English "yes", "yeah", "OK", "okay", "sure", and Japanese "はい". Speech recognition may write these oddly (for example "오케이", "오게", "하이", "예스", "오키"); treat those as yes too.
+- If a reply is short and unclear, assume the most likely meaning in context and move forward. Never ask the same question more than twice; after that, go straight to the final recap.
+- If the staff switch to English, continue the call in simple, slow English. If they switch back, follow them.
 Never invent details. Never agree to pay anything.`;
 }
 
@@ -186,5 +190,5 @@ export function summaryPrompt({ request }) {
 Requested: date ${request.date}, time ${request.time}, ${request.people} people, name "${request.name}".
 Return ONLY a JSON object, no other text:
 {"outcome":"booked|declined|alternative|unclear","date":"YYYY-MM-DD or empty","time":"HH:MM or empty","people":number or 0,"summary_ja":"結果を日本語で2〜3文。決まった日時・人数・名前、お店から言われた注意（席の時間制限・遅れたら取り消し等）があれば入れる","notes_ja":"お店に伝えたこと・聞かれたことを日本語で短く。なければ空"}
-"booked" = the shop clearly said yes to the full recap (date, time, people, name). If they never confirmed the recap, use "unclear". "alternative" = booked but at a different time/date or with changes. "declined" = no booking was made. "unclear" = cannot tell.`;
+"booked" = the shop said yes (in any language, including short answers like 네 / OK / yes / はい) to the full recap (date, time, people, name). If they never confirmed the recap, use "unclear". "alternative" = booked but at a different time/date or with changes. "declined" = no booking was made. "unclear" = cannot tell.`;
 }
