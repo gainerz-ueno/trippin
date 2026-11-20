@@ -113,7 +113,7 @@ export const VOICE = {
 };
 
 const LANG_NAME = {
-  'ko-KR': 'Korean', 'cmn-TW': 'Mandarin Chinese as spoken in Taiwan (Traditional characters)', 'yue-HK': 'Cantonese as spoken in Hong Kong (Traditional characters, colloquial Cantonese)',
+  'ko-KR': 'Korean', 'cmn-TW': 'Taiwanese Mandarin (華語, as spoken in Taiwan, Traditional characters). Use Taiwanese wording and expressions, not mainland ones (for example 訂位, 幾位, 好的, 謝謝您, 麻煩您), and say times the Taiwanese way (晚上七點). The staff\'s words reach you through speech recognition that may write them in Simplified characters or mainland wording; understand them normally', 'yue-HK': 'Cantonese as spoken in Hong Kong (Traditional characters, colloquial Cantonese)',
   'vi-VN': 'Vietnamese', 'th-TH': 'Thai (use polite particles)', 'id-ID': 'Indonesian', 'fr-FR': 'French', 'it-IT': 'Italian', 'es-ES': 'Spanish', 'de-DE': 'German',
   'en-US': 'English', 'en-AU': 'English', 'en-GB': 'English', 'ja-JP': 'Japanese',
 };
