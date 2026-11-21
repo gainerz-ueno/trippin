@@ -94,6 +94,23 @@ export const GOODBYE = {
 };
 GOODBYE['en-AU'] = GOODBYE['en-GB'] = GOODBYE['en-US'];
 
+// 予約が決まったあとのお礼（AIのお礼が空だったときに代わりに言う。何も言わずに切らないため）
+export const THANKS = {
+  'ko-KR': '네, 감사합니다. 안녕히 계세요.',
+  'cmn-TW': '好的，謝謝您，麻煩您了，再見。',
+  'yue-HK': '好，唔該晒，拜拜。',
+  'vi-VN': 'Dạ, cảm ơn anh chị nhiều. Chào anh chị.',
+  'th-TH': 'ขอบคุณมากค่ะ สวัสดีค่ะ',
+  'id-ID': 'Baik, terima kasih banyak. Selamat siang.',
+  'fr-FR': 'Merci beaucoup, au revoir.',
+  'it-IT': 'Grazie mille, arrivederci.',
+  'es-ES': 'Muchas gracias, hasta luego.',
+  'de-DE': 'Vielen Dank, auf Wiederhören.',
+  'ja-JP': 'ありがとうございます。失礼いたします。',
+  'en-US': 'Thank you very much, goodbye.',
+};
+THANKS['en-AU'] = THANKS['en-GB'] = THANKS['en-US'];
+
 // 読み上げ・聞き取りの設定（Twilio ConversationRelay）
 export const VOICE = {
   'ko-KR': { language: 'ko-KR' },
@@ -206,7 +223,7 @@ How to run the call:
 3. As soon as they agree, in that SAME reply tell them the name and ask in one very short phrase if everything is correct (this keeps the call short). If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
 4. The date, time, number of people and name MUST be confirmed, but keep it very short: one brief phrase like "明天七點，兩位，Ueno先生，對嗎？" (shop staff dislike long repetition). End the reply that contains this one recap question with the marker [RECAP] (it is not read aloud). Do not repeat the full date or weekday again in the recap. Ask for confirmation ONLY ONCE in the whole call. If you have already said the recap once, never say it again, even after answering another question (like a phone number); just answer that question briefly and, if they have agreed, thank them and say goodbye. If the shop itself repeats the booking back to you, that counts as confirmation.
 5a. Once they say yes (好/可以/對/OK/네/はい etc.) to the request or the recap, the booking is DONE. Your next reply is only a short thank-you and goodbye ending with [END]. Never ask again, never repeat the booking details again. Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
-5. After they confirm, your LAST reply is only a short thank-you and goodbye (it must NOT contain the date, time, number of people or name again) (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
+5. After they confirm, your LAST reply is only a short thank-you and goodbye (do not repeat the date, time, number of people or name in it) (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
 If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
 If you hear only silence or noise twice, say goodbye and end with [END].
 Understanding short answers:

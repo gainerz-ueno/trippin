@@ -2,7 +2,7 @@
 // ・/call/ws     … お店が話したこと（文字）が届く → Claude が現地語で返事 → Twilio が読み上げる
 // ・/call/status … Twilio から「呼び出し中・出た・切れた・出なかった」が届く
 // どちらも、電話を始めたときに作った合言葉（k）が合うときだけ動く。サイトのパスワードはかけない（Twilio が来るため）
-import { CALL_BLOCK_SEC, GREETING, GOODBYE, callSystemPrompt, summaryPrompt } from '../app/lib/call.js';
+import { CALL_BLOCK_SEC, GREETING, GOODBYE, THANKS, callSystemPrompt, summaryPrompt } from '../app/lib/call.js';
 import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from '../app/lib/call-server.js';
 
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
@@ -196,7 +196,9 @@ export class CallSession {
     if (this.busy === ac) this.busy = null;
     const done = text.includes(END);
     const recap = text.includes(RECAP);
-    const spoken = text.replace(END, '').replace(RECAP, '').replace(/\[[^\]]*\]?$/, '').trim();
+    let spoken = text.replace(END, '').replace(RECAP, '').replace(/\[[^\]]*\]?$/, '').trim();
+    // [END] だけで何も言わなかったとき：決まったお礼を言ってから切る（2026-11-21 電話テストで無言のまま切れた）
+    if (done && !spoken) spoken = THANKS[this.brief.lang] || THANKS['en-US'];
     if (spoken.length > sent) this.send({ type: 'text', token: spoken.slice(sent), last: true });
     else this.send({ type: 'text', token: '', last: true });
     if (spoken) {
