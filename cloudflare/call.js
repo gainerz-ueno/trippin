@@ -11,6 +11,10 @@ const END = '[END]';
 const RECAP = '[RECAP]';
 const IGNORE = '[IGNORE]'; // AIが「お店の返事ではない（テレビ・周りの声）」と判断したしるし
 const UNHEARD = '（短い返事・文字にならず）';
+// お店の言葉の見分け（確認のあとに聞き直しを繰り返さないため。2026-11-21 社長の電話：テレビの声が「的人我们就可以…」「啊我」等の文字になり、AIが確認を4回繰り返した）
+const NEG = /不是|不對|不对|錯|错|改|換|换|不行|不可以|不能|沒有|没有|沒位|没位|客滿|客满|滿了|满了|無法|无法|不好意思|唔得|冇|아니|안 돼|안돼|없어|없습니다|못|만석|いいえ|無理|できません|ありません|満席|いっぱい|\bno\b|\bnot\b|\bfull\b|sorry|can't|cannot|không|ไม่|tidak|\bnon\b|nein|complet|\bpas\b/i;
+const ASKING = /[?？]|嗎|吗|什麼|什么|幾|几|哪|誰|谁|電話|电话|號碼|号码|名字|貴姓|贵姓|怎麼|怎么|까|나요|번호|이름|성함|ですか|お名前|電話番号|what|when|which|who|how|phone|number|spell/i;
+const TIMEISH = /\d|點|点|時|时|시|분|半|小時|小时|o'clock|pm|am/i;
 const SILENT = '（返事が聞こえず・はいとみなして進めた）';
 // 短い「はい」（各国語・英語・日本語）
 const SHORT_YES = /^[\s,.，。、!！~～]*(好|好的|好啊|可以|對|对|是|是的|嗯|沒問題|没问题|行|ok|okay|okey|yes|yeah|sure|네|예|넵|오케이|はい|ええ|うん|係|得|vâng|dạ|được|ค่ะ|ครับ|ya|oui|sì|sí|ja)([\s,.，。、!！~～]*(好|好的|可以|對|对|ok|okay|네|예|はい))*[\s,.，。、!！?？~～]*$/i; // AIが最後の確認（日時・人数・名前）を言ったしるし
@@ -151,7 +155,7 @@ export class CallSession {
         this.shopOnAt = Date.now();
         this.turnHandled = false;
         this.partial = '';
-        this.clearWait();
+        // 待ちは止めない（テレビ等で「話している」が長く続くと、ずっと待ってしまうため。待ちの側で、話し始めて間もない間だけ少し延ばす）
         if (this.unheardTimer) clearTimeout(this.unheardTimer);
       } else {
         this.shopTalking = false;
@@ -187,12 +191,13 @@ export class CallSession {
     const o = { type: 'text', token: text, last: true };
     if (interruptible === false) o.interruptible = false;
     this.send(o);
+    this.lastAiAt = Date.now();
     this.armBackupWait(text);
   }
 
   armBackupWait(text) {
     if (this.backupTimer) clearTimeout(this.backupTimer);
-    this.backupTimer = setTimeout(() => { if (!this.agentSpeaking && !this.shopTalking) this.armWait(); }, 2500 + text.length * 350);
+    this.backupTimer = setTimeout(() => { if (!this.agentSpeaking) this.armWait(); }, 2500 + text.length * 350);
     this.timers.push(this.backupTimer);
   }
 
@@ -201,7 +206,7 @@ export class CallSession {
   // AIが言い終わったあと、お店が黙っているときの待ち
   armWait() {
     this.clearWait();
-    if (this.ending || this.finished || this.busy || this.shopTalking) return;
+    if (this.ending || this.finished || this.busy) return;
     // Twilio の「お店が話している」知らせは、文字になった声にしか来ない（2026-11-21 社長の電話の記録で確認：「OK」は知らせも文字も何も届かなかった）。
     // そのため「黙っている」は「文字にならない短い返事（OK・はい等）をした」かもしれない。止まらないよう、待ちは短く、はい/いいえで答える問いなら「はい」として進める
     // 待ちの期限はAIが言い終わった時から数える。周りの音（テレビ等）で延ばさない（ずっと待ち続けないように）
@@ -209,7 +214,9 @@ export class CallSession {
     const ms = Math.max(300, this.waitDeadline - Date.now());
     this.waitTimer = setTimeout(() => {
       this.waitTimer = null;
-      if (this.ending || this.finished || this.busy || this.shopTalking || this.agentSpeaking) return;
+      if (this.ending || this.finished || this.busy || this.agentSpeaking) return;
+      // お店が話し始めて2.5秒以内なら、言い終わるのを少し待つ（それより長く続く声はテレビ等とみなして待たない）
+      if (this.shopTalking && Date.now() - (this.shopOnAt || 0) < 2500) { this.waitDeadline = Date.now() + 1000; this.armWait(); return; }
       this.waitDeadline = null;
       this.silentCount = (this.silentCount || 0) + 1;
       if (this.silentCount >= 4) { this.sayGoodbye(); return; }
@@ -220,7 +227,7 @@ export class CallSession {
         this.reply('(No answer was heard after your introduction — they may have said a short yes that could not be heard. Go straight to the booking request now. Do not ask whether they can hear you and do not introduce yourself again.)');
       } else if (this.stage === 'recap') {
         // 最後の確認のあと：はいとみなしてお礼を言って切る
-        this.reply('(Nothing was heard after your recap — they most likely answered with a short OK that could not be heard. Treat it as yes: the booking is agreed. Reply only with a short thank-you and goodbye, and end with [END].)');
+        this.finishThanks();
       } else {
         this.reply('(Nothing was heard after your last line. The shop most likely answered with a short word that the system cannot hear, such as OK / はい. If your last line was a yes/no question (for example asking whether they can take the booking), treat it as YES and go to the next step (give the name and the one recap question). If it was another kind of question, repeat it in one short phrase. Never ask whether they can hear you.)');
       }
@@ -233,6 +240,8 @@ export class CallSession {
     this.unheardTimer = null;
     if (this.turnHandled || this.ending || this.finished) return;
     if (this.partial) { const p = this.partial; this.partial = ''; this.onShop(p); return; }
+    // AIが今の言葉を言い出す前に終わっていた声は、今の問いへの返事ではない（前の問いに二重に答えたことにしない）
+    if ((this.shopOffAt || 0) < (this.lastAiAt || 0)) { this.turnHandled = true; return; }
     // あいさつの最中に始まって終わった声（電話に出たときの「もしもし」）は返事ではない
     if (this.stage === 'greeting' && this.agentSpeaking) { this.turnHandled = true; return; }
     this.turnHandled = true;
@@ -258,6 +267,12 @@ export class CallSession {
       return;
     }
     this.turnHandled = true;
+    const meaningful = NEG.test(said) || ASKING.test(said) || TIMEISH.test(said);
+    if (this.greeted && this.stage !== 'greeting' && (this.busy || this.agentSpeaking) && !meaningful) {
+      // AIが返事を作っている・話している最中に届いた、意味のはっきりしない言葉：周りの音とみなして記録だけ（話を乱さない）
+      this.transcript.push({ who: 'shop', text: `（周りの音：${said}）` });
+      return;
+    }
     this.heard = true;
     this.silentCount = 0;
     this.clearWait();
@@ -277,7 +292,28 @@ export class CallSession {
       this.reply(`${said}\n(You already finished your introduction. If they only said hello or yes, do not introduce yourself again; go straight to the booking request.)`);
       return;
     }
+    if (this.stage === 'recap') {
+      // 確認はもう言った：はっきり「違う/できない」か質問でなければ、確認が取れたとしてお礼を言って切る（AIに聞き直させない）
+      if (!NEG.test(said) && !ASKING.test(said)) { this.finishThanks(); return; }
+      this.reply(`${said}\n(You have ALREADY asked the recap. Do not repeat the recap or ask again. If this is the shop clearly saying something is wrong, fix only that in one short phrase. If it is a question, answer it in one short sentence and then thank them and say goodbye with [END]. If it does not make sense as the shop's answer, reply only [IGNORE].)`);
+      return;
+    }
+    if (this.askedOnce && !NEG.test(said) && !ASKING.test(said) && !TIMEISH.test(said) && said.replace(/[\s,.，。、!！?？~～]/g, '').length <= 12) {
+      // 用件を聞いたあとの、はっきりしない短い言葉：「はい」として名前と確認へ進む（同じ質問を繰り返さない）
+      this.reply(`${said}\n(Treat this as YES to your request. Go straight to step 2: say the guest is Japanese, give the name once, and ask the one short recap question with [RECAP]. Do not repeat your request.)`);
+      return;
+    }
     this.reply(said);
+  }
+
+  // 確認が取れた：決まったお礼を言って切る（AIに作らせない）
+  finishThanks() {
+    if (this.busy) this.busy.abort();
+    const t = THANKS[this.brief.lang] || THANKS['en-US'];
+    this.send({ type: 'text', token: t, last: true });
+    this.history.push({ role: 'assistant', content: t });
+    this.transcript.push({ who: 'ai', text: t });
+    this.hangUpAfter(t);
   }
 
   async reply(said) {
@@ -294,6 +330,7 @@ export class CallSession {
     let text = '', sent = 0;
     try {
       for await (const t of claudeStream(this.env, { system: this.system, messages: this.history, maxTokens: 400, signal: ac.signal })) {
+        if (ac.signal.aborted) return; // 新しい返事に切り替わった：古い返事は読み上げない（2つ続けて話さないように）
         text += t;
         // [END] の手前までを少しずつ読み上げに回す（[ の途中で止めて、[END] を読み上げないように）
         const cut = text.indexOf('[');
@@ -308,6 +345,7 @@ export class CallSession {
       console.error('[tabibi] claude', String(e?.message || e));
       text = text || '';
     }
+    if (ac.signal.aborted) return;
     if (this.busy === ac) this.busy = null;
     if (text.includes(IGNORE) && !text.replace(IGNORE, '').replace(/\[[^\]]*\]/g, '').trim()) {
       // お店の返事ではなかった（テレビ・周りの声）：何も言わず、会話を元に戻して、返事を待ち続ける
@@ -328,6 +366,7 @@ export class CallSession {
     // [END] だけで何も言わなかったとき：決まったお礼を言ってから切る
     if (done && !spoken) spoken = THANKS[this.brief.lang] || THANKS['en-US'];
     this.send({ type: 'text', token: spoken.length > sent ? spoken.slice(sent) : '', last: true });
+    if (spoken) this.lastAiAt = Date.now();
     if (spoken) {
       this.history.push({ role: 'assistant', content: spoken });
       this.transcript.push({ who: 'ai', text: spoken });
@@ -341,6 +380,12 @@ export class CallSession {
     if (spoken) { this.emptyRetry = false; this.waitDeadline = null; }
     this.snapBefore = null;
     if (recap) this.stage = 'recap';
+    else if (this.stage === 'talk' && spoken) this.askedOnce = true; // 用件を聞いた（このあとの短い言葉は「はい」として扱う）
+    if (!recap && !done && this.stage === 'recap' && spoken) {
+      // 確認のあとにAIがまた話した：2回目は認めず、次の返事を待たずに締める準備（確認の繰り返しを止める）
+      this.afterRecapTalks = (this.afterRecapTalks || 0) + 1;
+      if (this.afterRecapTalks >= 2) { this.finishThanks(); return; }
+    }
     if (done) { this.hangUpAfter(spoken); return; }
     this.armBackupWait(spoken || ' ');
     if (this.speakEvents && !this.agentSpeaking && spoken) {
