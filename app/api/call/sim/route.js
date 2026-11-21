@@ -35,7 +35,7 @@ export async function POST(req) {
   const request = cleanRequest(body.request || {});
   if (!request) return json({ error: '予約の中身が足りません' }, 400);
   const system = callSystemPrompt({ lang, placeName: body.placeName || '北門', request });
-  const agent = [], shop = [], transcript = [];
+  const agent = [], shop = [], transcript = [], raws = [];
   // 同じ側が続いたら1つにまとめる（Claude には交互に渡す決まり）
   const add = (arr, role, content) => {
     const last = arr[arr.length - 1];
@@ -70,6 +70,7 @@ export async function POST(req) {
     let ended = false;
     for (let turn = 0; turn < 10 && !ended; turn++) {
       const a = (await claudeChat(env, { system, messages: agent, maxTokens: 220 })).trim();
+      raws.push(a);
       ended = a.includes(END);
       say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));
       if (ended) break;
@@ -82,7 +83,7 @@ export async function POST(req) {
       const out = await claudeOnce(env, { system: summaryPrompt({ request }), user: lines, maxTokens: 1500 });
       summary = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1));
     } catch { summary = null; }
-    return json({ lang, scenario, ended, aiTurns: transcript.filter((t) => t.who === 'ai').length, transcript, summary });
+    return json({ lang, scenario, ended, raws, aiTurns: transcript.filter((t) => t.who === 'ai').length, transcript, summary });
   } catch (e) {
     return json({ error: String(e?.message || e).slice(0, 300), transcript }, 500);
   }
