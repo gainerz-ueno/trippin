@@ -12,7 +12,7 @@ const RECAP = '[RECAP]';
 const IGNORE = '[IGNORE]'; // AIが「お店の返事ではない（テレビ・周りの声）」と判断したしるし
 const UNHEARD = '（短い返事・文字にならず）';
 // お店の言葉の見分け（確認のあとに聞き直しを繰り返さないため。2026-11-21 社長の電話：テレビの声が「的人我们就可以…」「啊我」等の文字になり、AIが確認を4回繰り返した）
-const NEG = /不是|不對|不对|錯|错|改|換|换|不行|不可以|不能|沒有|没有|沒位|没位|客滿|客满|滿了|满了|無法|无法|不好意思|唔得|冇|아니|안 돼|안돼|없어|없습니다|못|만석|いいえ|無理|できません|ありません|満席|いっぱい|\bno\b|\bnot\b|\bfull\b|sorry|can't|cannot|không|ไม่|tidak|\bnon\b|nein|complet|\bpas\b/i;
+const NEG = /休|關門|关门|打烊|候位|排隊|排队|現場|现场|휴무|쉬는|쉽니다|안 받|closed|walk-in|first come|不是|不對|不对|錯|错|改|換|换|不行|不可以|不能|沒有|没有|沒位|没位|客滿|客满|滿了|满了|無法|无法|不好意思|唔得|冇|아니|안 돼|안돼|없어|없습니다|못|만석|いいえ|無理|できません|ありません|満席|いっぱい|\bno\b|\bnot\b|\bfull\b|sorry|can't|cannot|không|ไม่|tidak|\bnon\b|nein|complet|\bpas\b/i;
 const ASKING = /[?？]|嗎|吗|什麼|什么|幾|几|哪|誰|谁|電話|电话|號碼|号码|名字|貴姓|贵姓|怎麼|怎么|까|나요|번호|이름|성함|ですか|お名前|電話番号|what|when|which|who|how|phone|number|spell/i;
 const TIMEISH = /\d|點|点|時|时|시|분|半|小時|小时|o'clock|pm|am/i;
 const SILENT = '（返事が聞こえず・はいとみなして進めた）';
