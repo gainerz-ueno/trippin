@@ -5,6 +5,8 @@ import { GREETING, callSystemPrompt, summaryPrompt, cleanRequest } from '../../.
 import { rpcJson, claudeChat, claudeOnce } from '../../../lib/call-server';
 
 const json = (o, status = 200) => Response.json(o, { status });
+// テレビ・周りの声の例（日本のテレビ・現地の放送・店内の別の会話）
+const TV = ['続いては全国のお天気です。', '今天的新聞報導，股市大漲。', '이번 주 로또 당첨 번호는', '三番テーブル、お冷お願いします', 'Breaking news this evening'];
 const END = '[END]';
 
 const SHOP = {
@@ -14,6 +16,7 @@ const SHOP = {
   full: '19時は満席。19時半なら空いていると答える。',
   spelling: '名前を聞いたら、つづりを聞き返す。そのあと予約を受ける。',
   silent: '店員。返事は全部、一言だけ（はい・OK・その国の「はい」）。名前を聞かれても聞き返さず一言で受ける。予約は受ける。',
+  noisy: '店員として自然に受け答えする。返事は短め。予約は受ける。',
   unheard: '店員。返事は全部、一言だけ（はい・OK・その国の「はい」）。名前を聞かれても聞き返さず一言で受ける。予約は受ける。',
   impatient: '確認を何度もされるのが嫌いな店員。2回目の確認をされたら「對啦，好了」と少し不機嫌に言う。',
 };
@@ -79,6 +82,13 @@ export async function POST(req) {
       ended = a.includes(END);
       say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));
       if (ended) break;
+      if (scenario === 'noisy') {
+        // 店内のテレビ・周りの声が文字になって届いた：AIは [IGNORE] だけを返し、何も言わないはず（会話には入れない）
+        const tv = TV[turn % TV.length];
+        const r = (await claudeChat(env, { system, messages: [...agent, { role: 'user', content: tv }], maxTokens: 400 })).trim();
+        transcript.push({ who: 'shop', text: `（周りの音：${tv}）` });
+        transcript.push({ who: 'ai', text: r.replace(/\s/g, '') === '[IGNORE]' ? '（無視した）' : `（周りの音に返事してしまった：${r}）` });
+      }
       const s = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
       say('shop', s);
     }

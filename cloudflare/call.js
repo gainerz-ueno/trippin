@@ -9,6 +9,7 @@ const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }
 
 const END = '[END]';
 const RECAP = '[RECAP]';
+const IGNORE = '[IGNORE]'; // AIが「お店の返事ではない（テレビ・周りの声）」と判断したしるし
 const UNHEARD = '（短い返事・文字にならず）';
 const SILENT = '（返事が聞こえず・はいとみなして進めた）';
 // 短い「はい」（各国語・英語・日本語）
@@ -143,7 +144,7 @@ export class CallSession {
       this.agentSpeaking = m.value === 'on';
       this.speakEvents = true;
       if (this.agentSpeaking) { this.clearWait(); this.agentOnAt = Date.now(); }
-      else { this.agentOffAt = Date.now(); this.armWait(); }
+      else { this.agentOffAt = Date.now(); this.waitDeadline = Date.now() + (this.stage === 'greeting' ? 3000 : 4000); this.armWait(); }
     } else if (m.type === 'info' && m.name === 'clientSpeaking') {
       if (m.value === 'on') {
         this.shopTalking = true;
@@ -203,10 +204,13 @@ export class CallSession {
     if (this.ending || this.finished || this.busy || this.shopTalking) return;
     // Twilio の「お店が話している」知らせは、文字になった声にしか来ない（2026-11-21 社長の電話の記録で確認：「OK」は知らせも文字も何も届かなかった）。
     // そのため「黙っている」は「文字にならない短い返事（OK・はい等）をした」かもしれない。止まらないよう、待ちは短く、はい/いいえで答える問いなら「はい」として進める
-    const ms = this.stage === 'greeting' ? 3000 : 4000;
+    // 待ちの期限はAIが言い終わった時から数える。周りの音（テレビ等）で延ばさない（ずっと待ち続けないように）
+    if (!this.waitDeadline) this.waitDeadline = Date.now() + (this.stage === 'greeting' ? 3000 : 4000);
+    const ms = Math.max(300, this.waitDeadline - Date.now());
     this.waitTimer = setTimeout(() => {
       this.waitTimer = null;
       if (this.ending || this.finished || this.busy || this.shopTalking || this.agentSpeaking) return;
+      this.waitDeadline = null;
       this.silentCount = (this.silentCount || 0) + 1;
       if (this.silentCount >= 4) { this.sayGoodbye(); return; }
       this.transcript.push({ who: 'shop', text: SILENT });
@@ -242,6 +246,7 @@ export class CallSession {
 
   // お店の言葉（文字）が届いた
   onShop(said) {
+    this.snapBefore = { stage: this.stage, silent: this.silentCount || 0 }; // 周りの音だったときに戻すため
     if (this.unheardTimer) { clearTimeout(this.unheardTimer); this.unheardTimer = null; }
     // 「聞き取れない短い返事」として進めた直後に、その文字が遅れて届いた：記録だけ書き換えて、二重に返事しない
     if (this.turnHandled && this.unheardAt && Date.now() - this.unheardAt < 6000) {
@@ -278,6 +283,8 @@ export class CallSession {
   async reply(said) {
     if (this.busy) this.busy.abort();
     this.clearWait();
+    // 周りの音と判断されたら元に戻せるよう、今の会話の形を控えておく
+    const snapLen = this.history.length, snapLast = this.history[snapLen - 1] && { ...this.history[snapLen - 1] }, snapStage = this.stage, snapSilent = this.silentCount;
     // 同じ人が続けて話したら1つにまとめる（Claude には交互に渡す決まり）
     const last = this.history[this.history.length - 1];
     if (last?.role === 'user') last.content += ' ' + said;
@@ -302,9 +309,22 @@ export class CallSession {
       text = text || '';
     }
     if (this.busy === ac) this.busy = null;
+    if (text.includes(IGNORE) && !text.replace(IGNORE, '').replace(/\[[^\]]*\]/g, '').trim()) {
+      // お店の返事ではなかった（テレビ・周りの声）：何も言わず、会話を元に戻して、返事を待ち続ける
+      this.history.length = snapLen;
+      if (snapLast) this.history[snapLen - 1] = snapLast;
+      this.stage = this.snapBefore ? this.snapBefore.stage : snapStage;
+      this.silentCount = this.snapBefore ? this.snapBefore.silent : snapSilent;
+      this.snapBefore = null;
+      const i = this.transcript.findLastIndex((t) => t.who === 'shop');
+      if (i >= 0 && !this.transcript[i].text.startsWith('（周りの音')) this.transcript[i].text = `（周りの音：${this.transcript[i].text}）`;
+      this.send({ type: 'text', token: '', last: true });
+      this.armWait();
+      return;
+    }
     const done = text.includes(END);
     const recap = text.includes(RECAP);
-    let spoken = text.replace(END, '').replace(RECAP, '').replace(/\[[^\]]*\]?$/, '').trim();
+    let spoken = text.replace(END, '').replace(RECAP, '').replace(IGNORE, '').replace(/\[[^\]]*\]?$/, '').trim();
     // [END] だけで何も言わなかったとき：決まったお礼を言ってから切る
     if (done && !spoken) spoken = THANKS[this.brief.lang] || THANKS['en-US'];
     this.send({ type: 'text', token: spoken.length > sent ? spoken.slice(sent) : '', last: true });
@@ -318,7 +338,8 @@ export class CallSession {
       this.reply('(You said nothing. Say your next line now, following the steps.)');
       return;
     }
-    if (spoken) this.emptyRetry = false;
+    if (spoken) { this.emptyRetry = false; this.waitDeadline = null; }
+    this.snapBefore = null;
     if (recap) this.stage = 'recap';
     if (done) { this.hangUpAfter(spoken); return; }
     this.armBackupWait(spoken || ' ');
