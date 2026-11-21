@@ -8,7 +8,9 @@ import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
 
 const END = '[END]';
-const RECAP = '[RECAP]'; // AIが最後の確認（日時・人数・名前）を言ったしるし
+const RECAP = '[RECAP]';
+// 電話に出たときの「もしもし」だけの言葉（聞き取りの崩れ「为・位」なども含む）
+const HELLO_ONLY = /^(?:[\s,.，。、!！?？~～]*(?:喂+|为|位|餵|唯|威|您好|你好|哈囉|哈啰|hello|hi|여보세요|안녕하세요|もしもし|alo|allo|a lô))+[\s,.，。、!！?？~～]*$/i; // AIが最後の確認（日時・人数・名前）を言ったしるし
 const ID = /^[0-9a-f-]{36}$/;
 const KEYRX = /^[0-9a-f]{64}$/;
 
@@ -112,6 +114,7 @@ export class CallSession {
         if (this.ending || this.finished || this.greeted) return;
         const g = GREETING[this.brief.lang];
         this.greeted = true;
+        this.greetEndsAt = Date.now() + g.length * 220; // あいさつを言い終わるおおよその時刻
         this.send({ type: 'text', token: g, last: true, interruptible: false }); // お店が「喂/您好」と言っても、あいさつは最後まで言う
         this.history.push({ role: 'user', content: '(The call has connected.)' }, { role: 'assistant', content: g });
         this.transcript.push({ who: 'ai', text: g });
@@ -125,6 +128,12 @@ export class CallSession {
       this.recapWaiting = false;
       if (this.silenceTimer) clearTimeout(this.silenceTimer);
       this.transcript.push({ who: 'shop', text: said });
+      if (this.greeted && this.history.length === 2 && Date.now() < (this.greetEndsAt || 0) + 800 && HELLO_ONLY.test(said)) {
+        // あいさつの途中に聞こえた「喂/您好」等（電話に出たときの声）は返事ではない：あいさつの問い（今お時間よろしいですか）への返事を待つ
+        // 2026-11-21 社長「お時間いいですかと聞いて、返事していないのに話し続けた」（記録ではお店の声が「为」）
+        this.armSilence(Math.max(0, this.greetEndsAt - Date.now()) + 8000);
+        return;
+      }
       if (this.greeted && this.history.length === 2) {
         // あいさつの最中・直後にお店が話した：あいさつは言い終えている前提で、その言葉に自然に続ける
         this.reply(`${said}\n(You already finished your introduction. If they only said hello, do not introduce yourself again; go straight to the booking request.)`);
