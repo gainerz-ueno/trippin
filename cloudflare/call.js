@@ -153,6 +153,7 @@ export class CallSession {
       if (m.value === 'on') {
         this.shopTalking = true;
         this.shopOnAt = Date.now();
+
         this.turnHandled = false;
         this.partial = '';
         // 待ちは止めない（テレビ等で「話している」が長く続くと、ずっと待ってしまうため。待ちの側で、話し始めて間もない間だけ少し延ばす）
@@ -216,7 +217,9 @@ export class CallSession {
       this.waitTimer = null;
       if (this.ending || this.finished || this.busy || this.agentSpeaking) return;
       // お店が話し始めて2.5秒以内なら、言い終わるのを少し待つ（それより長く続く声はテレビ等とみなして待たない）
-      if (this.shopTalking && Date.now() - (this.shopOnAt || 0) < 2500) { this.waitDeadline = Date.now() + 1000; this.armWait(); return; }
+      // お店がAIの言い終わったあとに話し始めていたら、言い終わるまで待つ（最大12秒）。AIの話にかぶって始まった声（テレビ等）は待たない
+      // 2026-11-21 社長の電話：「その日は満席です」を言っている途中で「返事なし」と判断していた（2.5秒で打ち切っていたため）
+      if (this.shopTalking && !this.startedOverAgent() && Date.now() - (this.shopOnAt || 0) < 12000) { this.waitDeadline = Date.now() + 1000; this.armWait(); return; }
       this.waitDeadline = null;
       this.silentCount = (this.silentCount || 0) + 1;
       if (this.silentCount >= 4) { this.sayGoodbye(); return; }
@@ -233,6 +236,17 @@ export class CallSession {
       }
     }, ms);
     this.timers.push(this.waitTimer);
+  }
+
+  // 今のお店の声は、AIの話と2秒以上重なっていたか（お店はふつうAIが話し終わってから答える。AIの話の上でずっと続いている声はテレビ・周りの声）
+  // 言い終わりの直前・直後に少し重なるだけの声は返事として扱う（電話の遅れで少し重なることがあるため）
+  startedOverAgent() {
+    const on = this.shopOnAt || 0;
+    const end = this.shopTalking ? Date.now() : (this.shopOffAt || Date.now());
+    const aOn = this.agentOnAt || 0;
+    const aOff = this.agentSpeaking ? Date.now() : (this.agentOffAt || 0);
+    if (!aOn || aOff < aOn) return false;
+    return Math.min(end, aOff) - Math.max(on, aOn) > 2000;
   }
 
   // お店が話し終わったのに文字が届かなかった
@@ -268,6 +282,11 @@ export class CallSession {
     }
     this.turnHandled = true;
     const meaningful = NEG.test(said) || ASKING.test(said) || TIMEISH.test(said);
+    // AIの話にかぶって始まり、3秒以上続いた声：お店の返事ではなくテレビ・周りの声とみなす（2026-11-21 社長の電話：テレビの「…何にそれを使うんですか」にAIが答えて、社長の返事にかぶった）
+    if (this.greeted && this.stage !== 'greeting' && this.startedOverAgent() && (this.shopOffAt || Date.now()) - (this.shopOnAt || 0) > 3000 && !NEG.test(said)) {
+      this.transcript.push({ who: 'shop', text: `（周りの音：${said}）` });
+      return;
+    }
     if (this.greeted && this.stage !== 'greeting' && (this.busy || this.agentSpeaking) && !meaningful) {
       // AIが返事を作っている・話している最中に届いた、意味のはっきりしない言葉：周りの音とみなして記録だけ（話を乱さない）
       this.transcript.push({ who: 'shop', text: `（周りの音：${said}）` });
