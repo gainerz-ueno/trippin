@@ -69,7 +69,7 @@ export async function POST(req) {
     }
     let ended = false;
     for (let turn = 0; turn < 10 && !ended; turn++) {
-      const a = (await claudeChat(env, { system, messages: agent, maxTokens: 220 })).trim();
+      const a = (await claudeChat(env, { system, messages: agent, maxTokens: 400 })).trim();
       raws.push(a);
       ended = a.includes(END);
       say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));

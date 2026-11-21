@@ -273,7 +273,7 @@ export class CallSession {
     this.busy = ac;
     let text = '', sent = 0;
     try {
-      for await (const t of claudeStream(this.env, { system: this.system, messages: this.history, signal: ac.signal })) {
+      for await (const t of claudeStream(this.env, { system: this.system, messages: this.history, maxTokens: 400, signal: ac.signal })) {
         text += t;
         // [END] の手前までを少しずつ読み上げに回す（[ の途中で止めて、[END] を読み上げないように）
         const cut = text.indexOf('[');
