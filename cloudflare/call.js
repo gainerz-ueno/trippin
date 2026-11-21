@@ -100,13 +100,23 @@ export class CallSession {
     this.block(1);
   }
 
+  // 調べ用の記録（届いた知らせ・送ったもの・時刻）。結果の debug に残す
+  log(dir, o) {
+    if ((this.dbg ||= []).length > 300) return;
+    const x = { t: Date.now() - this.start, d: dir, ty: o.type };
+    for (const k of ['last', 'voicePrompt', 'utteranceUntilInterrupt', 'description', 'name', 'value', 'token', 'interruptible']) if (o[k] !== undefined && o[k] !== '') x[k] = typeof o[k] === 'string' ? o[k].slice(0, 80) : o[k];
+    this.dbg.push(x);
+  }
+
   send(o) {
+    this.log('out', o);
     try { this.ws.send(JSON.stringify(o)); } catch {}
   }
 
   onMessage(raw) {
     let m;
     try { m = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
+    if (m.type !== 'setup') this.log('in', m); else this.log('in', { type: 'setup' });
     if (m.type === 'setup') {
       this.ctx.waitUntil(callUpdate(this.p.c, this.p.k, { status: 'talking', call_sid: m.callSid }));
       // つながった直後の「ピピッ」と重ならないよう、1.5秒待ってからあいさつ
@@ -313,6 +323,7 @@ export class CallSession {
         result = { summary_ja: '結果をまとめられませんでした。下の会話の記録を見てください。', notes_ja: '' };
       }
     }
+    if (this.brief.is_test) result.debug = this.dbg || []; // テストの電話だけ：届いた知らせの記録（原因を調べるため）
     await callUpdate(this.p.c, this.p.k, {
       status: 'done', outcome, result,
       transcript: this.transcript.slice(0, 80).map((t) => ({ who: t.who, text: t.text.slice(0, 500) })),
