@@ -125,7 +125,15 @@ export async function POST(req) {
   const host = new URL(origin).host;
   const q = `c=${id}&k=${secret}`;
   try {
-    const twiml = relayTwiml({ wsUrl: `wss://${host}/call/ws?${q}`, voice: VOICE[lang] }); // 最初のあいさつは、つながってから少し待って会話の仕組みから言う（つながった音とかぶらないように）
+    // 運営者のテストだけ：聞き取りの設定を試しに変えられる（電話テストで比べるため。決まった項目・決まった形の値だけ）
+    const tv = {};
+    if (isTest && body?.testVoice && typeof body.testVoice === 'object') {
+      for (const k of ['transcriptionProvider', 'transcriptionLanguage', 'speechModel', 'interruptible', 'interruptSensitivity', 'reportInputDuringAgentSpeech', 'speechTimeout', 'turnDetection', 'hints']) {
+        const v = body.testVoice[k];
+        if (typeof v === 'string' && /^[A-Za-z0-9_.,\-\u4e00-\u9fff ]{1,80}$/.test(v)) tv[k] = v;
+      }
+    }
+    const twiml = relayTwiml({ wsUrl: `wss://${host}/call/ws?${q}`, voice: { ...VOICE[lang], ...tv } }); // 最初のあいさつは、つながってから少し待って会話の仕組みから言う（つながった音とかぶらないように）
     // 電話の長さの上限：持っているチケット（はじめの1枚＋残り）× 3分。運営者は念のための上限まで
     const blocks = owner ? CALL_MAX_BLOCKS : Math.min(CALL_MAX_BLOCKS, Math.max(1, Number(me.data.left) || 1));
     const c = await twilioCreateCall(env, { to: phone, twiml, statusUrl: `${origin}/call/status?${q}`, timeLimit: blocks * CALL_BLOCK_SEC + 15 });
