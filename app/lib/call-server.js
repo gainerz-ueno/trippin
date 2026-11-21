@@ -34,7 +34,8 @@ const xml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 export function relayTwiml({ wsUrl, greeting, voice }) {
   // reportInputDuringAgentSpeech：AIが話している間（言い終わりの直後を含む）のお店の返事も受け取る。Twilio の初期値は none で、その間の「可以」「OK」が捨てられていた（2026-11-21 社長の電話で返事が届かない原因）
   // echoPromptFiltering は使わない：AIが言ったばかりの言葉と同じ言葉をお店の返事から消す仕組みで、「可以訂位嗎？」→ お店「可以」が消えた（2026-11-21）
-  const attrs = { url: wsUrl, interruptible: 'speech', reportInputDuringAgentSpeech: 'speech', events: 'speaker-events', ...voice }; // speaker-events：お店が話し始めた/やめた知らせ（声が届いているかを記録で確かめる）
+  // interruptible：none（お店の声でAIの読み上げを止めない）。speech だと、話をさえぎる仕組みが短い返事（可以・好）を捨てていた（2026-11-21 電話テストで確認：none にすると全部届いた）
+  const attrs = { url: wsUrl, interruptible: 'none', reportInputDuringAgentSpeech: 'speech', events: 'speaker-events', ...voice }; // speaker-events：お店が話し始めた/やめた知らせ（声が届いているかを記録で確かめる）
   if (greeting) Object.assign(attrs, { welcomeGreeting: greeting, welcomeGreetingInterruptible: 'none' });
   const a = Object.entries(attrs).map(([k, v]) => `${k}="${xml(v)}"`).join(' ');
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Connect><ConversationRelay ${a}/></Connect><Hangup/></Response>`;
