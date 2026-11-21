@@ -8,9 +8,9 @@ import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
 
 const END = '[END]';
-const RECAP = '[RECAP]';
+const RECAP = '[RECAP]'; // AIが最後の確認（日時・人数・名前）を言ったしるし
 // 電話に出たときの「もしもし」だけの言葉（聞き取りの崩れ「为・位」なども含む）
-const HELLO_ONLY = /^(?:[\s,.，。、!！?？~～]*(?:喂+|为|位|餵|唯|威|您好|你好|哈囉|哈啰|hello|hi|여보세요|안녕하세요|もしもし|alo|allo|a lô))+[\s,.，。、!！?？~～]*$/i; // AIが最後の確認（日時・人数・名前）を言ったしるし
+const HELLO_ONLY = /^(?:[\s,.，。、!！?？~～]*(?:喂+|为|位|餵|唯|威|您好|你好|哈囉|哈啰|hello|hi|여보세요|안녕하세요|もしもし|alo|allo|a lô))+[\s,.，。、!！?？~～]*$/i;
 const ID = /^[0-9a-f-]{36}$/;
 const KEYRX = /^[0-9a-f]{64}$/;
 
@@ -118,7 +118,7 @@ export class CallSession {
         this.send({ type: 'text', token: g, last: true, interruptible: false }); // お店が「喂/您好」と言っても、あいさつは最後まで言う
         this.history.push({ role: 'user', content: '(The call has connected.)' }, { role: 'assistant', content: g });
         this.transcript.push({ who: 'ai', text: g });
-        this.armAfterSpeaking(g);
+        this.armGreetWait();
       }, 1500);
       this.timers.push(this.hello);
     } else if (m.type === 'prompt' && m.last !== false) {
@@ -131,7 +131,7 @@ export class CallSession {
       if (this.greeted && this.history.length === 2 && Date.now() < (this.greetEndsAt || 0) + 800 && HELLO_ONLY.test(said)) {
         // あいさつの途中に聞こえた「喂/您好」等（電話に出たときの声）は返事ではない：あいさつの問い（今お時間よろしいですか）への返事を待つ
         // 2026-11-21 社長「お時間いいですかと聞いて、返事していないのに話し続けた」（記録ではお店の声が「为」）
-        this.armSilence(Math.max(0, this.greetEndsAt - Date.now()) + 8000);
+        this.armGreetWait();
         return;
       }
       if (this.greeted && this.history.length === 2) {
@@ -204,6 +204,19 @@ export class CallSession {
   // AIが言い終わるころから数えて、お店の返事が無いまま12秒たったら話しかけ直す
   armAfterSpeaking(spoken) {
     this.armSilence(Math.min(30000, spoken.length * 250) + 12000);
+  }
+
+  // あいさつ（今お時間よろしいですか）のあと：返事が文字にならないことがある（短い「可以」等の聞き取り漏れ。2026-11-21 社長の電話で2回）
+  // あいさつを言い終わって3秒たっても何も届かなければ、聞き直さずに予約の用件に進む（「聞こえますか」で止めない）
+  armGreetWait() {
+    if (this.silenceTimer) clearTimeout(this.silenceTimer);
+    const ms = Math.max(0, (this.greetEndsAt || Date.now()) - Date.now()) + 3000;
+    this.silenceTimer = setTimeout(() => {
+      if (this.ending || this.finished || this.busy || this.history.length !== 2) return;
+      this.history.push({ role: 'user', content: '(No answer was heard after your introduction, but they may have said yes quietly. Go straight to the booking request now. Do not ask whether they can hear you and do not introduce yourself again.)' });
+      this.reply('');
+    }, ms);
+    this.timers.push(this.silenceTimer);
   }
 
   // n 枚目の3分の区切り
