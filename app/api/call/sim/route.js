@@ -69,7 +69,7 @@ export async function POST(req) {
     for (let turn = 0; turn < 10 && !ended; turn++) {
       const a = (await claudeChat(env, { system, messages: agent, maxTokens: 220 })).trim();
       ended = a.includes(END);
-      say('ai', a.replace(END, '').trim());
+      say('ai', a.replace(END, '').replace('[RECAP]', '').trim());
       if (ended) break;
       const s = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
       say('shop', s);

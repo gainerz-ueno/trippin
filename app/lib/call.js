@@ -60,20 +60,20 @@ export function cleanRequest(r) {
   return out;
 }
 
-// 電話に出たときの最初のあいさつ（AIであることをはじめに名乗る）
+// 電話に出たときの最初のあいさつ（まず「日本のお客様の代わりの予約の電話」と言い、そのあとAIだと名乗る。2026-11-21 社長：AIが先だと怪しい電話と思われて切られる）
 export const GREETING = {
-  'ko-KR': '안녕하세요. 일본인 여행객을 대신해 예약 문의를 드리는 AI 예약 도우미입니다. 잠시 통화 괜찮으실까요?',
-  'cmn-TW': '您好，我是代替日本旅客打電話詢問訂位的 AI 訂位助理。請問現在方便說話嗎？',
-  'yue-HK': '你好，我係代表一位日本旅客打嚟問訂位嘅 AI 訂位助手。請問而家方便講幾句嗎？',
-  'vi-VN': 'Xin chào, tôi là trợ lý đặt chỗ AI, gọi thay cho một du khách Nhật Bản để hỏi đặt bàn. Anh chị có tiện nghe máy một chút không ạ?',
-  'th-TH': 'สวัสดีค่ะ ดิฉันเป็นผู้ช่วยจองโต๊ะ AI โทรแทนนักท่องเที่ยวชาวญี่ปุ่นเพื่อสอบถามการจองค่ะ สะดวกคุยสักครู่ไหมคะ',
-  'id-ID': 'Halo, saya asisten pemesanan AI yang menelepon atas nama seorang wisatawan dari Jepang untuk menanyakan reservasi. Apakah ada waktu sebentar?',
-  'fr-FR': "Bonjour, je suis un assistant de réservation IA qui appelle au nom d'un voyageur japonais pour une réservation. Avez-vous un instant ?",
-  'it-IT': 'Buongiorno, sono un assistente IA per le prenotazioni e chiamo per conto di un viaggiatore giapponese. Ha un momento?',
-  'es-ES': 'Hola, soy un asistente de reservas con IA y llamo en nombre de un viajero japonés para hacer una reserva. ¿Tiene un momento?',
-  'de-DE': 'Guten Tag, hier ist ein KI-Reservierungsassistent. Ich rufe im Auftrag eines Reisenden aus Japan wegen einer Reservierung an. Haben Sie kurz Zeit?',
-  'ja-JP': 'お忙しいところ失礼します。日本からの旅行者に代わって予約のお問い合わせをしている、AIの予約アシスタントです。少しお時間よろしいでしょうか。',
-  'en-US': 'Hello, this is an AI booking assistant calling on behalf of a traveler from Japan about a reservation. Do you have a moment?',
+  'ko-KR': '안녕하세요. 일본 손님을 대신해서 예약 문의 전화 드렸습니다. 저는 AI 예약 도우미입니다. 잠시 통화 괜찮으실까요?',
+  'cmn-TW': '您好，我這邊是代替日本客人打電話來訂位的，我是 AI 訂位助理。請問現在方便說話嗎？',
+  'yue-HK': '你好，我代一位日本客人打嚟訂位，我係 AI 訂位助手。請問而家方便講幾句嗎？',
+  'vi-VN': 'Xin chào, tôi gọi thay cho một khách người Nhật để đặt bàn. Tôi là trợ lý đặt chỗ AI. Anh chị có tiện nghe máy một chút không ạ?',
+  'th-TH': 'สวัสดีค่ะ โทรมาแทนลูกค้าชาวญี่ปุ่นเพื่อจองโต๊ะค่ะ ดิฉันเป็นผู้ช่วยจองโต๊ะ AI ค่ะ สะดวกคุยสักครู่ไหมคะ',
+  'id-ID': 'Halo, saya menelepon atas nama tamu dari Jepang untuk reservasi. Saya asisten pemesanan AI. Apakah ada waktu sebentar?',
+  'fr-FR': "Bonjour, j'appelle au nom d'un client japonais pour une réservation. Je suis un assistant de réservation IA. Avez-vous un instant ?",
+  'it-IT': 'Buongiorno, chiamo per conto di un cliente giapponese per una prenotazione. Sono un assistente IA. Ha un momento?',
+  'es-ES': 'Hola, llamo en nombre de un cliente japonés para hacer una reserva. Soy un asistente de reservas con IA. ¿Tiene un momento?',
+  'de-DE': 'Guten Tag, ich rufe im Auftrag eines Gastes aus Japan wegen einer Reservierung an. Ich bin ein KI-Reservierungsassistent. Haben Sie kurz Zeit?',
+  'ja-JP': 'お忙しいところ失礼します。日本からのお客様に代わって、予約のお電話をしております。AIの予約アシスタントです。少しお時間よろしいでしょうか。',
+  'en-US': 'Hello, I\'m calling on behalf of a guest from Japan to make a reservation. I\'m an AI booking assistant. Do you have a moment?',
 };
 GREETING['en-AU'] = GREETING['en-GB'] = GREETING['en-US'];
 
@@ -204,7 +204,7 @@ How to run the call:
 1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
 2. If that time is not available, ask what nearby times are available that day and accept one only if it fits the flexibility above (if no flexibility is given, accept a time within one hour before or after the requested time); otherwise thank them and end.
 3. As soon as they agree, in that SAME reply tell them the name and ask in one very short phrase if everything is correct (this keeps the call short). If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
-4. The date, time, number of people and name MUST be confirmed, but keep it very short: one brief phrase like "明天七點，兩位，Ueno先生，對嗎？" (shop staff dislike long repetition). Do not repeat the full date or weekday again in the recap. Ask for confirmation ONLY ONCE in the whole call. If you have already said the recap once, never say it again, even after answering another question (like a phone number); just answer that question briefly and, if they have agreed, thank them and say goodbye. If the shop itself repeats the booking back to you, that counts as confirmation.
+4. The date, time, number of people and name MUST be confirmed, but keep it very short: one brief phrase like "明天七點，兩位，Ueno先生，對嗎？" (shop staff dislike long repetition). End the reply that contains this one recap question with the marker [RECAP] (it is not read aloud). Do not repeat the full date or weekday again in the recap. Ask for confirmation ONLY ONCE in the whole call. If you have already said the recap once, never say it again, even after answering another question (like a phone number); just answer that question briefly and, if they have agreed, thank them and say goodbye. If the shop itself repeats the booking back to you, that counts as confirmation.
 5a. Once they say yes (好/可以/對/OK/네/はい etc.) to the request or the recap, the booking is DONE. Your next reply is only a short thank-you and goodbye ending with [END]. Never ask again, never repeat the booking details again. Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
 5. After they confirm, your LAST reply is only a short thank-you and goodbye (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
 If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].

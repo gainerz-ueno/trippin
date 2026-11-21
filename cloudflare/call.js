@@ -8,6 +8,7 @@ import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
 
 const END = '[END]';
+const RECAP = '[RECAP]'; // AIが最後の確認（日時・人数・名前）を言ったしるし
 const ID = /^[0-9a-f-]{36}$/;
 const KEYRX = /^[0-9a-f]{64}$/;
 
@@ -121,6 +122,7 @@ export class CallSession {
       const said = String(m.voicePrompt || '').trim();
       if (!said || this.ending) return;
       this.heard = true;
+      this.recapWaiting = false;
       if (this.silenceTimer) clearTimeout(this.silenceTimer);
       this.transcript.push({ who: 'shop', text: said });
       if (this.greeted && this.history.length === 2) {
@@ -174,7 +176,8 @@ export class CallSession {
     }
     if (this.busy === ac) this.busy = null;
     const done = text.includes(END);
-    const spoken = text.replace(END, '').replace(/\[[^\]]*\]?$/, '').trim();
+    const recap = text.includes(RECAP);
+    const spoken = text.replace(END, '').replace(RECAP, '').replace(/\[[^\]]*\]?$/, '').trim();
     if (spoken.length > sent) this.send({ type: 'text', token: spoken.slice(sent), last: true });
     else this.send({ type: 'text', token: '', last: true });
     if (spoken) {
@@ -182,7 +185,11 @@ export class CallSession {
       this.transcript.push({ who: 'ai', text: spoken });
     }
     if (done) this.hangUpAfter(spoken);
-    else if (spoken) this.armAfterSpeaking(spoken);
+    else if (spoken && recap) {
+      // 最後の確認のあと：お店はもう受けている。短い「OK」等が文字にならないことがあるので、4秒黙っていたら確認が取れたとしてお礼を言って切る（2026-11-21 社長「OKと言っているのに進まなかった」）
+      this.recapWaiting = true;
+      this.armSilence(Math.min(30000, spoken.length * 250) + 4000);
+    } else if (spoken) this.armAfterSpeaking(spoken);
   }
 
   // AIが言い終わるころから数えて、お店の返事が無いまま12秒たったら話しかけ直す
@@ -218,6 +225,12 @@ export class CallSession {
     if (this.silenceTimer) clearTimeout(this.silenceTimer);
     this.silenceTimer = setTimeout(() => {
       if (this.ending || this.finished || this.busy) return;
+      if (this.recapWaiting) {
+        this.recapWaiting = false;
+        this.history.push({ role: 'user', content: '(The shop did not object to your recap; they probably answered OK quietly. The booking is agreed. Reply only with a short thank-you and goodbye, and end with [END].)' });
+        this.reply('');
+        return;
+      }
       this.silentCount = (this.silentCount || 0) + 1;
       if (this.silentCount >= 3) { this.sayGoodbye(); return; }
       this.history.push({ role: 'user', content: '(No reply was heard for a while. If the booking was already agreed, just thank them, say goodbye and end with [END]. Otherwise briefly check that they can hear you and repeat only your last question, slowly. If you already did this once, say goodbye and end with [END].)' });
