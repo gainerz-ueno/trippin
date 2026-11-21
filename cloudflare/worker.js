@@ -4,7 +4,7 @@
 //   使わない時間が続くとコンテナは眠り、費用はかからない。次に使うときは数秒で起き上がる（AIが描く時間に比べればわずか）
 import { Container } from '@cloudflare/containers';
 import handler from '../.open-next/worker.js';
-import { handleWs, handleStatus } from './call.js';
+import { handleWs, handleStatus, handleShopbot } from './call.js';
 
 export class NoteAi extends Container {
   defaultPort = 8080;
@@ -35,6 +35,7 @@ export default {
     // タビビコール：電話の会話と電話の状態（Twilio から来る。中身は cloudflare/call.js）
     if (url.pathname === '/call/ws') return handleWs(request, env, ctx);
     if (url.pathname === '/call/status') return handleStatus(request, env);
+    if (url.pathname === '/call/shopbot') return handleShopbot(request, env); // 電話テスト用のお店役
     if (request.method === 'GET' && url.pathname === '/api/photo') {
       const cache = caches.default;
       const hit = await cache.match(request);

@@ -331,3 +331,18 @@ export class CallSession {
     });
   }
 }
+
+// ---- 電話テスト用「お店役」（運営者のテストだけ） ----
+// タビビの050番号にかかってきた電話に、決まった台詞（台湾華語）で出る。タビビコールが自分の番号（TWILIO_FROM）にかけたときだけ答え、ほかは断る。
+// 目的：本物の電話回線を通して、お店の短い返事（可以・好・對）が文字になってAIに届くかを、社長の電話を使わずに確かめる
+export async function handleShopbot(request, env) {
+  const twiml = (body) => new Response(`<?xml version="1.0" encoding="UTF-8"?><Response>${body}</Response>`, { headers: { 'content-type': 'text/xml' } });
+  if (request.method !== 'POST') return twiml('<Reject/>');
+  const form = Object.fromEntries(await request.formData());
+  const ok = await twilioSignatureOk(env.TWILIO_AUTH_TOKEN, request.url, form, request.headers.get('x-twilio-signature'));
+  if (!ok || form.From !== env.TWILIO_FROM) return twiml('<Reject/>');
+  const say = (t) => `<Say language="cmn-TW" voice="Google.cmn-TW-Standard-A">${t}</Say>`;
+  const pause = (s) => `<Pause length="${s}"/>`;
+  // あいさつ（約9秒）→ 返事 → 用件（約7秒）→ 返事 → 確認（約5秒）→ 返事 → 終わり
+  return twiml([pause(1), say('喂，您好'), pause(10), say('可以'), pause(9), say('好'), pause(8), say('對'), pause(6), say('好，再見'), pause(4)].join(''));
+}
