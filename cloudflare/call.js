@@ -8,7 +8,10 @@ import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
 
 const END = '[END]';
-const RECAP = '[RECAP]'; // AIが最後の確認（日時・人数・名前）を言ったしるし
+const RECAP = '[RECAP]';
+const UNHEARD = '（短い返事・文字にならず）';
+// 短い「はい」（各国語・英語・日本語）
+const SHORT_YES = /^[\s,.，。、!！~～]*(好|好的|好啊|可以|對|对|是|是的|嗯|沒問題|没问题|行|ok|okay|okey|yes|yeah|sure|네|예|넵|오케이|はい|ええ|うん|係|得|vâng|dạ|được|ค่ะ|ครับ|ya|oui|sì|sí|ja)([\s,.，。、!！~～]*(好|好的|可以|對|对|ok|okay|네|예|はい))*[\s,.，。、!！?？~～]*$/i; // AIが最後の確認（日時・人数・名前）を言ったしるし
 // 電話に出たときの「もしもし」だけの言葉（聞き取りの崩れ「为・位」なども含む）
 const HELLO_ONLY = /^(?:[\s,.，。、!！?？~～]*(?:喂+|为|位|餵|唯|威|您好|你好|哈囉|哈啰|hello|hi|여보세요|안녕하세요|もしもし|alo|allo|a lô))+[\s,.，。、!！?？~～]*$/i;
 const ID = /^[0-9a-f-]{36}$/;
@@ -113,6 +116,11 @@ export class CallSession {
     try { this.ws.send(JSON.stringify(o)); } catch {}
   }
 
+  // ---- 会話の順番（ターン）の決まり ----
+  // Twilio から届く「AIが話している/やめた（agentSpeaking）」「お店が話している/やめた（clientSpeaking）」の知らせで動く（時間の見込みでは動かない）。
+  // ・お店が話し終わったのに文字が届かない（短い「OK」「はい」「好」等の聞き取り漏れ）→「短い返事（たぶんはい）」として話を進める
+  // ・AIが言い終わってから、お店が何も話さないまま一定時間 → 段階に合わせて進める（あいさつ後は用件へ、確認後はお礼して切る、ほかは短く聞き直す）
+  // 2026-11-21 社長の電話テストで、時間の見込みのずれ・短い返事の聞き取り漏れで何度も止まったため、作り直した
   onMessage(raw) {
     let m;
     try { m = JSON.parse(typeof raw === 'string' ? raw : new TextDecoder().decode(raw)); } catch { return; }
@@ -124,52 +132,139 @@ export class CallSession {
         if (this.ending || this.finished || this.greeted) return;
         const g = GREETING[this.brief.lang];
         this.greeted = true;
-        this.greetEndsAt = Date.now() + g.length * 220; // あいさつを言い終わるおおよその時刻
-        this.send({ type: 'text', token: g, last: true, interruptible: false }); // お店が「喂/您好」と言っても、あいさつは最後まで言う
+        this.stage = 'greeting'; // あいさつ（今お時間よろしいですか）への返事を待つ段階
+        this.say(g, { interruptible: false });
         this.history.push({ role: 'user', content: '(The call has connected.)' }, { role: 'assistant', content: g });
         this.transcript.push({ who: 'ai', text: g });
-        this.armGreetWait();
       }, 1500);
       this.timers.push(this.hello);
-    } else if (m.type === 'prompt' && m.last !== false) {
+    } else if (m.type === 'info' && m.name === 'agentSpeaking') {
+      this.agentSpeaking = m.value === 'on';
+      this.speakEvents = true;
+      if (this.agentSpeaking) { this.clearWait(); this.agentOnAt = Date.now(); }
+      else { this.agentOffAt = Date.now(); this.armWait(); }
+    } else if (m.type === 'info' && m.name === 'clientSpeaking') {
+      if (m.value === 'on') {
+        this.shopTalking = true;
+        this.shopOnAt = Date.now();
+        this.turnHandled = false;
+        this.partial = '';
+        this.clearWait();
+        if (this.unheardTimer) clearTimeout(this.unheardTimer);
+      } else {
+        this.shopTalking = false;
+        this.shopOffAt = Date.now();
+        // 話し終わったのに文字が届かない：少し待っても届かなければ「聞き取れない短い返事」として進める
+        if (!this.turnHandled) {
+          if (this.unheardTimer) clearTimeout(this.unheardTimer);
+          this.unheardTimer = setTimeout(() => this.onUnheard(), 2000);
+          this.timers.push(this.unheardTimer);
+        }
+      }
+    } else if (m.type === 'prompt') {
       const said = String(m.voicePrompt || '').trim();
       if (!said || this.ending) return;
-      this.heard = true;
-      this.recapWaiting = false;
-      if (this.silenceTimer) clearTimeout(this.silenceTimer);
-      this.transcript.push({ who: 'shop', text: said });
-      if (this.greeted && this.history.length === 2 && Date.now() < (this.greetEndsAt || 0) + 800 && HELLO_ONLY.test(said)) {
-        // あいさつの途中に聞こえた「喂/您好」等（電話に出たときの声）は返事ではない：あいさつの問い（今お時間よろしいですか）への返事を待つ
-        // 2026-11-21 社長「お時間いいですかと聞いて、返事していないのに話し続けた」（記録ではお店の声が「为」）
-        this.armGreetWait();
-        return;
-      }
-      if (this.greeted && this.history.length === 2) {
-        // あいさつの最中・直後にお店が話した：あいさつは言い終えている前提で、その言葉に自然に続ける
-        this.reply(`${said}\n(You already finished your introduction. If they only said hello, do not introduce yourself again; go straight to the booking request.)`);
-        return;
-      }
-      if (!this.greeted) {
-        // お店が先に話した：決まったあいさつはやめ、返事の頭で名乗る
-        clearTimeout(this.hello);
-        this.greeted = true;
-        this.reply(`${said}\n(The shop answered first. You have not introduced yourself yet. Start your reply with a short version of this introduction: "${GREETING[this.brief.lang]}")`);
-        return;
-      }
-      this.reply(said);
-    } else if (m.type === 'interrupt') {
-      // お店の人が話し始めたら、言いかけの返事は止める（言えたところまでを記録）
-      if (this.busy) this.busy.abort();
-      const last = this.history[this.history.length - 1];
-      if (last?.role === 'assistant' && m.utteranceUntilInterrupt) last.content = m.utteranceUntilInterrupt;
+      if (m.last === false) { this.partial = said; return; } // 途中の文字（確定しないまま終わることがある）
+      this.onShop(said);
     } else if (m.type === 'error') {
       console.error('[tabibi] relay error', m.description);
       (this.relayErrors ||= []).push(String(m.description || '').slice(0, 200));
     }
   }
 
+  // AIの読み上げを送る（話し始め・話し終わりの知らせが来ない場合の保険として、長さから見込んだ時刻にも待ちを仕掛ける）
+  say(text, { interruptible } = {}) {
+    const o = { type: 'text', token: text, last: true };
+    if (interruptible === false) o.interruptible = false;
+    this.send(o);
+    this.armBackupWait(text);
+  }
+
+  armBackupWait(text) {
+    if (this.backupTimer) clearTimeout(this.backupTimer);
+    this.backupTimer = setTimeout(() => { if (!this.agentSpeaking && !this.shopTalking) this.armWait(); }, 2500 + text.length * 350);
+    this.timers.push(this.backupTimer);
+  }
+
+  clearWait() { if (this.waitTimer) { clearTimeout(this.waitTimer); this.waitTimer = null; } }
+
+  // AIが言い終わったあと、お店が黙っているときの待ち
+  armWait() {
+    this.clearWait();
+    if (this.ending || this.finished || this.busy || this.shopTalking) return;
+    const ms = this.stage === 'greeting' ? 3000 : this.stage === 'recap' ? 4000 : 7000;
+    this.waitTimer = setTimeout(() => {
+      this.waitTimer = null;
+      if (this.ending || this.finished || this.busy || this.shopTalking || this.agentSpeaking) return;
+      if (this.stage === 'greeting') {
+        // あいさつのあと黙っている：聞き直さずに用件へ
+        this.stage = 'talk';
+        this.reply('(No answer was heard after your introduction. Go straight to the booking request now. Do not ask whether they can hear you and do not introduce yourself again.)');
+      } else if (this.stage === 'recap') {
+        // 最後の確認のあと黙っている：お店はもう受けている。お礼を言って切る
+        this.reply('(The shop did not object to your recap. The booking is agreed. Reply only with a short thank-you and goodbye, and end with [END].)');
+      } else {
+        this.silentCount = (this.silentCount || 0) + 1;
+        if (this.silentCount >= 3) { this.sayGoodbye(); return; }
+        this.reply('(No reply was heard. If the booking was already agreed, just thank them, say goodbye and end with [END]. Otherwise repeat only your last question in one short phrase. If you already did this twice, say goodbye and end with [END].)');
+      }
+    }, ms);
+    this.timers.push(this.waitTimer);
+  }
+
+  // お店が話し終わったのに文字が届かなかった
+  onUnheard() {
+    this.unheardTimer = null;
+    if (this.turnHandled || this.ending || this.finished) return;
+    if (this.partial) { this.onShop(this.partial); return; }
+    // あいさつの最中に始まって終わった声（電話に出たときの「もしもし」）は返事ではない
+    if (this.stage === 'greeting' && this.agentSpeaking) { this.turnHandled = true; return; }
+    this.turnHandled = true;
+    this.heard = true;
+    this.unheardAt = Date.now();
+    this.transcript.push({ who: 'shop', text: UNHEARD });
+    const wasGreeting = this.stage === 'greeting';
+    this.stage = this.stage === 'greeting' ? 'talk' : this.stage;
+    this.reply(`(The shop answered with something short that could not be transcribed — almost certainly a short yes such as OK / 好 / 네 / はい. Treat it as YES and move on to the next step${wasGreeting ? ' (the booking request)' : ''}. Do not ask whether they can hear you.)`);
+  }
+
+  // お店の言葉（文字）が届いた
+  onShop(said) {
+    if (this.unheardTimer) { clearTimeout(this.unheardTimer); this.unheardTimer = null; }
+    // 「聞き取れない短い返事」として進めた直後に、その文字が遅れて届いた：記録だけ書き換えて、二重に返事しない
+    if (this.turnHandled && this.unheardAt && Date.now() - this.unheardAt < 6000) {
+      const i = this.transcript.findLastIndex((t) => t.who === 'shop' && t.text === UNHEARD);
+      if (i >= 0) this.transcript[i].text = said;
+      this.unheardAt = 0;
+      // 「はい」だった：そのまま。違うことを言っていた（満席・別の時間など）：言い直して、その言葉に答える
+      if (!SHORT_YES.test(said)) { this.stage = 'talk'; this.reply(`(Correction: the shop's last words were actually: "${said}". Answer that, instead of assuming they said yes. Anything you said after assuming yes does not count.)`); }
+      return;
+    }
+    this.turnHandled = true;
+    this.heard = true;
+    this.clearWait();
+    this.transcript.push({ who: 'shop', text: said });
+    if (!this.greeted) {
+      // お店が先に話した：決まったあいさつはやめ、返事の頭で名乗る
+      clearTimeout(this.hello);
+      this.greeted = true;
+      this.stage = 'talk';
+      this.reply(`${said}\n(The shop answered first. You have not introduced yourself yet. Start your reply with a short version of this introduction: "${GREETING[this.brief.lang]}")`);
+      return;
+    }
+    if (this.stage === 'greeting') {
+      // あいさつを言っている最中の「喂/您好/もしもし」は、電話に出たときの声：返事ではないので待つ
+      if (this.agentSpeaking && HELLO_ONLY.test(said)) return;
+      this.stage = 'talk';
+      this.reply(`${said}\n(You already finished your introduction. If they only said hello or yes, do not introduce yourself again; go straight to the booking request.)`);
+      return;
+    }
+    this.reply(said);
+  }
+
   async reply(said) {
     if (this.busy) this.busy.abort();
+    this.clearWait();
     // 同じ人が続けて話したら1つにまとめる（Claude には交互に渡す決まり）
     const last = this.history[this.history.length - 1];
     if (last?.role === 'user') last.content += ' ' + said;
@@ -197,38 +292,19 @@ export class CallSession {
     const done = text.includes(END);
     const recap = text.includes(RECAP);
     let spoken = text.replace(END, '').replace(RECAP, '').replace(/\[[^\]]*\]?$/, '').trim();
-    // [END] だけで何も言わなかったとき：決まったお礼を言ってから切る（2026-11-21 電話テストで無言のまま切れた）
+    // [END] だけで何も言わなかったとき：決まったお礼を言ってから切る
     if (done && !spoken) spoken = THANKS[this.brief.lang] || THANKS['en-US'];
-    if (spoken.length > sent) this.send({ type: 'text', token: spoken.slice(sent), last: true });
-    else this.send({ type: 'text', token: '', last: true });
+    this.send({ type: 'text', token: spoken.length > sent ? spoken.slice(sent) : '', last: true });
     if (spoken) {
       this.history.push({ role: 'assistant', content: spoken });
       this.transcript.push({ who: 'ai', text: spoken });
     }
-    if (done) this.hangUpAfter(spoken);
-    else if (spoken && recap) {
-      // 最後の確認のあと：お店はもう受けている。短い「OK」等が文字にならないことがあるので、4秒黙っていたら確認が取れたとしてお礼を言って切る（2026-11-21 社長「OKと言っているのに進まなかった」）
-      this.recapWaiting = true;
-      this.armSilence(Math.min(30000, spoken.length * 250) + 4000);
-    } else if (spoken) this.armAfterSpeaking(spoken);
-  }
-
-  // AIが言い終わるころから数えて、お店の返事が無いまま12秒たったら話しかけ直す
-  armAfterSpeaking(spoken) {
-    this.armSilence(Math.min(30000, spoken.length * 250) + 12000);
-  }
-
-  // あいさつ（今お時間よろしいですか）のあと：返事が文字にならないことがある（短い「可以」等の聞き取り漏れ。2026-11-21 社長の電話で2回）
-  // あいさつを言い終わって3秒たっても何も届かなければ、聞き直さずに予約の用件に進む（「聞こえますか」で止めない）
-  armGreetWait() {
-    if (this.silenceTimer) clearTimeout(this.silenceTimer);
-    const ms = Math.max(0, (this.greetEndsAt || Date.now()) - Date.now()) + 3000;
-    this.silenceTimer = setTimeout(() => {
-      if (this.ending || this.finished || this.busy || this.history.length !== 2) return;
-      this.history.push({ role: 'user', content: '(No answer was heard after your introduction, but they may have said yes quietly. Go straight to the booking request now. Do not ask whether they can hear you and do not introduce yourself again.)' });
-      this.reply('');
-    }, ms);
-    this.timers.push(this.silenceTimer);
+    if (recap) this.stage = 'recap';
+    if (done) { this.hangUpAfter(spoken); return; }
+    this.armBackupWait(spoken || ' ');
+    if (this.speakEvents && !this.agentSpeaking && spoken) {
+      // 話し始めの知らせを待つ（来なければ保険の待ちが動く）
+    }
   }
 
   // n 枚目の3分の区切り
@@ -252,25 +328,6 @@ export class CallSession {
     this.wrapping = true;
     this.history.push({ role: 'user', content: '(The call is about to reach its time limit. Confirm what was agreed in one short sentence, thank them, say goodbye, and end with [END].)' });
     this.reply('');
-  }
-
-  // お店の声が文字にならないまま黙りが続いたら、AIからもう一度話しかける（無言のまま待ち続けないように）
-  armSilence(ms) {
-    if (this.silenceTimer) clearTimeout(this.silenceTimer);
-    this.silenceTimer = setTimeout(() => {
-      if (this.ending || this.finished || this.busy) return;
-      if (this.recapWaiting) {
-        this.recapWaiting = false;
-        this.history.push({ role: 'user', content: '(The shop did not object to your recap; they probably answered OK quietly. The booking is agreed. Reply only with a short thank-you and goodbye, and end with [END].)' });
-        this.reply('');
-        return;
-      }
-      this.silentCount = (this.silentCount || 0) + 1;
-      if (this.silentCount >= 3) { this.sayGoodbye(); return; }
-      this.history.push({ role: 'user', content: '(No reply was heard for a while. If the booking was already agreed, just thank them, say goodbye and end with [END]. Otherwise briefly check that they can hear you and repeat only your last question, slowly. If you already did this once, say goodbye and end with [END].)' });
-      this.reply('');
-    }, ms);
-    this.timers.push(this.silenceTimer);
   }
 
   // 時間切れ：AIの返事を止めて、決まったあいさつを言ってから切る（何も言わずに切れないように）

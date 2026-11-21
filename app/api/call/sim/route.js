@@ -13,6 +13,7 @@ const SHOP = {
   hello_first: '電話に出たらまず「喂，您好，北門」と言う。そのあとは普通に予約を受ける。',
   full: '19時は満席。19時半なら空いていると答える。',
   spelling: '名前を聞いたら、つづりを聞き返す。そのあと予約を受ける。',
+  unheard: '店員として自然に受け答えする。返事は全部とても短く（好・可以・對・OK・네 など一言）。予約は受ける。',
   impatient: '確認を何度もされるのが嫌いな店員。2回目の確認をされたら「對啦，好了」と少し不機嫌に言う。',
 };
 
@@ -40,10 +41,13 @@ export async function POST(req) {
     const last = arr[arr.length - 1];
     if (last && last.role === role) last.content += '\n' + content; else arr.push({ role, content });
   };
+  // unheard：お店の短い返事は文字にならない（本番で聞き取れなかったときと同じ知らせをAIに渡す）
+  const UNHEARD_NOTE = '(The shop answered with something short that could not be transcribed — almost certainly a short yes such as OK / 好 / 네 / はい. Treat it as YES and move on to the next step. Do not ask whether they can hear you.)';
   const say = (who, text) => {
-    transcript.push({ who, text });
+    const lost = who === 'shop' && scenario === 'unheard' && text.replace(/[\s,.，。、!！?？]/g, '').length <= 4;
+    transcript.push({ who, text: lost ? `（短い返事・文字にならず：${text}）` : text });
     if (who === 'ai') { add(agent, 'assistant', text); add(shop, 'user', text); }
-    else { add(agent, 'user', text); add(shop, 'assistant', text); }
+    else { add(agent, 'user', lost ? UNHEARD_NOTE : text); add(shop, 'assistant', text); }
   };
   try {
     if (scenario === 'hello_first') {
@@ -61,15 +65,13 @@ export async function POST(req) {
       transcript.push({ who: 'ai', text: GREETING[lang] });
       shop.push({ role: 'user', content: GREETING[lang] });
       const s1 = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
-      shop.push({ role: 'assistant', content: s1 });
-      agent.push({ role: 'user', content: s1 });
-      transcript.push({ who: 'shop', text: s1 });
+      say('shop', s1);
     }
     let ended = false;
     for (let turn = 0; turn < 10 && !ended; turn++) {
       const a = (await claudeChat(env, { system, messages: agent, maxTokens: 220 })).trim();
       ended = a.includes(END);
-      say('ai', a.replace(END, '').replace('[RECAP]', '').trim());
+      say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || '（お礼）');
       if (ended) break;
       const s = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
       say('shop', s);
