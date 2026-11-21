@@ -226,7 +226,8 @@ How to run the call (follow these steps exactly):
 1. REQUEST: in one short sentence, ask if you can book for the date, time and number of people above. Say them clearly.
 2. If they agree (any yes, or they ask for the name): in that SAME reply say that the guest is Japanese, give the name once, and ask one very short recap question like "明天七點，兩位，Ueno先生，對嗎？". End this reply with the marker [RECAP]. Do this recap only once in the whole call.
    - If the shop has ALREADY repeated the date, time, people and name back to you, that is the confirmation: skip the recap and go to step 4.
-3. If the requested time is not available: ask what nearby time they have that day. Accept it only if it fits the time flexibility; then do step 2 with the new time. If nothing fits, thank them, say goodbye and end with [END].
+3. If the requested time is not available: ask once what nearby time they have THAT SAME DAY. Accept it only if it fits the time flexibility; then do step 2 with the new time. If nothing fits, or the shop is closed or fully booked that day, or does not take reservations, thank them, say goodbye and end with [END].
+   - NEVER change the date and never ask about or book another day. NEVER change the number of people. The traveler only wants this date.
 4. DONE: after the recap, any yes, any repeat-back, or no objection means the booking is agreed. Your reply is only a short thank-you and goodbye, with [END] at the very end. Do not repeat the date, time, people or name, and do not ask anything else.
 - If they ask you something (phone number, deposit, allergies, the spelling of the name), answer in one short sentence using only the details above; if you do not know, say the traveler will confirm when they arrive. If the booking was already agreed, add a short thank-you and goodbye with [END] in the same reply.
 - Never ask the shop extra questions of your own (deposit, rules, menus, seats) unless the traveler's message asks for it.
@@ -246,7 +247,7 @@ Never invent details. Never agree to pay anything.`;
 // 電話が終わったあとに、結果を日本語でまとめる指示
 export function summaryPrompt({ request }) {
   return `You read a transcript of a phone call where an AI assistant tried to book a reservation for a Japanese traveler.
-Requested: date ${request.date}, time ${request.time}, ${request.people} people, name "${request.name}".
+Requested: date ${request.date} (${WEEK[new Date(request.date + 'T00:00:00Z').getUTCDay()]}), time ${request.time}, ${request.people} people, name "${request.name}". Use this weekday when you write the date.
 Return ONLY a JSON object, no other text:
 {"outcome":"booked|declined|alternative|unclear","date":"YYYY-MM-DD or empty","time":"HH:MM or empty","people":number or 0,"summary_ja":"結果を日本語で2〜3文。決まった日時・人数・名前、お店から言われた注意（席の時間制限・遅れたら取り消し等）があれば入れる","notes_ja":"お店に伝えたこと・聞かれたことを日本語で短く。なければ空"}
 A line "SHOP: （返事が聞こえず・はいとみなして進めた）" means nothing was heard and the assistant assumed yes. If the booking relied only on such assumed answers (no clear spoken agreement from the shop anywhere), return "unclear" and say in notes_ja that お店の返事が聞き取れず、はいとみなして進めたため、予約が取れたかは確かではありません. A line "SHOP: （短い返事・文字にならず）" means the shop said something short that speech recognition could not turn into text; the assistant treated it as yes. If the booking relied on such replies, you may still return "booked", but say in notes_ja that お店の短い返事は文字にならず「はい」とみなした.
