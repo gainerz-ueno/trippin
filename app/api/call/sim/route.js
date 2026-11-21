@@ -13,6 +13,7 @@ const SHOP = {
   hello_first: '電話に出たらまず「喂，您好，北門」と言う。そのあとは普通に予約を受ける。',
   full: '19時は満席。19時半なら空いていると答える。',
   spelling: '名前を聞いたら、つづりを聞き返す。そのあと予約を受ける。',
+  silent: '店員。返事は全部、一言だけ（はい・OK・その国の「はい」）。名前を聞かれても聞き返さず一言で受ける。予約は受ける。',
   unheard: '店員。返事は全部、一言だけ（はい・OK・その国の「はい」）。名前を聞かれても聞き返さず一言で受ける。予約は受ける。',
   impatient: '確認を何度もされるのが嫌いな店員。2回目の確認をされたら「對啦，好了」と少し不機嫌に言う。',
 };
@@ -42,12 +43,15 @@ export async function POST(req) {
     if (last && last.role === role) last.content += '\n' + content; else arr.push({ role, content });
   };
   // unheard：お店の短い返事は文字にならない（本番で聞き取れなかったときと同じ知らせをAIに渡す）
+  // silent：短い返事は何も届かない（本番の「黙っている」と同じ知らせ）
+  let recapped = false;
+  const SILENT_NOTE = () => (recapped ? '(Nothing was heard after your recap — they most likely answered with a short OK that could not be heard. Treat it as yes: the booking is agreed. Reply only with a short thank-you and goodbye, and end with [END].)' : '(Nothing was heard after your last line. The shop most likely answered with a short word that the system cannot hear, such as OK / はい. If your last line was a yes/no question (for example asking whether they can take the booking), treat it as YES and go to the next step (give the name and the one recap question). If it was another kind of question, repeat it in one short phrase. Never ask whether they can hear you.)');
   const UNHEARD_NOTE = '(The shop answered with something short that could not be transcribed — almost certainly a short yes such as OK / 好 / 네 / はい. Treat it as YES and move on to the next step. Do not ask whether they can hear you.)';
   const say = (who, text) => {
-    const lost = who === 'shop' && scenario === 'unheard' && text.replace(/[\s,.，。、!！?？]/g, '').length <= 4;
+    const lost = who === 'shop' && (scenario === 'unheard' || scenario === 'silent') && text.replace(/[\s,.，。、!！?？]/g, '').length <= 4;
     transcript.push({ who, text: lost ? `（短い返事・文字にならず：${text}）` : text });
     if (who === 'ai') { add(agent, 'assistant', text); add(shop, 'user', text); }
-    else { add(agent, 'user', lost ? UNHEARD_NOTE : text); add(shop, 'assistant', text); }
+    else { add(agent, 'user', lost ? (scenario === 'silent' ? SILENT_NOTE() : UNHEARD_NOTE) : text); add(shop, 'assistant', text); }
   };
   try {
     if (scenario === 'hello_first') {
@@ -71,6 +75,7 @@ export async function POST(req) {
     for (let turn = 0; turn < 10 && !ended; turn++) {
       const a = (await claudeChat(env, { system, messages: agent, maxTokens: 400 })).trim();
       raws.push(a);
+      if (a.includes('[RECAP]')) recapped = true;
       ended = a.includes(END);
       say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));
       if (ended) break;
