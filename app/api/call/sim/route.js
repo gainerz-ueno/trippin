@@ -13,12 +13,12 @@ const SHOP = {
   hello_first: '電話に出たらまず「喂，您好，北門」と言う。そのあとは普通に予約を受ける。',
   full: '19時は満席。19時半なら空いていると答える。',
   spelling: '名前を聞いたら、つづりを聞き返す。そのあと予約を受ける。',
-  unheard: '店員として自然に受け答えする。返事は全部とても短く（好・可以・對・OK・네 など一言）。予約は受ける。',
+  unheard: '店員。返事は全部、一言だけ（はい・OK・その国の「はい」）。名前を聞かれても聞き返さず一言で受ける。予約は受ける。',
   impatient: '確認を何度もされるのが嫌いな店員。2回目の確認をされたら「對啦，好了」と少し不機嫌に言う。',
 };
 
 function shopSystem(lang, scenario) {
-  const L = { 'cmn-TW': '台湾華語（繁体字）', 'yue-HK': '広東語', 'ko-KR': '韓国語', 'ja-JP': '日本語', 'vi-VN': 'ベトナム語', 'th-TH': 'タイ語' }[lang] || 'その国の言葉';
+  const L = { 'cmn-TW': '台湾華語（繁体字）', 'yue-HK': '広東語', 'ko-KR': '韓国語', 'ja-JP': '日本語', 'vi-VN': 'ベトナム語', 'th-TH': 'タイ語', 'en-US': '英語', 'en-GB': '英語', 'en-AU': '英語', 'id-ID': 'インドネシア語', 'fr-FR': 'フランス語', 'it-IT': 'イタリア語', 'es-ES': 'スペイン語', 'de-DE': 'ドイツ語' }[lang] || 'その国の言葉';
   return `あなたは飲食店の電話に出た店員。${L}だけで話す。${SHOP[scenario] || SHOP.normal}
 AIの予約アシスタントから予約の電話がかかってくる。店員の言葉だけを1〜2文で書く（説明・かっこ書き不要）。会話が終わったと思ったら「再見」など普通に挨拶して終える。`;
 }
@@ -71,7 +71,7 @@ export async function POST(req) {
     for (let turn = 0; turn < 10 && !ended; turn++) {
       const a = (await claudeChat(env, { system, messages: agent, maxTokens: 220 })).trim();
       ended = a.includes(END);
-      say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || '（お礼）');
+      say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));
       if (ended) break;
       const s = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
       say('shop', s);

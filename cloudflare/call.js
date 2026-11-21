@@ -299,6 +299,13 @@ export class CallSession {
       this.history.push({ role: 'assistant', content: spoken });
       this.transcript.push({ who: 'ai', text: spoken });
     }
+    if (!spoken && !done && !this.emptyRetry) {
+      // 何も言わない返事だった：1回だけ言い直させる（黙ったままにしない）
+      this.emptyRetry = true;
+      this.reply('(You said nothing. Say your next line now, following the steps.)');
+      return;
+    }
+    if (spoken) this.emptyRetry = false;
     if (recap) this.stage = 'recap';
     if (done) { this.hangUpAfter(spoken); return; }
     this.armBackupWait(spoken || ' ');

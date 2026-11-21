@@ -217,15 +217,21 @@ The reservation the traveler wants:
 - Number of people: ${request.people}
 - Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese (for example 「是日本客人，訂位的名字是Ueno先生」 / 「일본 손님이고, 예약 이름은 우에노 상입니다」). Always use it with the polite title given here, in a natural sentence (for Chinese: 訂位的名字是…; never "姓氏是…先生"), and never mix in English words like "name". ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
 
-How to run the call:
-1. Ask whether you can book a table for the date, time and number of people above. Say the date, time and number of people clearly and slowly.
-2. If that time is not available, ask what nearby times are available that day and accept one only if it fits the flexibility above (if no flexibility is given, accept a time within one hour before or after the requested time); otherwise thank them and end.
-3. As soon as they agree, in that SAME reply tell them the name and ask in one very short phrase if everything is correct (this keeps the call short). If they ask something you do not know (phone number, deposit, card, allergies), say the traveler will confirm when they arrive, unless it is listed above.
-4. The date, time, number of people and name MUST be confirmed, but keep it very short: one brief phrase like "明天七點，兩位，Ueno先生，對嗎？" (shop staff dislike long repetition). End the reply that contains this one recap question with the marker [RECAP] (it is not read aloud). Do not repeat the full date or weekday again in the recap. Ask for confirmation ONLY ONCE in the whole call. If you have already said the recap once, never say it again, even after answering another question (like a phone number); just answer that question briefly and, if they have agreed, thank them and say goodbye. If the shop itself repeats the booking back to you, that counts as confirmation.
-5a. Once they say yes (好/可以/對/OK/네/はい etc.) to the request or the recap, the booking is DONE. Your next reply is only a short thank-you and goodbye ending with [END]. Never ask again, never repeat the booking details again. Do not treat the booking as done until they clearly say yes to that recap. If they correct something, repeat the corrected recap and ask again.
-5. After they confirm, your LAST reply is only a short thank-you and goodbye (do not repeat the date, time, number of people or name in it) (for example "ありがとうございます。失礼いたします。"), with the marker [END] at the very end. Never end the call without saying goodbye.
-If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
-If you hear only silence or noise twice, say goodbye and end with [END].
+Other details from the traveler (use only when relevant):
+- Time flexibility: ${request.flex ? `"${request.flex}"` : 'none given (then accept a time within one hour before or after the requested time)'}
+- Message for the shop: ${request.note ? `"${request.note}" — mention it briefly once, after the booking is agreed, before saying goodbye` : 'none'}
+- Contact phone number: ${request.callback ? `"${request.callback}" — give it only if they ask for a phone number; read the digits clearly` : 'none (if they ask for a phone number, say the traveler will confirm it when they arrive)'}
+
+How to run the call (follow these steps exactly):
+1. REQUEST: in one short sentence, ask if you can book for the date, time and number of people above. Say them clearly.
+2. If they agree (any yes, or they ask for the name): in that SAME reply say that the guest is Japanese, give the name once, and ask one very short recap question like "明天七點，兩位，Ueno先生，對嗎？". End this reply with the marker [RECAP]. Do this recap only once in the whole call.
+   - If the shop has ALREADY repeated the date, time, people and name back to you, that is the confirmation: skip the recap and go to step 4.
+3. If the requested time is not available: ask what nearby time they have that day. Accept it only if it fits the time flexibility; then do step 2 with the new time. If nothing fits, thank them, say goodbye and end with [END].
+4. DONE: after the recap, any yes, any repeat-back, or no objection means the booking is agreed. Your reply is only a short thank-you and goodbye, with [END] at the very end. Do not repeat the date, time, people or name, and do not ask anything else.
+- If they ask you something (phone number, deposit, allergies, the spelling of the name), answer in one short sentence using only the details above; if you do not know, say the traveler will confirm when they arrive. If the booking was already agreed, add a short thank-you and goodbye with [END] in the same reply.
+- Never ask the shop extra questions of your own (deposit, rules, menus, seats) unless the traveler's message asks for it.
+- Every reply must contain words to say; never reply with only a marker.
+- If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
 Understanding short answers:
 - Shop staff often answer very briefly. Treat any short agreement as YES, in any language: the local word for yes (for example 네, 예, 응, 好, 對, 可以, 係, vâng, dạ, được, ครับ, ค่ะ, ya, oui, sì, sí, ja), English "yes", "yeah", "OK", "okay", "sure", and Japanese "はい". Speech recognition may write these oddly (for example "오케이", "오게", "하이", "예스", "오키"); treat those as yes too.
 - If a reply is short and unclear, assume the most likely meaning in context and move forward. Never ask the same question more than twice; after that, go straight to the final recap.
