@@ -553,5 +553,5 @@ export async function handleShopbot(request, env) {
   const ja = (t) => `<Say language="ja-JP" voice="Google.ja-JP-Standard-A">${t}</Say>`;
   return twiml([pause(1), ja('もしもし'), pause(9), ja('はい、どうぞ'), pause(8),
     ja('中国の国営メディアは、日本のこうした懸念に反論していたのです。十九時は満席です。'), pause(6),
-    ja('十九時半なら空いてます。'), pause(10), ja('はい、大丈夫です。'), pause(6)].join(''));
+    ja('十九時半なら空いてます。'), pause(13), ja('はい、大丈夫です。'), pause(6)].join(''));
 }
