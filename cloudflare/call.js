@@ -176,7 +176,7 @@ export class CallSession {
         // 話し終わったのに文字が届かない：少し待っても届かなければ「聞き取れない短い返事」として進める
         if (!this.turnHandled) {
           if (this.unheardTimer) clearTimeout(this.unheardTimer);
-          this.unheardTimer = setTimeout(() => this.onUnheard(), 2000);
+          this.unheardTimer = setTimeout(() => this.onUnheard(), 3000); // 文字は話し終わりから少し遅れて届く（2秒では早すぎた）
           this.timers.push(this.unheardTimer);
         }
       }
@@ -232,6 +232,8 @@ export class CallSession {
       // お店がAIの言い終わったあとに話し始めていたら、言い終わるまで待つ（最大12秒）。AIの話にかぶって始まった声（テレビ等）は待たない
       // 2026-11-21 社長の電話：「その日は満席です」を言っている途中で「返事なし」と判断していた（2.5秒で打ち切っていたため）
       if (this.shopTalking && !this.startedOverAgent() && Date.now() - (this.shopOnAt || 0) < 12000) { this.waitDeadline = Date.now() + 1000; this.armWait(); return; }
+      // お店が話し終わって、文字を待っている間（文字にならなかった声の判断の前）は、無言とみなさない
+      if (this.unheardTimer) { this.waitDeadline = Date.now() + 1000; this.armWait(); return; }
       this.waitDeadline = null;
       this.silentCount = (this.silentCount || 0) + 1;
       if (this.silentCount >= 4) { this.sayGoodbye(); return; }
@@ -243,8 +245,12 @@ export class CallSession {
       } else if (this.stage === 'recap') {
         // 最後の確認のあと：はいとみなしてお礼を言って切る
         this.finishThanks();
+      } else if (this.silentCount === 1) {
+        // 用件・別の時間などを聞いたあとの1回目の無言：「はい」とみなさない。答えが文字にならなかった（満席などの文だった）かもしれないので、短く聞き直す
+        // 2026-11-22 社長の電話：「十九時は満席です」が文字にならず、無言として「はい」で進めていた
+        this.reply('(Nothing was heard after your last line. Their answer may not have come through (it could have been a NO, a different time, or a question). Do NOT assume yes yet. Ask the same thing again once, in one very short polite sentence (for example: 恐れ入ります、十九時にふたり、ご予約は大丈夫でしょうか。). Never ask whether they can hear you.)');
       } else {
-        this.reply('(Nothing was heard after your last line. The shop most likely answered with a short word that the system cannot hear, such as OK / はい. If your last line was a yes/no question (for example asking whether they can take the booking), treat it as YES and go to the next step (give the name and the one recap question). If it was another kind of question, repeat it in one short phrase. Never ask whether they can hear you.)');
+        this.reply('(Nothing was heard again. The shop most likely answered with a short word that the system cannot hear, such as OK / はい. If your last line was a yes/no question (for example asking whether they can take the booking), treat it as YES and go to the next step (give the name and the one recap question). If it was another kind of question, repeat it in one short phrase. Never ask whether they can hear you.)');
       }
     }, ms);
     this.timers.push(this.waitTimer);
@@ -272,6 +278,19 @@ export class CallSession {
     if (this.stage === 'greeting' && this.agentSpeaking) { this.turnHandled = true; return; }
     this.turnHandled = true;
     this.heard = true;
+    // 文字にならなかった声の長さ：短い（1.2秒まで）なら「はい/OK」、長いなら文（「十九時は満席です」等）。
+    // 長い声を「はい」とみなすと、満席なのに予約を進めてしまう（2026-11-22 社長の電話）→ 聞き直す（同じ問いに2回まで。それでもだめなら、はっきりしないとして切る）
+    const len = (this.shopOffAt || Date.now()) - (this.shopOnAt || Date.now());
+    if (this.stage !== 'greeting' && len > 1200) {
+      this.unclearAsks = (this.unclearAsks || 0) + 1;
+      this.transcript.push({ who: 'shop', text: '（返事が聞き取れず）' });
+      if (this.unclearAsks <= 2) {
+        this.reply(`(The shop said a full sentence but it could not be heard clearly — it may have been a NO, a different time, or a question. Do NOT assume yes. Politely ask them to say it once more, in one very short sentence (for example: 申し訳ありません、もう一度お願いできますか。).)`);
+      } else {
+        this.reply(`(The shop's answer still could not be heard. Apologize briefly, say you will call back, and say goodbye with [END]. Do not claim the booking is made.)`);
+      }
+      return;
+    }
     this.unheardAt = Date.now();
     this.transcript.push({ who: 'shop', text: UNHEARD });
     const wasGreeting = this.stage === 'greeting';
@@ -307,6 +326,7 @@ export class CallSession {
     }
     this.heard = true;
     this.silentCount = 0;
+    this.unclearAsks = 0;
     this.clearWait();
     this.transcript.push({ who: 'shop', text: said });
     if (!this.greeted) {
@@ -328,7 +348,8 @@ export class CallSession {
     }
     if (this.stage === 'recap') {
       // 確認はもう言った：はっきり「違う/できない」か質問でなければ、確認が取れたとしてお礼を言って切る（AIに聞き直させない）
-      if (!NEG.test(said) && !ASKING.test(said)) { this.finishThanks(); return; }
+      // 時間・数の入った返事（「いえ、十九時半です」等）は訂正かもしれないので、AIに渡して確かめさせる（2026-11-22 の通し試験で見つけた）
+      if (!NEG.test(said) && !ASKING.test(said) && !TIMEISH.test(said) && !/いえ|違|ちが|じゃなく|ではなく/.test(said)) { this.finishThanks(); return; }
       this.reply(`${said}\n(You have ALREADY asked the recap. Do not repeat the recap or ask again. If this is the shop clearly saying something is wrong, fix only that in one short phrase. If it is a question, answer it in one short sentence and then thank them and say goodbye with [END]. If it does not make sense as the shop's answer, reply only [IGNORE].)`);
       return;
     }
@@ -527,6 +548,10 @@ export async function handleShopbot(request, env) {
   if (!ok || form.From !== env.TWILIO_FROM) return twiml('<Reject/>');
   const say = (t) => `<Say language="cmn-TW" voice="Google.cmn-TW-Standard-A">${t}</Say>`;
   const pause = (s) => `<Pause length="${s}"/>`;
-  // あいさつ（約9秒）→ 返事 → 用件（約7秒）→ 返事 → 確認（約5秒）→ 返事 → 終わり
-  return twiml([pause(1), say('喂，您好'), pause(10), say('可以'), pause(9), say('好'), pause(8), say('對'), pause(6), say('好，再見'), pause(4)].join(''));
+  // 2026-11-22：日本語・満席の場面（社長の電話の再現）。テレビの声のあとに「十九時は満席です」をつなげて言う
+  // あいさつ（約9秒）→ はい、どうぞ → 用件（約7秒）→ テレビ＋満席 → 別の時間を聞く（約4秒）→ 十九時半 → 確認（約8秒）→ はい → お礼
+  const ja = (t) => `<Say language="ja-JP" voice="Google.ja-JP-Standard-A">${t}</Say>`;
+  return twiml([pause(1), ja('もしもし'), pause(9), ja('はい、どうぞ'), pause(8),
+    ja('中国の国営メディアは、日本のこうした懸念に反論していたのです。十九時は満席です。'), pause(6),
+    ja('十九時半なら空いてます。'), pause(10), ja('はい、大丈夫です。'), pause(6)].join(''));
 }
