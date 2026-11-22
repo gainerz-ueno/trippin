@@ -231,7 +231,7 @@ export function callSystemPrompt({ lang, placeName, request }) {
     // 「今週いっぱい」などと言われたときに入るかを、AIが日付の計算で迷わないよう先に書いておく（今日から6日以内は「今週」に入るとみなす）
     const local = new Date(Date.now() + 9 * 3600000);
     const days = Math.round((Date.parse(a.date + 'T00:00:00Z') - Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate())) / 86400000);
-    a = { ...a, week: days <= 6 ? ' (counts as THIS WEEK if the shop talks about this week)' : '' };
+    a = { ...a, week: days <= 6 ? ' — this day is inside "this week": if the shop has said they are full or closed this week (for example 今週はいっぱい), this choice is already ruled out, so do NOT ask about it' : '' };
     return { ...a, say: same ? 'the same day as choice 1' : `${r2 ? `"${r2}" then ` : ''}${s2 ? `"${s2}"` : `${a.date.slice(5)} (${WEEK[new Date(a.date + 'T00:00:00Z').getUTCDay()]})`}` };
   });
   return `You are an AI reservation assistant on a live phone call with a restaurant or shop called "${placeName}".
