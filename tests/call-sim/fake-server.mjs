@@ -2,38 +2,56 @@ export const rpcJson = async () => ({ ok: true, data: true });
 export const callUpdate = async () => {};
 export const twilioSignatureOk = async () => true;
 export const claudeOnce = async () => '{}';
-// 偽のAI：本物の AI がしそうな返事を、渡された内容から作る
+
+// 偽のAI：電話の仕組み（待ち・聞き取れない声・周りの音・しるし）の試験用に、気の利く人が言いそうな返事を作る。
+// 2026-11-22 から本物のAIには決まりで指図せず、聞こえた事実（黙っていた・聞き取れなかった等）だけを渡す。ここではその事実から判断する
+const REQ = 'はい、ありがとうございます。本日十一月二十二日、日曜日の十九時に、ふたりでご予約をお願いできますでしょうか。';
+const recap = (t) => `はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日${t}、ふたりでよろしいでしょうか。[RECAP]`;
+const close = (t) => `ありがとうございます。それでは本日${t}、ふたり、ウエノ様でお願いいたします。失礼いたします。[END]`;
+const YES = /はい|大丈夫|どうぞ|いいですよ|かしこまり|ええ|OK|もしもし/;
+
 export async function* claudeStream(env, { messages }) {
   const u = messages[messages.length - 1].content;
-  const asst = messages.filter(m => m.role === 'assistant').map(m => m.content).join('|');
+  const asstAll = messages.filter((m) => m.role === 'assistant').map((m) => m.content);
+  const last = asstAll[asstAll.length - 1] || '';
+  const isGreetAsk = /お時間よろしい|お電話よろしい/.test(last);
+  const isRecap = /ウエノ様です/.test(last) && /よろしいでしょうか/.test(last);
+  const isWait = /お待ちしております|お願いします。$/.test(last);
+  const recapTime = (() => { const r = [...asstAll].reverse().find((a) => /ウエノ様です/.test(a)) || ''; return /二十時/.test(r) ? '二十時' : /十九時半/.test(r) ? '十九時半' : '十九時'; })();
+  const count = (re) => asstAll.filter((a) => re.test(a)).length;
+  const onShop = (t) => {
+    const tail = t.slice(-24);
+    if (/待って|お待ちください/.test(t) && !/満席|空いて/.test(t)) return isGreetAsk ? 'はい、お待ちしております。[WAIT]' : 'はい、お願いします。[WAIT]';
+    if (/予約は受け|やってない|休み|定休/.test(t)) return '承知しました。ありがとうございます。失礼いたします。[END]';
+    if (isRecap) {
+      if (/いえ|違/.test(t) && /半/.test(t)) return close('十九時半');
+      if (YES.test(t)) return close(recapTime);
+      return '[IGNORE]';
+    }
+    if (/満席|いっぱい/.test(tail) && !/空いて|なら/.test(tail)) return '承知しました。近い時間で空いている時間はありますでしょうか。';
+    if (/二十時/.test(tail)) return recap('二十時');
+    if (/半|なら空いて|なら大丈夫/.test(tail)) return recap('十九時半');
+    if (/何名|人数/.test(t)) return 'ふたりです。';
+    if (/^(画面|テレビ|中国)/.test(t) && !YES.test(tail)) return '[IGNORE]';
+    if (isGreetAsk || isWait && !/ご予約/.test(asstAll.join(''))) return YES.test(t) ? REQ : '[IGNORE]';
+    if (YES.test(t)) return /ご予約|大丈夫でしょうか/.test(last) || isWait ? recap('十九時') : REQ;
+    return '[IGNORE]';
+  };
   let out;
-  const f = globalThis.FAKE_LLM;
-  if (f) out = f(u, asst, messages);
-  if (out === undefined && /The booking is agreed/.test(u)) { const t = /二十時/.test(asst) ? '二十時' : /十九時半/.test(asst) ? '十九時半' : '十九時'; out = `ありがとうございます。それでは本日${t}、ふたり、ウエノでお願いいたします。失礼いたします。[END]`; }
-  if (out === undefined && /They asked you to wait before/.test(u)) out = 'はい、お待ちしております。';
-  if (out === undefined && /They asked you to wait/.test(u)) out = 'はい、お願いします。';
-  if (out === undefined) {
-    if (/No answer was heard after your introduction/.test(u)) out = 'もしもし、今お電話よろしいでしょうか。';
-    else if (/There is still no answer/.test(u)) out = 'またおかけ直しいたします。失礼いたします。[END]';
-    else if (/ALREADY asked the recap/.test(u)) out = /半/.test(u.split('\n')[0]) ? '失礼しました、十九時半ですね。ありがとうございます。それでは本日十九時半、ふたり、ウエノでお願いいたします。失礼いたします。[END]' : 'ありがとうございます。それでは本日十九時、ふたり、ウエノでお願いいたします。失礼いたします。[END]';
-    else     if (/満席|いっぱい/.test(u) && !/空いて|なら/.test(u)) out = '承知しました。近い時間で空いている時間はありますでしょうか。';
-    else if (/二十時/.test(u)) out = 'はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日二十時、ふたりでよろしいでしょうか。[RECAP]';
-    else if (/半|なら空いて|なら大丈夫/.test(u)) out = 'はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日十九時半、ふたりでよろしいでしょうか。[RECAP]';
-    else if (/お名前|名前は/.test(u)) out = 'はい、ウエノです。日本のお客様です。[RECAP]';
-    else if (/Do NOT assume yes yet|could not be heard clearly|once more/.test(u)) out = '恐れ入ります、十九時にふたり、ご予約は大丈夫でしょうか。';
-    else if (/introduction|go straight to the booking request/.test(u) && !/booking request now/.test(u) && /^(画面|テレビ|中国)/.test(u)) out = '[IGNORE]';
-    else if (/introduction|booking request/.test(u)) out = 'はい、ありがとうございます。本日十一月二十二日、日曜日の十九時に、ふたりでご予約をお願いできますでしょうか。';
-    else if (/ALREADY asked the recap/.test(u)) out = /半/.test(u) ? '失礼しました、十九時半ですね。ありがとうございます。それでは本日十九時半、ふたり、ウエノでお願いいたします。失礼いたします。[END]' : 'ありがとうございます。それでは本日十九時、ふたり、ウエノでお願いいたします。失礼いたします。[END]';
-    else if (/TV or other/.test(u)) out = /満席/.test(u.slice(-40)) ? '承知しました。近い時間で空いている時間はありますでしょうか。' : 'はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日十九時、ふたりでよろしいでしょうか。[RECAP]';
-    else if (/Treat it as YES|treat it as YES|Treat this as YES/.test(u)) out = 'はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日十九時、ふたりでよろしいでしょうか。[RECAP]';
-    else if (/still could not be heard/.test(u)) out = '申し訳ありません、改めてお電話いたします。失礼いたします。[END]';
-    else if (/予約は受け|やってない|休み|定休/.test(u)) out = '承知しました。ありがとうございます。失礼いたします。[END]';
-    else if (/何名|人数/.test(u)) out = 'ふたりです。';
-    
-    else if (/大丈夫|はい|どうぞ|いいですよ|かしこまり/.test(u)) out = asst.includes('RECAP_DONE') ? 'ありがとうございます。[END]' : 'はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日十九時、ふたりでよろしいでしょうか。[RECAP]';
-    else out = '[IGNORE]';
+  if (/passed after your introduction/.test(u)) out = count(/お電話よろしい/) >= 2 ? 'またおかけ直しいたします。失礼いたします。[END]' : 'もしもし、今お電話よろしいでしょうか。';
+  else if (/since they asked you to wait/.test(u)) out = 'もしもし、お待ちしております。';
+  else if (/passed after your last line/.test(u)) {
+    if (isRecap) out = close(recapTime); // 確認のあとの無言：短い「はい」が聞こえなかったとみる
+    else if (/ again/.test(u)) out = recap('十九時'); // 聞き直しても無言：短い「はい」が届いていないとみる
+    else out = '恐れ入ります、十九時にふたり、ご予約は大丈夫でしょうか。';
+  } else if (/could not be turned into text/.test(u)) {
+    if (/one-word/.test(u)) out = isGreetAsk ? REQ : isRecap ? close(recapTime) : recap('十九時');
+    else out = count(/もう一度お願い/) >= 2 ? '申し訳ありません、改めてお電話いたします。失礼いたします。[END]' : '申し訳ありません、もう一度お願いできますか。';
+  } else {
+    const m = u.match(/were actually: "([^"]*)"/);
+    out = onShop(m ? m[1] : u.replace(/\n\(.*\)$/s, ''));
   }
   if (globalThis.NO_RECAP_MARK) out = out.replace('[RECAP]', '');
-  await new Promise(r => setTimeout(r, 400)); // AIが考える時間
+  await new Promise((r) => setTimeout(r, 400)); // AIが考える時間
   yield out;
 }

@@ -26,9 +26,9 @@ const SHOP = {
   impatient: '確認を何度もされるのが嫌いな店員。2回目の確認をされたら「對啦，好了」と少し不機嫌に言う。',
 };
 
-function shopSystem(lang, scenario) {
+function shopSystem(lang, scenario, note) {
   const L = { 'cmn-TW': '台湾華語（繁体字）', 'yue-HK': '広東語', 'ko-KR': '韓国語', 'ja-JP': '日本語', 'vi-VN': 'ベトナム語', 'th-TH': 'タイ語', 'en-US': '英語', 'en-GB': '英語', 'en-AU': '英語', 'id-ID': 'インドネシア語', 'fr-FR': 'フランス語', 'it-IT': 'イタリア語', 'es-ES': 'スペイン語', 'de-DE': 'ドイツ語' }[lang] || 'その国の言葉';
-  return `あなたは飲食店の電話に出た店員。${L}だけで話す。${SHOP[scenario] || SHOP.normal}
+  return `あなたは飲食店の電話に出た店員。${L}だけで話す。${note || SHOP[scenario] || SHOP.normal}${note ? '\n黙っている（返事をしない）ときは「（無言）」とだけ書く。' : ''}
 AIの予約アシスタントから予約の電話がかかってくる。店員の言葉だけを1〜2文で書く（説明・かっこ書き不要）。会話が終わったと思ったら「再見」など普通に挨拶して終える。`;
 }
 
@@ -40,7 +40,9 @@ export async function POST(req) {
   let env; try { env = getCloudflareContext().env; } catch { env = process.env; }
   const body = await req.json().catch(() => ({}));
   const lang = GREETING[body.lang] ? body.lang : 'cmn-TW';
-  const scenario = SHOP[body.scenario] ? body.scenario : 'normal';
+  // custom：お店の振る舞いを文で渡す（運営者だけ。想定問答を本物のAIで確かめるため）
+  const note = typeof body.shopNote === 'string' ? body.shopNote.replace(/[\u0000-\u001F]/g, ' ').slice(0, 600) : '';
+  const scenario = note ? 'custom' : SHOP[body.scenario] ? body.scenario : 'normal';
   const request = cleanRequest(body.request || {});
   if (!request) return json({ error: '予約の中身が足りません' }, 400);
   const system = callSystemPrompt({ lang, placeName: body.placeName || '北門', request });
@@ -53,9 +55,12 @@ export async function POST(req) {
   // unheard：お店の短い返事は文字にならない（本番で聞き取れなかったときと同じ知らせをAIに渡す）
   // silent：短い返事は何も届かない（本番の「黙っている」と同じ知らせ）
   let recapped = false;
-  const SILENT_NOTE = () => (recapped ? '(Nothing was heard after your recap — they most likely answered with a short OK that could not be heard. Treat it as yes: the booking is agreed. Reply only with a short thank-you and goodbye, and end with [END].)' : '(Nothing was heard after your last line. The shop most likely answered with a short word that the system cannot hear, such as OK / はい. If your last line was a yes/no question (for example asking whether they can take the booking), treat it as YES and go to the next step (give the name and the one recap question). If it was another kind of question, repeat it in one short phrase. Never ask whether they can hear you.)');
-  const UNHEARD_NOTE = '(The shop answered with something short that could not be transcribed — almost certainly a short yes such as OK / 好 / 네 / はい. Treat it as YES and move on to the next step. Do not ask whether they can hear you.)';
+  // 本番と同じ、聞こえた事実だけの知らせ（どうするかはAIが決める）
+  const SILENT_NOTE = () => (agent.length <= 2 ? '(About 4 seconds passed after your introduction and no reply was heard.)' : '(About 4 seconds passed after your last line and no reply was heard.)');
+  const UNHEARD_NOTE = '(The shop said something for about 0.6 seconds, but it could not be turned into text. Something this short is usually a one-word answer.)';
   const say = (who, text) => {
+    const mute = who === 'shop' && /^（無言）$/.test(text.trim());
+    if (mute) { transcript.push({ who, text: '（返事が聞こえず）' }); add(agent, 'user', SILENT_NOTE()); add(shop, 'assistant', text); return; }
     const lost = who === 'shop' && (scenario === 'unheard' || scenario === 'silent') && text.replace(/[\s,.，。、!！?？]/g, '').length <= 4;
     transcript.push({ who, text: lost ? `（短い返事・文字にならず：${text}）` : text });
     if (who === 'ai') { add(agent, 'assistant', text); add(shop, 'user', text); }
@@ -64,7 +69,7 @@ export async function POST(req) {
   try {
     if (scenario === 'hello_first') {
       shop.push({ role: 'user', content: '（電話が鳴った。出てください）' });
-      const first = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
+      const first = (await claudeChat(env, { system: shopSystem(lang, scenario, note), messages: shop })).trim();
       shop.pop();
       transcript.push({ who: 'shop', text: first });
       // 本番と同じく、あいさつは最後まで言い、そのあとお店の言葉に答える
@@ -76,16 +81,16 @@ export async function POST(req) {
       agent.push({ role: 'user', content: '(The call has connected.)' }, { role: 'assistant', content: GREETING[lang] });
       transcript.push({ who: 'ai', text: GREETING[lang] });
       shop.push({ role: 'user', content: GREETING[lang] });
-      const s1 = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
+      const s1 = (await claudeChat(env, { system: shopSystem(lang, scenario, note), messages: shop })).trim();
       say('shop', s1);
     }
     let ended = false;
-    for (let turn = 0; turn < 10 && !ended; turn++) {
+    for (let turn = 0; turn < 12 && !ended; turn++) {
       const a = (await claudeChat(env, { system, messages: agent, maxTokens: 400 })).trim();
       raws.push(a);
       if (a.includes('[RECAP]')) recapped = true;
       ended = a.includes(END);
-      say('ai', a.replace(END, '').replace('[RECAP]', '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));
+      say('ai', a.replace(/\[(END|RECAP|WAIT)\]/g, '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));
       if (ended) break;
       if (scenario === 'noisy') {
         // 店内のテレビ・周りの声が文字になって届いた：AIは [IGNORE] だけを返し、何も言わないはず（会話には入れない）
@@ -94,7 +99,7 @@ export async function POST(req) {
         transcript.push({ who: 'shop', text: `（周りの音：${tv}）` });
         transcript.push({ who: 'ai', text: r.replace(/\s/g, '') === '[IGNORE]' ? '（無視した）' : `（周りの音に返事してしまった：${r}）` });
       }
-      const s = (await claudeChat(env, { system: shopSystem(lang, scenario), messages: shop })).trim();
+      const s = (await claudeChat(env, { system: shopSystem(lang, scenario, note), messages: shop })).trim();
       say('shop', s);
     }
     let summary = null;
