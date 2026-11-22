@@ -2,6 +2,7 @@
 import { searchPage, fillTranslations, localize } from '../../lib/places';
 import { str, num, latLng, bad } from '../../lib/validate';
 import { gfetch, friendly, MOCK } from '../../lib/gfetch';
+import { spend, refund } from '../../lib/points';
 
 export const maxDuration = 60;
 const GKEY = () => process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
@@ -27,9 +28,13 @@ async function gemini(prompt, maxTokens = 3072) {
 
 export async function POST(req) {
   if (!GKEY()) return Response.json({ error: 'AIの設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
+  let paid = null;
   try {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') return bad('入力が正しくありません');
+    // ポイント：AIのおすすめ1pt（2026-11-22 社長決定）。失敗したら戻す
+    paid = await spend(req, 'recommend');
+    if (!paid.ok) return paid.res;
     const question = str(body.question, 200);
     const here = latLng(body.here);
     const hotelPos = latLng(body.hotel);
@@ -146,6 +151,7 @@ export async function POST(req) {
 
     return Response.json({ answer: String(out.answer || '').slice(0, 600), picks });
   } catch (e) {
+    await refund(paid);
     return Response.json({ error: friendly(e, 'AIに聞けませんでした。少し待ってからもう一度試してください') }, { status: 502 });
   }
 }

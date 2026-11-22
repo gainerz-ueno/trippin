@@ -50,7 +50,7 @@ export async function api(url, { method = 'GET', body, timeout = 20000, fallback
     if (res.status === 413) throw new Error('写真が大きすぎて送れませんでした。枚数を減らしてもう一度試してください');
     throw new Error(hasJa(data?.error) ? data.error : fallback || 'うまくいきませんでした。もう一度試してください');
   }
-  if (/^\/api\/(search|details\?.*reviews=1)/.test(url)) tellApp('tabibi:points'); // 残りを出し直す
+  if (/^\/api\/(search|recommend|screenshot)/.test(url) || (/^\/api\/details/.test(url) && !/lite=1/.test(url))) tellApp('tabibi:points'); // 残りを出し直す
   return data;
 }
 

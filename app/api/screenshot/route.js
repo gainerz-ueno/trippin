@@ -1,5 +1,6 @@
 // スクリーンショットから店名・街・国を読み取る（Gemini）
 import { gfetch, friendly, MOCK } from '../../lib/gfetch';
+import { spend, refund } from '../../lib/points';
 
 export const maxDuration = 30;
 const COUNTRY_CODES = ['TW', 'KR', 'HK', 'CN', 'VN', 'TH', 'SG', 'MY', 'PH', 'JP'];
@@ -7,6 +8,7 @@ const COUNTRY_CODES = ['TW', 'KR', 'HK', 'CN', 'VN', 'TH', 'SG', 'MY', 'PH', 'JP
 export async function POST(req) {
   const key = process.env.GEMINI_API_KEY || (MOCK ? 'mock' : '');
   if (!key) return Response.json({ error: '読み取りの設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
+  let paid = null;
   try {
     const body = await req.json().catch(() => null);
     const image = typeof body?.image === 'string' ? body.image : '';
@@ -15,6 +17,9 @@ export async function POST(req) {
     if (!image || image.length > 4_000_000 || !/^[A-Za-z0-9+/=]+$/.test(image)) {
       return Response.json({ error: '画像が大きすぎるか、読み込めませんでした' }, { status: 400 });
     }
+    // ポイント：スクショからさがす3pt（2026-11-22 社長決定）。失敗したら戻す
+    paid = await spend(req, 'screenshot');
+    if (!paid.ok) return paid.res;
     const prompt = [
       'これはインスタグラムやYouTubeなどのスクリーンショットです。紹介されているお店・名所を読み取ってください。',
       '看板・キャプション・位置情報タグ・ハッシュタグ・字幕など、画面に写っている情報をすべて手がかりにしてください。',
@@ -50,6 +55,7 @@ export async function POST(req) {
       }));
     return Response.json({ shops });
   } catch (e) {
+    await refund(paid);
     return Response.json({ error: friendly(e, '読み取りに失敗しました。少し待ってからもう一度試してください') }, { status: 502 });
   }
 }

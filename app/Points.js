@@ -76,7 +76,10 @@ export default function Points({ user, onSignIn }) {
             <p className="pt-now">いまのポイント：<b>{p ? (p.owner ? '使い放題（運営者）' : `${p.balance}pt`) : '確認中…'}</b></p>
             <ul className="pt-cost">
               <li>お店の検索：2pt</li>
+              <li>スクショからさがす：3pt</li>
+              <li>お店の詳細を見る：1pt</li>
               <li>口コミを見る：1pt</li>
+              <li>AIのおすすめ：1pt</li>
               <li>AIで画像を作る：3pt</li>
               <li>タビビコール：45pt（3分ごと）</li>
             </ul>

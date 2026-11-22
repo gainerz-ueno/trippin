@@ -58,9 +58,9 @@ export async function GET(req) {
   if (id.length > 300 || !/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'お店の指定が正しくありません' }, { status: 400 });
   if (!KEY()) return Response.json({ error: '詳細の設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
 
-  // ポイント：口コミを見るときだけ1pt（2026-11-22 社長決定）。失敗したら戻す
+  // ポイント：口コミを見る1pt・お店の詳細1pt（2026-11-22 社長決定）。営業時間だけ（lite）は画面が裏で取るのでポイントなし。失敗したら戻す
   let paid = null;
-  if (onlyReviews) { paid = await spend(req, 'reviews'); if (!paid.ok) return paid.res; }
+  if (!lite) { paid = await spend(req, onlyReviews ? 'reviews' : 'details'); if (!paid.ok) return paid.res; }
   try {
     const res = await gfetch(`https://places.googleapis.com/v1/places/${id}?languageCode=ja`, {
       headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': onlyReviews ? REVIEWS : lite ? LITE : FIELDS },
