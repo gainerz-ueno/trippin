@@ -244,9 +244,15 @@ export class CallSession {
       if (this.silentCount >= 4) { this.sayGoodbye(); return; }
       this.transcript.push({ who: 'shop', text: SILENT });
       if (this.stage === 'greeting') {
-        // あいさつのあと：聞き直さずに用件へ
-        this.stage = 'talk';
-        this.reply('(No answer was heard after your introduction — they may have said a short yes that could not be heard. Go straight to the booking request now. Do not ask whether they can hear you and do not introduce yourself again.)');
+        // あいさつのあと何も返事がない：勝手に用件へ進まない。「お電話よろしいでしょうか」をもう一度聞く（2回まで。それでも返事がなければ、かけ直すと言って切る）
+        // 2026-11-22 社長の電話：「少しお時間よろしいでしょうか」に返事をしなかったのに、用件を話し始めた（社長「返事しなくても勝手に進める」）
+        this.greetAsks = (this.greetAsks || 0) + 1;
+        this.transcript[this.transcript.length - 1].text = '（返事が聞こえず）';
+        if (this.greetAsks <= 2) {
+          this.reply('(No answer was heard after your introduction. Do NOT start the booking request yet. Ask once more, in one very short polite sentence, whether they can talk now (for Japanese: 「もしもし、今お電話よろしいでしょうか。」). Do not introduce yourself again in full.)');
+        } else {
+          this.reply('(There is still no answer. Say briefly that you will call again later, say goodbye, and end with [END].)');
+        }
       } else if (this.stage === 'recap') {
         // 最後の確認のあと：はいとみなしてお礼を言って切る
         this.finishThanks();
@@ -570,9 +576,8 @@ export async function handleShopbot(request, env) {
   if (!ok || form.From !== env.TWILIO_FROM) return twiml('<Reject/>');
   const say = (t) => `<Say language="cmn-TW" voice="Google.cmn-TW-Standard-A">${t}</Say>`;
   const pause = (s) => `<Pause length="${s}"/>`;
-  // 2026-11-22：日本語・社長の電話の再現（あいさつの最中に「もしもし」→言い終わり直後に「はい」→少々お待ちください→テレビの声＋満席→十九時半→はい）
+  // 2026-11-22 夕方：社長の電話の再現（あいさつの最中に「もしもし」→あいさつには返事をしない→聞き直されて「はい」→用件に「今週はいっぱいです」）
+  // 正しい動き：あいさつのあと黙っていたら用件に進まず聞き直す／第2候補（明日）は「今週」に入るので聞かずにお礼を言って切る
   const ja = (t) => `<Say language="ja-JP" voice="Google.ja-JP-Standard-A">${t}</Say>`;
-  return twiml([pause(2), ja('もしもし'), pause(11), ja('はい'), pause(9), ja('少々お待ちください'), pause(5),
-    ja('お待たせしました。中国の国営メディアは、日本のこうした懸念に反論していたのです。十九時は満席です。'), pause(6),
-    ja('十九時半なら空いてます。'), pause(13), ja('はい、大丈夫です。'), pause(6)].join(''));
+  return twiml([pause(2), ja('もしもし'), pause(17), ja('はい'), pause(9), ja('今週はいっぱいです。'), pause(12)].join(''));
 }

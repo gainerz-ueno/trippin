@@ -12,7 +12,9 @@ export async function* claudeStream(env, { messages }) {
   if (out === undefined && /The booking is agreed/.test(u)) { const t = /二十時/.test(asst) ? '二十時' : /十九時半/.test(asst) ? '十九時半' : '十九時'; out = `ありがとうございます。それでは本日${t}、ふたり、ウエノでお願いいたします。失礼いたします。[END]`; }
   if (out === undefined && /They asked you to wait/.test(u)) out = 'はい、お願いします。';
   if (out === undefined) {
-    if (/ALREADY asked the recap/.test(u)) out = /半/.test(u.split('\n')[0]) ? '失礼しました、十九時半ですね。ありがとうございます。それでは本日十九時半、ふたり、ウエノでお願いいたします。失礼いたします。[END]' : 'ありがとうございます。それでは本日十九時、ふたり、ウエノでお願いいたします。失礼いたします。[END]';
+    if (/No answer was heard after your introduction/.test(u)) out = 'もしもし、今お電話よろしいでしょうか。';
+    else if (/There is still no answer/.test(u)) out = 'またおかけ直しいたします。失礼いたします。[END]';
+    else if (/ALREADY asked the recap/.test(u)) out = /半/.test(u.split('\n')[0]) ? '失礼しました、十九時半ですね。ありがとうございます。それでは本日十九時半、ふたり、ウエノでお願いいたします。失礼いたします。[END]' : 'ありがとうございます。それでは本日十九時、ふたり、ウエノでお願いいたします。失礼いたします。[END]';
     else     if (/満席|いっぱい/.test(u) && !/空いて|なら/.test(u)) out = '承知しました。近い時間で空いている時間はありますでしょうか。';
     else if (/二十時/.test(u)) out = 'はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日二十時、ふたりでよろしいでしょうか。[RECAP]';
     else if (/半|なら空いて|なら大丈夫/.test(u)) out = 'はい、ありがとうございます。日本のお客様で、お名前はウエノ様です。本日十九時半、ふたりでよろしいでしょうか。[RECAP]';

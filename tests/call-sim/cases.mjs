@@ -3,6 +3,7 @@ const T = (say, o = {}) => ({ say, ...o });
 // 店の返事の決め方：AIの言葉（line）を見て返す
 const flow = (o) => (line, i) => {
   if (i === 0) return o.greet;
+  if (/お電話よろしい/.test(line)) return o.greet2 || [];
   if (/恐れ入ります|大丈夫でしょうか/.test(line)) return o.reask;
   if (/[?？]|ますでしょうか|でしょうか/.test(line) && /十九時に|十九時、|19時/.test(line) && !/よろしい/.test(line)) return o.request;
   if (/空いている時間|近い時間|ほかに/.test(line)) return o.alt;
@@ -15,7 +16,7 @@ const cases = [
   ['あいさつの最中に「もしもし」→言い終わってすぐ「はい」', flow({ greet: [T('もしもし', { during: 500 }), T('はい', { after: 300 })], request: [T('はい、大丈夫です')], recap: [T('はい')] }), 'booked19'],
   ['あいさつ直後に「はい」（言い終わる直前）', flow({ greet: [T('はい', { during: 9000 })], request: [T('大丈夫ですよ')], recap: [T('はい')] }), 'booked19'],
   ['あいさつに「はい」が文字にならない', flow({ greet: [T('はい', { mode: 'untranscribed' })], request: [T('はい、大丈夫です')], recap: [T('はい')] }), 'booked19'],
-  ['あいさつのあとテレビが鳴り続ける（今日の社長の電話）', flow({ greet: [T('画面では', { during: 1000, dur: 1300 }), T('はい。画面ではアクセス許可です', { mode: 'stuck', partial: 'はい。画面ではアクセス許可です。今回は初めての人が', partialAt: 12000 })], request: [T('はい、大丈夫です')], recap: [T('はい')] }), 'booked19'],
+  ['あいさつのあとテレビが鳴り続ける（今日の社長の電話）', flow({ greet: [T('画面では', { during: 1000, dur: 1300 }), T('はい。画面ではアクセス許可です', { mode: 'stuck', partial: 'はい。画面ではアクセス許可です。今回は初めての人が', partialAt: 12000 })], greet2: [T('はい')], request: [T('はい、大丈夫です')], recap: [T('はい')] }), 'booked19'],
   ['満席→19時半→はい', flow({ greet: [T('はい')], request: [T('十九時は満席です')], alt: [T('十九時半なら空いてます')], recap: [T('はい')] }), 'booked1930'],
   ['満席が文字にならない（無言）→聞き直し→満席', flow({ greet: [T('はい')], request: [T('', { mode: 'silent' })], reask: [T('十九時は満席です')], alt: [T('十九時半なら空いてます')], recap: [T('はい')] }), 'booked1930'],
   ['満席が長い声で文字にならない→聞き直し→満席', flow({ greet: [T('はい')], request: [T('十九時は満席です', { mode: 'untranscribed', dur: 2000 })], reask: [T('十九時は満席です')], alt: [T('十九時半なら空いてます')], recap: [T('はい')] }), 'booked1930'],
@@ -31,6 +32,8 @@ const cases = [
   ['AIが確認のしるしを付け忘れる→はい、大丈夫です', flow({ greet: [T('はい')], request: [T('はい、大丈夫です')], recap: [T('はい、大丈夫です')], noMark: true }), 'booked19'],
   ['「少々お待ちください」がAIの話にかぶる→大丈夫', (line, i) => i === 0 ? [T('はい')] : i === 1 ? [T('少々お待ちください', { during: 5000 }), T('お待たせしました、大丈夫です', { after: 6000 })] : /よろしい/.test(line) ? [T('はい')] : [], 'booked19'],
   ['満席→「二十時やったら大丈夫」→大丈夫（社長の電話）', flow({ greet: [T('はい')], request: [T('十九時は満席です')], alt: [T('二十時やったら大丈夫です')], recap: [T('大丈夫です')] }), 'booked'],
+  ['あいさつに返事なし→もう一度聞く→はい', flow({ greet: [], greet2: [T('はい')], request: [T('はい、大丈夫です')], recap: [T('はい')] }), 'booked19'],
+  ['あいさつに最後まで返事なし→かけ直すと言って切る', flow({ greet: [], greet2: [] }), 'noanswer'],
   ['予約は受けていない', flow({ greet: [T('はい')], request: [T('うちは予約は受けてないんです')] }), 'declined'],
 ];
 let ok = 0;
@@ -39,14 +42,16 @@ for (const [name, shop, want] of cases) {
   const r = await run(name, shop);
   const ai = r.lines.filter(l => l[0] === 'AI').map(l => l[1]);
   const last = ai.join(' ');
-  const recapLine = ai.slice(1).find(l => /よろしいでしょうか/.test(l)) || '';
+  const recapLine = ai.slice(1).find(l => /よろしいでしょうか/.test(l) && !/お電話よろしい/.test(l)) || '';
   let pass = r.ended && r.maxGap <= 10;
   if (want === 'booked19') pass &&= /十九時、ふたり/.test(recapLine) && !/半/.test(recapLine);
   if (want === 'booked1930') pass &&= /十九時半/.test(recapLine) && /空いている時間|近い時間/.test(last);
   if (/少々/.test(name)) pass &&= !ai.some(l => /恐れ入ります/.test(l)) && ai.some(l => /^はい、お願いします/.test(l)) && ai.findIndex(l => /^はい、お願いします/.test(l)) < ai.findIndex((l, k) => k > 0 && /よろしいでしょうか/.test(l));
-  pass &&= ai.slice(1).filter(l => /よろしいでしょうか/.test(l)).length <= 1; // 確認は1回だけ
+  pass &&= ai.slice(1).filter(l => /よろしいでしょうか/.test(l) && !/お電話よろしい/.test(l)).length <= 1; // 確認は1回だけ
   if (/booked/.test(want)) pass &&= /それでは本日/.test(ai[ai.length - 1] || ''); // 締めで決まった内容を言ってから切る
   if (want === 'declined') pass &&= !recapLine;
+  if (/あいさつに/.test(name) && /返事なし/.test(name)) pass &&= ai.length > 1 && /お電話よろしい/.test(ai[1]) && !ai.slice(0, 2).some(l => /ご予約をお願い/.test(l));
+  if (want === 'noanswer') pass &&= !ai.some(l => /ご予約をお願い/.test(l)) && /かけ直/.test(ai[ai.length - 1] || '');
   if (pass) ok++;
   console.log((pass ? '○' : '×') + ' ' + name + `（${r.secs}秒・いちばん長い間 ${r.maxGap}秒${r.ended ? '' : '・終わらない'}）`);
   if (!pass) for (const l of r.lines) console.log('     ', l[0], l[1]);
