@@ -201,6 +201,7 @@ const NAME_HOW = {
 };
 
 // 電話で話すAIへの指示
+const JA_PEOPLE = { 1: 'ひとり', 2: 'ふたり', 3: 'さんにん', 4: 'よにん', 5: 'ごにん', 6: 'ろくにん', 7: 'ななにん', 8: 'はちにん', 9: 'きゅうにん', 10: 'じゅうにん' };
 export function callSystemPrompt({ lang, placeName, request }) {
   const d = new Date(request.date + 'T00:00:00Z');
   const wd = WEEK[d.getUTCDay()];
@@ -215,7 +216,7 @@ Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. Star
 The reservation the traveler wants:
 - Date: ${rel ? `it is ${rel.toUpperCase()} for the shop — first say "${rel}" in the local language (only that word; never say any other day word such as tomorrow), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${request.time}
-- Number of people: ${request.people}
+- Number of people: ${request.people}${lang === 'ja-JP' ? ` — in Japanese always write it in hiragana as "${JA_PEOPLE[request.people] || request.people + 'にん'}" (never write 名 or 二名: it is misread aloud)` : ''}
 - Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese (for example 「是日本客人，訂位的名字是Ueno先生」 / 「일본 손님이고, 예약 이름은 우에노 상입니다」). Always use it with the polite title given here, in a natural sentence (for Chinese: 訂位的名字是…; never "姓氏是…先生"), and never mix in English words like "name". ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
 
 Other details from the traveler (use only when relevant):
@@ -225,7 +226,7 @@ Other details from the traveler (use only when relevant):
 
 How to run the call (follow these steps exactly):
 1. REQUEST: in one short sentence, ask if you can book for the date, time and number of people above. Say them clearly.
-2. If they agree (any yes, or they ask for the name): in that SAME reply say that the guest is Japanese, give the name once, and ask one very short recap question like "明天七點，兩位，Ueno先生，對嗎？". End this reply with the marker [RECAP]. Do this recap only once in the whole call.
+2. If they agree (any yes, or they ask for the name): in that SAME reply say that the guest is Japanese, give the name once, and ask one very short recap question with the date word, the time, the number of people and the name, like "明天七點，兩位，Ueno先生，對嗎？". If the time or date changed during the call (for example the shop offered 19:30 instead), the recap MUST say the NEW time. Never leave out the time. End this reply with the marker [RECAP]. Do this recap only once in the whole call.
    - If the shop has ALREADY repeated the date, time, people and name back to you, that is the confirmation: skip the recap and go to step 4.
 3. If the requested time is not available: ask once what nearby time they have THAT SAME DAY. Accept it only if it fits the time flexibility; then do step 2 with the new time. If nothing fits, or the shop is closed or fully booked that day, or does not take reservations, thank them, say goodbye and end with [END].
    - NEVER change the date and never ask about or book another day (do not even ask which days they are open). If the shop is closed that day, just thank them and end. NEVER change the number of people. The traveler only wants this date.

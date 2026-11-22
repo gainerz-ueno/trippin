@@ -295,7 +295,8 @@ export class CallSession {
     this.turnHandled = true;
     const meaningful = NEG.test(said) || ASKING.test(said) || TIMEISH.test(said);
     // AIの話にかぶって始まり、3秒以上続いた声：お店の返事ではなくテレビ・周りの声とみなす（2026-11-21 社長の電話：テレビの「…何にそれを使うんですか」にAIが答えて、社長の返事にかぶった）
-    if (this.greeted && this.stage !== 'greeting' && this.startedOverAgent() && (this.shopOffAt || Date.now()) - (this.shopOnAt || 0) > 3000 && !NEG.test(said)) {
+    const tail = said.slice(-20); // 長い声の最後にお店の答えがつながっていることがある（2026-11-22 社長の電話：テレビの話の最後に「十九時半は空いてます」）
+    if (this.greeted && this.stage !== 'greeting' && this.startedOverAgent() && (this.shopOffAt || Date.now()) - (this.shopOnAt || 0) > 3000 && !NEG.test(said) && !TIMEISH.test(tail) && !ASKING.test(tail) && !/空|あい|大丈夫|いけ|ok|可以|好|되|가능/i.test(tail)) {
       this.transcript.push({ who: 'shop', text: `（周りの音：${said}）` });
       return;
     }
@@ -336,7 +337,7 @@ export class CallSession {
       this.reply(`${said}\n(Treat this as YES to your request. Go straight to step 2: say the guest is Japanese, give the name once, and ask the one short recap question with [RECAP]. Do not repeat your request.)`);
       return;
     }
-    if (said.replace(/[\s,.，。、!！?？~～-]/g, '').length > 40) {
+    if (said.replace(/[\s,.，。、!！?？~～-]/g, '').length > 25) {
       // 長い文字：テレビ・周りの声とお店の返事が1つにつながって届いた（2026-11-22 社長の電話：テレビの話の最後に「十九時は満席です」がつながり、AIが聞き直していた）
       this.reply(`${said}\n(This transcript is long because TV or other people's voices got mixed in with the staff's words. Ignore everything that is not about this booking. Find the staff's actual answer (usually at the end — for example fully booked, a different time, yes or no) and respond to that answer only. Do not ask them to repeat if a clear answer is in it.)`);
       return;
