@@ -52,7 +52,7 @@ export async function service(path, { method = 'GET', body } = {}) {
   if (!key) return { ok: false, status: 503 };
   const r = await fetch(`${SUPABASE_URL}${path}`, {
     method,
-    headers: { apikey: key, Authorization: `Bearer ${key}`, 'content-type': 'application/json', ...(/\/rpc\//.test(path) ? {} : { Prefer: 'return=minimal' }) },
+    headers: { apikey: key, ...(key.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${key}` }), 'content-type': 'application/json', ...(/\/rpc\//.test(path) ? {} : { Prefer: 'return=minimal' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: 'no-store',
     signal: AbortSignal.timeout(10000),
