@@ -18,6 +18,7 @@ import { hasConsented, recordConsent, notify, logEvent, supa, setUser as setClou
 import PlanView, { dayStops, dayLabel } from './PlanView';
 import SouvenirPanel from './Souvenirs';
 import FxPanel from './FxPanel';
+import Points from './Points';
 import { distanceKm } from './lib/geo';
 import { BASE_CATS, CUSTOM_COLOR, allCats, cleanCustomCats } from './lib/cats.mjs';
 import { UNSORTED, isLegacyFolder, migrateItems, migrateFolderList, migrateSouvenirs, migrateKeyed, removeFolder } from './lib/migrate.mjs';
@@ -1564,6 +1565,7 @@ export default function Home() {
       <header className="apphead">
         <h1 className="logo"><img src="/logo.png" alt="Tabibi" width="720" height="168" /></h1>
         <span className="head-btns">
+          <Points user={user} onSignIn={() => signIn()} />
           {user
             ? <button type="button" className="login-btn" onClick={() => signOut()}><IcUser size={16} />ログアウト</button>
             : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}

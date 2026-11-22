@@ -1,6 +1,7 @@
 // お店の詳細（Google Places API (New) Place Details）
 import { KEY } from '../../lib/places';
 import { gfetch, friendly } from '../../lib/gfetch';
+import { spend, refund } from '../../lib/points';
 
 const FIELDS = [
   'id',
@@ -57,6 +58,9 @@ export async function GET(req) {
   if (id.length > 300 || !/^[A-Za-z0-9_-]+$/.test(id)) return Response.json({ error: 'お店の指定が正しくありません' }, { status: 400 });
   if (!KEY()) return Response.json({ error: '詳細の設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
 
+  // ポイント：口コミを見るときだけ1pt（2026-11-22 社長決定）。失敗したら戻す
+  let paid = null;
+  if (onlyReviews) { paid = await spend(req, 'reviews'); if (!paid.ok) return paid.res; }
   try {
     const res = await gfetch(`https://places.googleapis.com/v1/places/${id}?languageCode=ja`, {
       headers: { 'X-Goog-Api-Key': KEY(), 'X-Goog-FieldMask': onlyReviews ? REVIEWS : lite ? LITE : FIELDS },
@@ -95,6 +99,7 @@ export async function GET(req) {
       mapsUrl: p.googleMapsUri || '',
     });
   } catch (e) {
+    await refund(paid);
     return Response.json({ error: friendly(e, '詳細を取得できませんでした') }, { status: 502 });
   }
 }

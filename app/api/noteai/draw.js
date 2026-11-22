@@ -437,16 +437,17 @@ async function run(req, job) {
     if (!o.ok) return json({ error: 'AIがうまく描けませんでした。もう一度試してください' }, 502);
     return new Response(o.jpg, { headers: imgHeaders(o) });
   }
-  const r = await rpc('use_ai_credit', token);
+  // ポイント：1枚3pt（2026-11-22 社長決定。前は1日3回まで無料）
+  const r = await rpc('points_spend', token, { kind: 'image' });
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);
   const ticket = await r.json();
-  if (!ticket) return json({ error: '「AIで作る」は1日3回までです（直すときも1回に数えます）。また明日使ってください', quota: true }, 429);
+  if (!ticket) return json({ error: 'ポイントが足りません（AIで画像を作るのは1回3ポイント。直すときも1回に数えます）。ポイントを買ってから、もう一度試してください', quota: true, needPoints: true }, 402);
 
   const out = await make(MODEL_FREE());
   if (!out.ok) {
-    await rpc('refund_ai_credit', token, { ticket }).catch(() => {});
-    return json({ error: 'AIがうまく描けませんでした。もう一度試してください（回数は減っていません）' }, 502);
+    await rpc('points_refund', token, { ticket }).catch(() => {});
+    return json({ error: 'AIがうまく描けませんでした。もう一度試してください（ポイントは減っていません）' }, 502);
   }
   return new Response(out.jpg, { headers: imgHeaders(out) });
 }
