@@ -356,7 +356,7 @@ export class CallSession {
       // 確認はもう言った：はっきり「違う/できない」か質問でなければ、確認が取れたとしてお礼を言って切る（AIに聞き直させない）
       // 時間・数の入った返事（「いえ、十九時半です」等）は訂正かもしれないので、AIに渡して確かめさせる（2026-11-22 の通し試験で見つけた）
       if (!NEG.test(said) && !ASKING.test(said) && !TIMEISH.test(said) && !/いえ|違|ちが|じゃなく|ではなく/.test(said)) { this.finishThanks(); return; }
-      this.reply(`${said}\n(You have ALREADY asked the recap. Do not repeat the recap or ask again. If this is the shop clearly saying something is wrong, fix only that in one short phrase. If it is a question, answer it in one short sentence and then thank them and say goodbye with [END]. If it does not make sense as the shop's answer, reply only [IGNORE].)`);
+      this.reply(`${said}\n(You have ALREADY asked the recap. Do not repeat the recap or ask again. If this is the shop clearly saying something is wrong, fix only that in one short phrase, then end the call the same way (thank them, state the corrected booking once, goodbye, [END]). If it is a question, answer it in one short sentence. Then end the call: thank them, state the agreed booking once as the final arrangement (for Japanese: 「それでは本日十九時半、ふたり、ウエノでお願いいたします。失礼いたします。」 with the agreed time) and add [END]. If it does not make sense as the shop's answer, reply only [IGNORE].)`);
       return;
     }
     if (HOLD.test(said) && !NEG.test(said) && !TIMEISH.test(said)) {
@@ -381,6 +381,13 @@ export class CallSession {
   // 確認が取れた：決まったお礼を言って切る（AIに作らせない）
   finishThanks() {
     if (this.busy) this.busy.abort();
+    // 締めのあいさつ：決まったお礼だけだと素っ気なく、すぐ切っていた（2026-11-22 社長「最後の終わり方がちょっと」）。
+    // 決まった予約の内容（時間・人数）を1回だけ言ってお礼し、[END] で切る。AIが変なことを言っても、この返事のあとは必ず切る
+    if (!this.closing) {
+      this.closing = true;
+      this.reply('(The booking is agreed. Say a warm, natural closing in ONE or TWO short sentences: thank them, state the agreed booking once (date word, time, number of people, name) as the final arrangement — not as a question — and say goodbye politely. For Japanese, exactly this shape: 「ありがとうございます。それでは本日二十時、ふたり、ウエノでお願いいたします。失礼いたします。」 End with [END]. Do not ask anything.)');
+      return;
+    }
     const t = THANKS[this.brief.lang] || THANKS['en-US'];
     this.send({ type: 'text', token: t, last: true });
     this.history.push({ role: 'assistant', content: t });
@@ -432,7 +439,7 @@ export class CallSession {
       this.armWait();
       return;
     }
-    const done = text.includes(END);
+    const done = text.includes(END) || (this.closing && !!text.replace(IGNORE, '').trim()); // 締めのあいさつのあとは必ず切る
     // 最後の確認のしるし：[RECAP] を付け忘れても、名前を言って問いで終わっていれば確認とみなす（2026-11-22 電話テスト：付け忘れて、お店の「はい、大丈夫です」のあとに確認をもう一度言っていた）
     const nm = String(this.brief.request?.name || '');
     const saysName = nm && (text.toLowerCase().includes(nm.toLowerCase()) || text.includes(romajiToKana(nm)));

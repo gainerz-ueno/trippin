@@ -30,6 +30,7 @@ const cases = [
   ['満席→「二十時なら」→はい', flow({ greet: [T('はい')], request: [T('十九時は満席です')], alt: [T('二十時なら空いてます')], recap: [T('はい')] }), 'any'],
   ['AIが確認のしるしを付け忘れる→はい、大丈夫です', flow({ greet: [T('はい')], request: [T('はい、大丈夫です')], recap: [T('はい、大丈夫です')], noMark: true }), 'booked19'],
   ['「少々お待ちください」がAIの話にかぶる→大丈夫', (line, i) => i === 0 ? [T('はい')] : i === 1 ? [T('少々お待ちください', { during: 5000 }), T('お待たせしました、大丈夫です', { after: 6000 })] : /よろしい/.test(line) ? [T('はい')] : [], 'booked19'],
+  ['満席→「二十時やったら大丈夫」→大丈夫（社長の電話）', flow({ greet: [T('はい')], request: [T('十九時は満席です')], alt: [T('二十時やったら大丈夫です')], recap: [T('大丈夫です')] }), 'booked'],
   ['予約は受けていない', flow({ greet: [T('はい')], request: [T('うちは予約は受けてないんです')] }), 'declined'],
 ];
 let ok = 0;
@@ -44,6 +45,7 @@ for (const [name, shop, want] of cases) {
   if (want === 'booked1930') pass &&= /十九時半/.test(recapLine) && /空いている時間|近い時間/.test(last);
   if (/少々/.test(name)) pass &&= !ai.some(l => /恐れ入ります/.test(l)) && ai.some(l => /^はい、お願いします/.test(l)) && ai.findIndex(l => /^はい、お願いします/.test(l)) < ai.findIndex((l, k) => k > 0 && /よろしいでしょうか/.test(l));
   pass &&= ai.slice(1).filter(l => /よろしいでしょうか/.test(l)).length <= 1; // 確認は1回だけ
+  if (/booked/.test(want)) pass &&= /それでは本日/.test(ai[ai.length - 1] || ''); // 締めで決まった内容を言ってから切る
   if (want === 'declined') pass &&= !recapLine;
   if (pass) ok++;
   console.log((pass ? '○' : '×') + ' ' + name + `（${r.secs}秒・いちばん長い間 ${r.maxGap}秒${r.ended ? '' : '・終わらない'}）`);
