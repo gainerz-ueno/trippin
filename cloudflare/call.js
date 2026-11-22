@@ -336,6 +336,11 @@ export class CallSession {
       this.reply(`${said}\n(Treat this as YES to your request. Go straight to step 2: say the guest is Japanese, give the name once, and ask the one short recap question with [RECAP]. Do not repeat your request.)`);
       return;
     }
+    if (said.replace(/[\s,.，。、!！?？~～-]/g, '').length > 40) {
+      // 長い文字：テレビ・周りの声とお店の返事が1つにつながって届いた（2026-11-22 社長の電話：テレビの話の最後に「十九時は満席です」がつながり、AIが聞き直していた）
+      this.reply(`${said}\n(This transcript is long because TV or other people's voices got mixed in with the staff's words. Ignore everything that is not about this booking. Find the staff's actual answer (usually at the end — for example fully booked, a different time, yes or no) and respond to that answer only. Do not ask them to repeat if a clear answer is in it.)`);
+      return;
+    }
     this.reply(said);
   }
 
