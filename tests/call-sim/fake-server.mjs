@@ -29,6 +29,7 @@ export async function* claudeStream(env, { messages }) {
     else if (/大丈夫|はい|どうぞ|いいですよ|かしこまり/.test(u)) out = asst.includes('RECAP_DONE') ? 'ありがとうございます。[END]' : 'はい、ありがとうございます。日本のお客様で、お名前はウエノさんです。本日十九時、ふたりでよろしいでしょうか。[RECAP]';
     else out = '[IGNORE]';
   }
+  if (globalThis.NO_RECAP_MARK) out = out.replace('[RECAP]', '');
   await new Promise(r => setTimeout(r, 400)); // AIが考える時間
   yield out;
 }

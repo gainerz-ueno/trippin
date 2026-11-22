@@ -28,10 +28,13 @@ const cases = [
   ['用件に「何名様ですか？」→ふたり→大丈夫', (line, i) => i === 0 ? [T('はい')] : i === 1 ? [T('何名様ですか？')] : /ふたり/.test(line) && !/よろしい/.test(line) ? [T('はい、大丈夫です')] : /よろしい/.test(line) ? [T('はい')] : [], 'booked19'],
   ['用件に「少々お待ちください」→5秒→大丈夫', (line, i) => i === 0 ? [T('はい')] : i === 1 ? [T('少々お待ちください'), T('お待たせしました、大丈夫です', { after: 6000 })] : /よろしい/.test(line) ? [T('はい')] : [], 'booked19'],
   ['満席→「二十時なら」→はい', flow({ greet: [T('はい')], request: [T('十九時は満席です')], alt: [T('二十時なら空いてます')], recap: [T('はい')] }), 'any'],
+  ['AIが確認のしるしを付け忘れる→はい、大丈夫です', flow({ greet: [T('はい')], request: [T('はい、大丈夫です')], recap: [T('はい、大丈夫です')], noMark: true }), 'booked19'],
+  ['「少々お待ちください」がAIの話にかぶる→大丈夫', (line, i) => i === 0 ? [T('はい')] : i === 1 ? [T('少々お待ちください', { during: 5000 }), T('お待たせしました、大丈夫です', { after: 6000 })] : /よろしい/.test(line) ? [T('はい')] : [], 'booked19'],
   ['予約は受けていない', flow({ greet: [T('はい')], request: [T('うちは予約は受けてないんです')] }), 'declined'],
 ];
 let ok = 0;
 for (const [name, shop, want] of cases) {
+  globalThis.NO_RECAP_MARK = /付け忘れ/.test(name);
   const r = await run(name, shop);
   const ai = r.lines.filter(l => l[0] === 'AI').map(l => l[1]);
   const last = ai.join(' ');
@@ -40,6 +43,7 @@ for (const [name, shop, want] of cases) {
   if (want === 'booked19') pass &&= /十九時、ふたり/.test(recapLine) && !/半/.test(recapLine);
   if (want === 'booked1930') pass &&= /十九時半/.test(recapLine) && /空いている時間|近い時間/.test(last);
   if (/少々/.test(name)) pass &&= ai.some(l => /^はい、お願いします/.test(l)) && ai.findIndex(l => /^はい、お願いします/.test(l)) < ai.findIndex((l, k) => k > 0 && /よろしいでしょうか/.test(l));
+  pass &&= ai.slice(1).filter(l => /よろしいでしょうか/.test(l)).length <= 1; // 確認は1回だけ
   if (want === 'declined') pass &&= !recapLine;
   if (pass) ok++;
   console.log((pass ? '○' : '×') + ' ' + name + `（${r.secs}秒・いちばん長い間 ${r.maxGap}秒${r.ended ? '' : '・終わらない'}）`);

@@ -2,7 +2,7 @@
 // ・/call/ws     … お店が話したこと（文字）が届く → Claude が現地語で返事 → Twilio が読み上げる
 // ・/call/status … Twilio から「呼び出し中・出た・切れた・出なかった」が届く
 // どちらも、電話を始めたときに作った合言葉（k）が合うときだけ動く。サイトのパスワードはかけない（Twilio が来るため）
-import { CALL_BLOCK_SEC, GREETING, GOODBYE, THANKS, callSystemPrompt, summaryPrompt } from '../app/lib/call.js';
+import { CALL_BLOCK_SEC, GREETING, GOODBYE, THANKS, callSystemPrompt, summaryPrompt, romajiToKana } from '../app/lib/call.js';
 import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from '../app/lib/call-server.js';
 
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
@@ -317,7 +317,7 @@ export class CallSession {
       return;
     }
     this.turnHandled = true;
-    const meaningful = NEG.test(said) || ASKING.test(said) || TIMEISH.test(said);
+    const meaningful = NEG.test(said) || ASKING.test(said) || TIMEISH.test(said) || HOLD.test(said);
     // AIの話にかぶって始まり、3秒以上続いた声：お店の返事ではなくテレビ・周りの声とみなす（2026-11-21 社長の電話：テレビの「…何にそれを使うんですか」にAIが答えて、社長の返事にかぶった）
     const tail = said.slice(-20); // 長い声の最後にお店の答えがつながっていることがある（2026-11-22 社長の電話：テレビの話の最後に「十九時半は空いてます」）
     if (this.greeted && this.stage !== 'greeting' && this.startedOverAgent() && (this.shopOffAt || Date.now()) - (this.shopOnAt || 0) > 3000 && !NEG.test(said) && !TIMEISH.test(tail) && !ASKING.test(tail) && !/空|あい|大丈夫|いけ|ok|可以|好|되|가능/i.test(tail)) {
@@ -433,7 +433,10 @@ export class CallSession {
       return;
     }
     const done = text.includes(END);
-    const recap = text.includes(RECAP);
+    // 最後の確認のしるし：[RECAP] を付け忘れても、名前を言って問いで終わっていれば確認とみなす（2026-11-22 電話テスト：付け忘れて、お店の「はい、大丈夫です」のあとに確認をもう一度言っていた）
+    const nm = String(this.brief.request?.name || '');
+    const saysName = nm && (text.toLowerCase().includes(nm.toLowerCase()) || text.includes(romajiToKana(nm)));
+    const recap = text.includes(RECAP) || (this.stage === 'talk' && saysName && /[?？]|でしょうか|ですか|嗎|吗|對嗎|对吗|까요|니까|죠|correct|right/.test(text.slice(-30)));
     let spoken = text.replace(END, '').replace(RECAP, '').replace(IGNORE, '').replace(/\[[^\]]*\]?$/, '').trim();
     // [END] だけで何も言わなかったとき：決まったお礼を言ってから切る
     if (done && !spoken) spoken = THANKS[this.brief.lang] || THANKS['en-US'];
