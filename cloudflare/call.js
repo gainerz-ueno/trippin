@@ -154,6 +154,7 @@ export class CallSession {
         // あいさつを言い終えた：言い終わりの直前（2.5秒以内）に返事があれば、それを返事として進む。なければ返事を待つ
         if (this.stage === 'greeting' && this.greetHeard && Date.now() - this.greetHeard.at < 2500 && !this.shopTalking) {
           const g = this.greetHeard.said; this.greetHeard = null;
+          if (this.greetHold(g)) return;
           this.stage = 'talk';
           this.reply(`${g}\n(You already finished your introduction. If they only said hello or yes, do not introduce yourself again; go straight to the booking request.)`);
           return;
@@ -309,6 +310,15 @@ export class CallSession {
     this.reply(`(The shop answered with something short that could not be transcribed — almost certainly a short yes such as OK / 好 / 네 / はい. Treat it as YES and move on to the next step${wasGreeting ? ' (the booking request)' : ''}. Do not ask whether they can hear you.)`);
   }
 
+  // あいさつ（今お電話よろしいでしょうか）に「ちょっと待ってください」：待つと答えて、戻るまで（最大30秒）用件を言わずに待つ
+  // 2026-11-22 社長の電話：あいさつのあとの「ちょっと待ってください」に「承知しました」と言ってすぐ用件を話し始めた
+  greetHold(said) {
+    if (!HOLD.test(said) || NEG.test(said) || TIMEISH.test(said)) return false;
+    this.holding = true;
+    this.reply(`${said}\n(They asked you to wait before you have said what you want. Reply only with a very short "Sure, I'll wait" in the local language (for Japanese: はい、お待ちしております。). Then wait silently. Do NOT say the booking request yet; you will say it when they come back.)`);
+    return true;
+  }
+
   // お店の言葉（文字）が届いた
   onShop(said) {
     this.snapBefore = { stage: this.stage, silent: this.silentCount || 0 }; // 周りの音だったときに戻すため
@@ -354,6 +364,7 @@ export class CallSession {
       // 2026-11-21 社長の電話：あいさつの途中の「こんにちは」を返事とみなし、あいさつの直後に間を空けずに用件を話し始めていた
       // （言い終わりの直前に重なった返事は、言い終えた時に使う）
       if (this.agentSpeaking || this.busy) { this.greetHeard = { said, at: Date.now() }; return; }
+      if (this.greetHold(said)) return;
       this.stage = 'talk';
       this.reply(`${said}\n(You already finished your introduction. If they only said hello or yes, do not introduce yourself again; go straight to the booking request.)`);
       return;

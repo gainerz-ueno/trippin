@@ -10,6 +10,7 @@ export async function* claudeStream(env, { messages }) {
   const f = globalThis.FAKE_LLM;
   if (f) out = f(u, asst, messages);
   if (out === undefined && /The booking is agreed/.test(u)) { const t = /二十時/.test(asst) ? '二十時' : /十九時半/.test(asst) ? '十九時半' : '十九時'; out = `ありがとうございます。それでは本日${t}、ふたり、ウエノでお願いいたします。失礼いたします。[END]`; }
+  if (out === undefined && /They asked you to wait before/.test(u)) out = 'はい、お待ちしております。';
   if (out === undefined && /They asked you to wait/.test(u)) out = 'はい、お願いします。';
   if (out === undefined) {
     if (/No answer was heard after your introduction/.test(u)) out = 'もしもし、今お電話よろしいでしょうか。';

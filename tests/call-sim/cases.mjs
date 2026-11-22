@@ -34,6 +34,7 @@ const cases = [
   ['満席→「二十時やったら大丈夫」→大丈夫（社長の電話）', flow({ greet: [T('はい')], request: [T('十九時は満席です')], alt: [T('二十時やったら大丈夫です')], recap: [T('大丈夫です')] }), 'booked'],
   ['あいさつに返事なし→もう一度聞く→はい', flow({ greet: [], greet2: [T('はい')], request: [T('はい、大丈夫です')], recap: [T('はい')] }), 'booked19'],
   ['あいさつに最後まで返事なし→かけ直すと言って切る', flow({ greet: [], greet2: [] }), 'noanswer'],
+  ['あいさつに「ちょっと待ってください」→待つ→はい、どうぞ（社長の電話）', (line, i) => i === 0 ? [T('もしもし', { during: 500 }), T('ちょっと待ってください', { after: 400 }), T('はい、どうぞ', { after: 8000 })] : /お願いできますでしょうか/.test(line) ? [T('はい、大丈夫です')] : /よろしいでしょうか/.test(line) && !/お電話/.test(line) ? [T('はい')] : [], 'booked19'],
   ['予約は受けていない', flow({ greet: [T('はい')], request: [T('うちは予約は受けてないんです')] }), 'declined'],
 ];
 let ok = 0;
@@ -50,6 +51,7 @@ for (const [name, shop, want] of cases) {
   pass &&= ai.slice(1).filter(l => /よろしいでしょうか/.test(l) && !/お電話よろしい/.test(l)).length <= 1; // 確認は1回だけ
   if (/booked/.test(want)) pass &&= /それでは本日/.test(ai[ai.length - 1] || ''); // 締めで決まった内容を言ってから切る
   if (want === 'declined') pass &&= !recapLine;
+  if (/ちょっと待って/.test(name)) pass &&= /お待ちしております/.test(ai[1] || '') && !/予約/.test(ai[1] || '');
   if (/あいさつに/.test(name) && /返事なし/.test(name)) pass &&= ai.length > 1 && /お電話よろしい/.test(ai[1]) && !ai.slice(0, 2).some(l => /ご予約をお願い/.test(l));
   if (want === 'noanswer') pass &&= !ai.some(l => /ご予約をお願い/.test(l)) && /かけ直/.test(ai[ai.length - 1] || '');
   if (pass) ok++;
