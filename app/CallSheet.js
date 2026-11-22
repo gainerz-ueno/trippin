@@ -87,7 +87,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
     let gender = 'm', callback = '';
     try { name = localStorage.getItem(NAME_KEY) || ''; gender = localStorage.getItem(NAME_KEY + '.g') || 'm'; callback = localStorage.getItem(NAME_KEY + '.tel') || ''; } catch {}
     const L = langOfPhone(toE164(place.phone));
-    return { date: todayLocal(), time: '19:00', people: 2, name, gender, callback, flex: '', note: '', alt2d: '', alt2t: '', alt3d: '', alt3t: '', testPhone: '', testLang: L && !L.testOnly ? L.lang : 'ko-KR' };
+    return { date: todayLocal(), time: '19:00', people: 2, name, gender, callback, flex: '', note: '', timeTo: '20:00', alt2d: '', alt2t: '', alt2to: '', alt2p: 2, alt3d: '', alt3t: '', alt3to: '', alt3p: 2, testPhone: '', testLang: L && !L.testOnly ? L.lang : 'ko-KR' };
   });
   const [sending, setSending] = useState(false);
   const [call, setCall] = useState(null);
@@ -120,7 +120,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
     setSending(true);
     try {
       try { localStorage.setItem(NAME_KEY, form.name.trim()); localStorage.setItem(NAME_KEY + '.g', form.gender); localStorage.setItem(NAME_KEY + '.tel', form.callback.trim()); } catch {}
-      const request = { date: form.date, time: form.time, people: Number(form.people), name: form.name.trim(), gender: form.gender, callback: form.callback.trim(), flex: form.flex.trim(), note: form.note.trim(), alts: [[form.alt2d, form.alt2t], [form.alt3d, form.alt3t]].filter(([d, t]) => d && t).map(([d, t]) => ({ date: d, time: t })) };
+      const request = { date: form.date, time: form.time, timeTo: form.timeTo > form.time ? form.timeTo : '', people: Number(form.people), name: form.name.trim(), gender: form.gender, callback: form.callback.trim(), flex: form.flex.trim(), note: form.note.trim(), alts: [[form.alt2d, form.alt2t, form.alt2to, form.alt2p], [form.alt3d, form.alt3t, form.alt3to, form.alt3p]].filter(([d, t]) => d && t).map(([d, t, to, p]) => ({ date: d, time: t, timeTo: to > t ? to : '', people: Number(p) })) };
       const body = { placeId: place.placeId, placeName: place.altName || place.name, request };
       if (me?.owner && form.testPhone.trim()) { body.testPhone = form.testPhone.trim(); body.testLang = form.testLang; }
       const d = await callApi('/api/call', { method: 'POST', body: JSON.stringify(body) });
@@ -160,18 +160,20 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
               <p className="hint">回数券が残っていません。回数券の購入はただいま準備中です。</p>
             ) : (
               <div className="call-form">
-                <label className="cand-d">第1候補の日にち<input type="date" value={form.date} min={todayLocal()} onChange={set('date')} /></label>
-                <label>第1候補の時間<input type="time" value={form.time} step="900" onChange={set('time')} /></label>
-                <label className="cand-d">第2候補の日にち（任意）<input type="date" value={form.alt2d} min={todayLocal()} onChange={(e) => setForm((f) => ({ ...f, alt2d: e.target.value, alt2t: f.alt2t || f.time }))} /></label>
-                <label>第2候補の時間<input type="time" value={form.alt2t} step="900" onChange={set('alt2t')} /></label>
-                <label className="cand-d">第3候補の日にち（任意）<input type="date" value={form.alt3d} min={todayLocal()} onChange={(e) => setForm((f) => ({ ...f, alt3d: e.target.value, alt3t: f.alt3t || f.time }))} /></label>
-                <label>第3候補の時間<input type="time" value={form.alt3t} step="900" onChange={set('alt3t')} /></label>
-                <p className="hint wide">1つ目が満席のときは、第2候補、第3候補の順にお店へ聞きます。</p>
-                <label>人数
-                  <select value={form.people} onChange={set('people')}>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}人</option>)}
-                  </select>
-                </label>
+                {[['', 'date', 'time', 'timeTo', 'people'], ['（任意）', 'alt2d', 'alt2t', 'alt2to', 'alt2p'], ['（任意）', 'alt3d', 'alt3t', 'alt3to', 'alt3p']].map(([opt, d, t, to, p], i) => (
+                  <fieldset key={d} className="wide call-cand">
+                    <legend>第{i + 1}候補{opt}</legend>
+                    <label className="wide">日にち<input type="date" value={form[d]} min={todayLocal()} onChange={i === 0 ? set(d) : (e) => setForm((f) => ({ ...f, [d]: e.target.value, [t]: f[t] || f.time, [to]: f[to] || f.timeTo, [p]: f[p] || f.people }))} /></label>
+                    <label>何時から<input type="time" value={form[t]} step="900" onChange={set(t)} /></label>
+                    <label>何時まで<input type="time" value={form[to]} step="900" onChange={set(to)} /></label>
+                    <label>人数
+                      <select value={form[p]} onChange={set(p)}>
+                        {Array.from({ length: 12 }, (_, n) => n + 1).map((n) => <option key={n} value={n}>{n}人</option>)}
+                      </select>
+                    </label>
+                  </fieldset>
+                ))}
+                <p className="hint wide">「何時から〜何時まで」の間で空いていれば予約します（ぴったりの時間だけなら「何時まで」を空けてください）。第1候補が無理なときは、第2候補、第3候補の順にお店へ聞きます。</p>
                 <label className="wide">予約の名前（ローマ字かカタカナ）<input value={form.name} maxLength={40} placeholder="例：UENO" onChange={set('name')} /></label>
                 <label>呼び方
                   <select value={form.gender} onChange={set('gender')}>
@@ -180,7 +182,6 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
                   </select>
                 </label>
                 <label className="wide">連絡先の電話番号（任意・お店に聞かれたときだけ伝えます）<input value={form.callback} maxLength={30} inputMode="tel" placeholder="例：+81 90-1234-5678" onChange={set('callback')} /></label>
-                <label className="wide">時間がずれてもいい範囲（任意）<input value={form.flex} maxLength={60} placeholder="例：18時〜20時ならOK" onChange={set('flex')} /></label>
                 <label className="wide">お店に伝えたいこと（任意）<input value={form.note} maxLength={120} placeholder="例：子ども1人います" onChange={set('note')} /></label>
                 {me?.owner && (
                   <fieldset className="wide call-test">
