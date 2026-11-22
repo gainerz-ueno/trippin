@@ -7,6 +7,8 @@ import { SUPABASE_URL, SUPABASE_KEY } from './supabase-public.js';
 export const CLAUDE_MODEL = 'claude-haiku-5-5';
 // 考える時間（thinking）を切る：Haiku 5.5 は初期値で考え、その分が max_tokens に数えられて返事が空・途中切れになっていた。電話は速さが大事（2026-11-21）
 const NO_THINKING = { type: 'disabled' };
+// Sonnet 等は「考えない」の指定の書き方が違う（disabled を受け付けない）
+const noThink = (model) => (/haiku/.test(model) ? NO_THINKING : { type: 'between_tools' });
 
 export function rpc(fn, body, token) {
   return fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
@@ -122,7 +124,7 @@ export async function claudeChat(env, { system, messages, maxTokens = 300 }) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: env.CALL_MODEL_OVERRIDE || CLAUDE_MODEL, max_tokens: maxTokens, system, messages, thinking: NO_THINKING }),
+    body: JSON.stringify({ model: env.CALL_MODEL_OVERRIDE || CLAUDE_MODEL, max_tokens: maxTokens, system, messages, thinking: noThink(env.CALL_MODEL_OVERRIDE || CLAUDE_MODEL) }),
     signal: AbortSignal.timeout(30000),
   });
   const d = await r.json().catch(() => ({}));
