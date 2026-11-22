@@ -1,6 +1,7 @@
 import { KEY, searchPage, fillTranslations, decodeToken, encodeToken, guessCountry } from '../../lib/places';
 import { str, num, latLng, country as countryOf, bad } from '../../lib/validate';
 import { friendly } from '../../lib/gfetch';
+import { spend, refund } from '../../lib/points';
 
 export const maxDuration = 30;
 
@@ -8,6 +9,7 @@ export async function POST(req) {
   if (!KEY()) {
     return Response.json({ error: '検索の設定がまだ終わっていません（運営者の設定待ち）' }, { status: 500 });
   }
+  let paid = null;
   try {
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== 'object') return bad('入力が正しくありません');
@@ -33,6 +35,10 @@ export async function POST(req) {
       return Response.json({ error: '国をえらんでから、さがしてください', needCountry: true }, { status: 400 });
     }
 
+    // ポイント：検索1回で2pt（2026-11-22 社長決定。ログイン必須）。失敗したら戻す
+    paid = await spend(req, 'search');
+    if (!paid.ok) return paid.res;
+
     // レビュー件数で絞るとき：1ページずつ取り、10件そろったら止める（自動で取るのは次の1ページまで＝最大2回）
     // 続きは「もっと見る」で同じように取る
     if (minReviews > 0) {
@@ -51,6 +57,7 @@ export async function POST(req) {
     const filled = await fillTranslations(places);
     return Response.json({ places: filled, nextPageToken: encodeToken(next), country });
   } catch (e) {
-    return Response.json({ error: friendly(e, '検索に失敗しました。少し待ってからもう一度試してください') }, { status: 502 });
+    await refund(paid);
+    return Response.json({ error: friendly(e, '検索に失敗しました。少し待ってからもう一度試してください（ポイントは減っていません）') }, { status: 502 });
   }
 }

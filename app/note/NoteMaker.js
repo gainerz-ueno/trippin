@@ -27,7 +27,7 @@ export function defaultNote(trip, items, unsorted) {
 }
 
 // AIで作るときの雰囲気の見本（テンプレートの背景の絵）
-const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1日3回まで）';
+const AI_NOTE = '写真と文字をAIがまとめて、1枚のイラストに描きます（1回3ポイント）';
 
 export const MAX_SV = 4; // eタビセツに入れるお土産の数（NoteCanvas の SouvenirBand が横4列の帯。note.css の .nt-sv-row）
 

@@ -108,7 +108,7 @@ export default function ChatFlow(props) {
     ui: () => (
       <div className="ac-modes">
         <button type="button" onClick={() => { setMode('tpl'); save({ mode: 'tpl' }); answer('mode', 'テンプレートで作る'); }}><b>テンプレートで作る</b><small>すぐできる・何枚でも</small></button>
-        <button type="button" onClick={() => { setMode('ai'); save({ mode: 'ai' }); answer('mode', 'AIで作る'); }}><b>AIで作る</b><small>写真と文字をAIがイラストに仕上げる（1日3回まで）</small></button>
+        <button type="button" onClick={() => { setMode('ai'); save({ mode: 'ai' }); answer('mode', 'AIで作る'); }}><b>AIで作る</b><small>写真と文字をAIがイラストに仕上げる（1回3ポイント）</small></button>
       </div>
     ),
   });

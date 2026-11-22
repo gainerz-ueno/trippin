@@ -13,12 +13,28 @@ export function jaError(e, fallback = 'うまくいきませんでした。も�
   return hasJa(m) ? m : fallback;
 }
 
+// ログインの印（ポイント制で、検索などはログインした人のポイントを使うため）
+async function authHeader() {
+  try {
+    const { supa } = await import('../cloud');
+    const { data } = await supa().auth.getSession();
+    const t = data.session?.access_token;
+    return t ? { Authorization: 'Bearer ' + t } : {};
+  } catch { return {}; }
+}
+
+// ポイントが足りない・ログインが要るときは、画面に知らせる（ポイントを買う画面・ログインの案内を出す）
+function tellApp(name) {
+  try { window.dispatchEvent(new CustomEvent(name)); } catch {}
+}
+
 export async function api(url, { method = 'GET', body, timeout = 20000, fallback, headers } = {}) {
   let res;
+  const auth = await authHeader();
   try {
     res = await fetch(url, {
       method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json', ...headers } : headers,
+      headers: body !== undefined ? { 'Content-Type': 'application/json', ...auth, ...headers } : { ...auth, ...headers },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(timeout),
     });
@@ -27,11 +43,14 @@ export async function api(url, { method = 'GET', body, timeout = 20000, fallback
   }
   const data = await res.json().catch(() => null);
   if (!res.ok || !data) {
+    if (res.status === 402 || data?.needPoints) { tellApp('tabibi:needpoints'); throw new Error(data?.error || 'ポイントが足りません'); }
+    if (data?.needLogin) { tellApp('tabibi:needlogin'); throw new Error(data.error || 'Googleでログインしてください'); }
     if (res.status === 401) throw new Error('ログインが切れました。ページを開き直して、パスワードを入れてください');
     if (res.status === 429) throw new Error(data?.error || '短い時間に使いすぎです。1分ほど待ってからもう一度試してください');
     if (res.status === 413) throw new Error('写真が大きすぎて送れませんでした。枚数を減らしてもう一度試してください');
     throw new Error(hasJa(data?.error) ? data.error : fallback || 'うまくいきませんでした。もう一度試してください');
   }
+  if (/^\/api\/(search|details\?.*reviews=1)/.test(url)) tellApp('tabibi:points'); // 残りを出し直す
   return data;
 }
 

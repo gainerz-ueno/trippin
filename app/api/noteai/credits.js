@@ -28,9 +28,9 @@ function mockRpc(fn, token, body) {
   const name = m[1] || 'mock-user';
   const limit = 3;
   const n = mockUses.get(name) || 0;
-  if (fn === 'ai_credits_left') return ok(Math.max(0, limit - n));
-  if (fn === 'use_ai_credit') { if (n >= limit) return ok(null); mockUses.set(name, n + 1); return ok('t' + (n + 1)); }
-  if (fn === 'refund_ai_credit') { mockUses.set(name, Math.max(0, n - 1)); return ok(true); }
+  if (fn === 'my_points') return ok({ balance: Math.max(0, limit - n) * 3 });
+  if (fn === 'points_spend') { if (n >= limit) return ok(null); mockUses.set(name, n + 1); return ok('t' + (n + 1)); }
+  if (fn === 'points_refund') { mockUses.set(name, Math.max(0, n - 1)); return ok(true); }
   return new Response('{}', { status: 404 });
 }
 export const bearer = (req) => (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').slice(0, 4000);
@@ -52,10 +52,11 @@ export async function GET(req) {
   const token = bearer(req);
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (await isUnlimited(token)) return json({ left: 999, plan: 'owner', limit: 999 });
-  const r = await rpc('ai_credits_left', token);
+  // あと何回作れるか＝ポイントの残り÷3（2026-11-22 ポイント制）
+  const r = await rpc('my_points', token);
   if (r.status === 401 || r.status === 403) return json({ error: 'Googleでログインしてください' }, 401);
   if (!r.ok) return json({ error: '回数を確認できませんでした' }, 500);
-  const n = await r.json().catch(() => null);
-  if (typeof n !== 'number') return json({ error: '回数を確認できませんでした' }, 500);
-  return json({ left: n });
+  const p = await r.json().catch(() => null);
+  if (typeof p?.balance !== 'number') return json({ error: '回数を確認できませんでした' }, 500);
+  return json({ left: Math.floor(p.balance / 3), points: p.balance });
 }

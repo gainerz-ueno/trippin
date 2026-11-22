@@ -666,3 +666,12 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 .call-log li.ai{background:var(--teal-tint)}
 .call-past ul{margin:4px 0 0;padding-left:16px;font-size:13px;line-height:1.8}
 @media (max-width:380px){.call-form{grid-template-columns:1fr 1fr}.call-cand{grid-template-columns:1fr 1fr}.call-test{grid-template-columns:1fr}}
+
+/* ポイント（2026-11-22） */
+.pt-chip{font:inherit;display:inline-flex;align-items:center;gap:2px;height:36px;padding:0 12px;border-radius:999px;border:1.5px solid var(--copybtn);background:var(--card);color:var(--copybtn);font-size:13px;font-weight:800;cursor:pointer;margin-right:6px}
+.pt-chip b{font-size:15px}
+.pt-toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:700;z-index:120;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.pt-now{font-size:15px}
+.pt-now b{font-size:20px}
+.pt-cost{margin:8px 0 14px;padding-left:18px;font-size:14px;line-height:1.8}
+.btn.pt-buy{width:100%;background:var(--copybtn);color:var(--copybtn-ink);border-color:var(--copybtn);font-size:16px;font-weight:800;padding:12px}

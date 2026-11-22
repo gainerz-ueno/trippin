@@ -1,10 +1,10 @@
 'use client';
 // タビビコール：保存したお店に、AIが現地語で予約の電話をかける画面
 // ・日にち・時間・人数・名前を入れる → AIが電話（最大3分）→ 結果を日本語で見せる
-// ・回数券（1回300円）を1つ使う。お店が出なかった・話し中だったときは回数を戻す
+// ・ポイントを45pt使う（3分ごと。2026-11-22 ポイント制）。お店が出なかった・話し中だったときはポイントを戻す
 import { useEffect, useRef, useState } from 'react';
 import { accessToken } from './note/util';
-import { CALL_PRICE, CALL_BLOCK_SEC, CALL_LANGS, langOfPhone, toE164 } from './lib/call';
+import { CALL_BLOCK_SEC, CALL_LANGS, langOfPhone, toE164 } from './lib/call';
 
 // お店の国の言葉（例：現地の言葉（韓国語））
 function localLang(phone) {
@@ -61,7 +61,7 @@ function Result({ c }) {
     <div className={'call-res ' + (c.outcome || '')}>
       <p className="call-st">{final && c.status === 'done' ? OUTCOME_JA[c.outcome] || STATUS_JA.done : STATUS_JA[c.status] || STATUS_JA.calling}</p>
       {!final && <p className="hint">そのまま待ってください。画面を閉じても電話は続き、結果はあとでここに残ります。</p>}
-      {final && c.tickets > 0 && !c.is_test && <p className="hint">この電話で使ったチケット：{c.tickets}枚</p>}
+      {final && c.tickets > 0 && !c.is_test && <p className="hint">この電話で使ったポイント：{c.tickets * 45}pt</p>}
       {c.result?.summary_ja && <p className="call-sum">{c.result.summary_ja}</p>}
       {c.result?.notes_ja && <p className="call-notes">{c.result.notes_ja}</p>}
       {Array.isArray(c.transcript) && c.transcript.length > 1 && (
@@ -145,7 +145,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
           <button type="button" className="x" onClick={onClose} aria-label="閉じる">×</button>
         </header>
         <p className="call-shop"><b>{place.name}</b>{place.altName && place.altName !== place.name ? <span>{place.altName}</span> : null}</p>
-        <p className="prem-now">AIが{localLang(place.phone)}で予約の電話をかけて、結果を日本語でお知らせします。チケット1枚（{CALL_PRICE}円）で{CALL_BLOCK_SEC / 60}分。{CALL_BLOCK_SEC / 60}分を超えると、{CALL_BLOCK_SEC / 60}分ごとに1枚ずつ使い、チケットがなくなると電話は切れます。お店が出なかったときや話し中のときは、チケットを戻します。</p>
+        <p className="prem-now">AIが{localLang(place.phone)}で予約の電話をかけて、結果を日本語でお知らせします。45ポイントで{CALL_BLOCK_SEC / 60}分。{CALL_BLOCK_SEC / 60}分を超えると、{CALL_BLOCK_SEC / 60}分ごとに45ポイントずつ使い、ポイントが足りなくなると電話は切れます。お店が出なかったときや話し中のときは、ポイントを戻します。</p>
 
         {!user ? (
           <p className="prem-now">使うには <button type="button" className="linkbtn" onClick={onSignIn}>Googleでログイン</button> してください。</p>
@@ -156,9 +156,9 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
           </>
         ) : (
           <>
-            <p className="prem-now">回数券：<b>{me === undefined ? '確認中…' : me ? (me.owner ? '運営者（制限なし）' : `あと${me.left}回`) : 'わかりませんでした'}</b></p>
+            <p className="prem-now">ポイント：<b>{me === undefined ? '確認中…' : me ? (me.owner ? '運営者（制限なし）' : `${me.points ?? me.left * 45}pt（1回45pt）`) : 'わかりませんでした'}</b></p>
             {me && !me.owner && me.left < 1 ? (
-              <p className="hint">回数券が残っていません。回数券の購入はただいま準備中です。</p>
+              <p className="hint">ポイントが足りません（1回45pt）。<button type="button" className="btn pt-buy" onClick={() => window.dispatchEvent(new CustomEvent('tabibi:needpoints'))}>ポイントを買う</button></p>
             ) : (
               <div className="call-form">
                 {[['', 'date', 'time', 'timeTo', 'people'], ['（任意）', 'alt2d', 'alt2t', 'alt2to', 'alt2p'], ['（任意）', 'alt3d', 'alt3t', 'alt3to', 'alt3p']].map(([opt, d, t, to, p], i) => (

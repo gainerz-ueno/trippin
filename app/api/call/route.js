@@ -1,5 +1,5 @@
 // タビビコール：電話をかける（POST）／残り回数と電話の結果を見る（GET）
-// ・Googleでログインしている人だけ。回数券を1つ使う（Supabase の call_start。つながらなかったら戻す）
+// ・Googleでログインしている人だけ。ポイントを45pt使う（Supabase の call_start。つながらなかったら戻す）
 // ・電話番号は画面から受け取らず、保存したお店の番号を Google から取り直す（ほかの番号に勝手にかけられないように）
 // ・運営者だけ、テストとして自分のスマホにかけられる（公開前に本物のお店へかけないため）
 import { getCloudflareContext } from '@opennextjs/cloudflare';
@@ -66,7 +66,7 @@ export async function GET(req) {
     signal: AbortSignal.timeout(10000),
   }).catch(() => null);
   const list = r && r.ok ? await r.json().catch(() => []) : [];
-  return json({ left: c.data.left, owner: !!c.data.owner, calls: list });
+  return json({ left: c.data.left, points: c.data.points, owner: !!c.data.owner, calls: list });
 }
 
 export async function POST(req) {
@@ -113,13 +113,13 @@ export async function POST(req) {
   // テストのときは、話す言語を選べる（自分のスマホで韓国語の会話を試すため）
   const lang = isTest && typeof body?.testLang === 'string' && VOICE[body.testLang] ? body.testLang : L.lang;
 
-  if (!owner && me.data.left < 1) return json({ error: '回数券が残っていません', needCredits: true }, 402);
+  if (!owner && me.data.left < 1) return json({ error: 'ポイントが足りません（1回45pt）', needCredits: true, needPoints: true }, 402);
 
   const secret = randomSecret();
   const started = await rpcJson('call_start', { p: { place_id: placeId, place_name: placeName, phone, lang, request, is_test: isTest }, secret }, token);
   if (!started.ok) return json({ error: '電話を始められませんでした（運営者の設定待ちの可能性があります）' }, 500);
   const id = started.data;
-  if (!id) return json({ error: 'いま別の電話をかけているか、回数券が残っていません' }, 409);
+  if (!id) return json({ error: 'いま別の電話をかけているか、ポイントが足りません' }, 409);
 
   const origin = new URL(req.url).origin;
   const host = new URL(origin).host;

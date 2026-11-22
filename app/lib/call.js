@@ -2,7 +2,7 @@
 // ・画面（CallSheet.js）と、電話をかける仕組み（app/api/call・cloudflare/call.js）の両方から使う
 // ・鍵や合言葉はここに書かない
 
-export const CALL_PRICE = 300; // 円／1回（回数券。5回1,500円など）
+export const CALL_POINTS = 45; // 1回（3分）に使うポイント（2026-11-22 ポイント制）
 export const CALL_BLOCK_SEC = 180; // チケット1枚で話せる時間（3分）。3分ごとに1枚ずつ使い、残りがなくなったら切る
 export const CALL_MAX_BLOCKS = 10; // 念のための上限（10枚＝30分）。保留のまま放っておかれても、これより長くはならない
 
