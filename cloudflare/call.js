@@ -148,7 +148,19 @@ export class CallSession {
       this.agentSpeaking = m.value === 'on';
       this.speakEvents = true;
       if (this.agentSpeaking) { this.clearWait(); this.agentOnAt = Date.now(); }
-      else { this.agentOffAt = Date.now(); this.waitDeadline = Date.now() + (this.stage === 'greeting' ? 3000 : 4000); this.armWait(); }
+      else {
+        this.agentOffAt = Date.now();
+        // あいさつを言い終えた：言い終わりの直前（2.5秒以内）に返事があれば、それを返事として進む。なければ返事を待つ
+        if (this.stage === 'greeting' && this.greetHeard && Date.now() - this.greetHeard.at < 2500 && !this.shopTalking) {
+          const g = this.greetHeard.said; this.greetHeard = null;
+          this.stage = 'talk';
+          this.reply(`${g}\n(You already finished your introduction. If they only said hello or yes, do not introduce yourself again; go straight to the booking request.)`);
+          return;
+        }
+        this.greetHeard = null;
+        this.waitDeadline = Date.now() + (this.stage === 'greeting' ? 3500 : 4000);
+        this.armWait();
+      }
     } else if (m.type === 'info' && m.name === 'clientSpeaking') {
       if (m.value === 'on') {
         this.shopTalking = true;
@@ -305,8 +317,10 @@ export class CallSession {
       return;
     }
     if (this.stage === 'greeting') {
-      // あいさつを言っている最中の「喂/您好/もしもし」は、電話に出たときの声：返事ではないので待つ
-      if (this.agentSpeaking && HELLO_ONLY.test(said)) return;
+      // あいさつ（今お時間よろしいですか）を言っている最中の声は、言葉に関係なく返事として扱わない：あいさつを言い終えてから返事を待つ
+      // 2026-11-21 社長の電話：あいさつの途中の「こんにちは」を返事とみなし、あいさつの直後に間を空けずに用件を話し始めていた
+      // （言い終わりの直前に重なった返事は、言い終えた時に使う）
+      if (this.agentSpeaking || this.busy) { this.greetHeard = { said, at: Date.now() }; return; }
       this.stage = 'talk';
       this.reply(`${said}\n(You already finished your introduction. If they only said hello or yes, do not introduce yourself again; go straight to the booking request.)`);
       return;
