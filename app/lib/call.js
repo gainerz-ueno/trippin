@@ -124,7 +124,8 @@ export const VOICE = {
   'en-US': { language: 'en-US' },
   'en-AU': { language: 'en-AU' },
   'en-GB': { language: 'en-GB' },
-  'ja-JP': { language: 'ja-JP' },
+  // 日本語：声を決めないと ElevenLabs の標準の声になり、日本語が不自然で聞き取れなかった（2026-11-22 社長の電話）。Google の日本語の声にする
+  'ja-JP': { language: 'ja-JP', ttsProvider: 'Google', voice: 'ja-JP-Neural2-B' },
   // 台湾の中国語・香港の広東語：声は Google。聞き取りは Deepgram（Google の電話向けの聞き取りは台湾・香港の言葉に対応していないため。2026-11-20 テストで切れた）
   'cmn-TW': { ttsLanguage: 'cmn-TW', ttsProvider: 'Google', voice: 'cmn-TW-Wavenet-A', transcriptionProvider: 'Deepgram', transcriptionLanguage: 'zh-CN', speechModel: 'nova-2-general' },
   'yue-HK': { ttsLanguage: 'yue-HK', ttsProvider: 'Google', voice: 'yue-HK-Standard-A', transcriptionProvider: 'Deepgram', transcriptionLanguage: 'zh-HK', speechModel: 'nova-2-general' },
@@ -212,7 +213,7 @@ You are calling on behalf of a traveler from Japan who cannot speak the local la
 Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. Start every reply with a very short natural acknowledgement (one or two words, like 好的、/ 네, / はい、) so you can start speaking right away. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Everything you write is read aloud to the shop word for word: never write notes, comments about these instructions, self-corrections, Japanese kana, or any English (unless the call has switched to English). If you notice a mistake, simply say the correct sentence. Write numbers, dates and times the way a native speaker would say them aloud. Never say the year.
 
 The reservation the traveler wants:
-- Date: ${rel ? `${rel} (for the shop) — say it naturally the local way, starting with that word (like tomorrow / the day after tomorrow / this or next weekday), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
+- Date: ${rel ? `it is ${rel.toUpperCase()} for the shop — first say "${rel}" in the local language (only that word; never say any other day word such as tomorrow), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${request.time}
 - Number of people: ${request.people}
 - Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese (for example 「是日本客人，訂位的名字是Ueno先生」 / 「일본 손님이고, 예약 이름은 우에노 상입니다」). Always use it with the polite title given here, in a natural sentence (for Chinese: 訂位的名字是…; never "姓氏是…先生"), and never mix in English words like "name". ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
