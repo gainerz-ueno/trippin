@@ -194,7 +194,7 @@ export function relativeDay(lang, date, now = Date.now()) {
 // 名前の伝え方（言語ごと）。日本の名前は「〇〇さん」と日本語の音で言い、念のためローマ字を1文字ずつ
 const cap = (n) => n.split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 const NAME_HOW = {
-  'ja-JP': (k) => `Say "${k}さん".`,
+  'ja-JP': (k) => `Say "${k}様" (never さん — you are speaking for your customer).`,
   'ko-KR': (k) => `Say it as it sounds in Japanese with "상" (for example "우에노 상" for ウエノ).`,
   'cmn-TW': (k, n, g) => `Say "${cap(n)}${g === 'f' ? '小姐' : '先生'}".`,
   'yue-HK': (k, n, g) => `Say "${cap(n)}${g === 'f' ? '小姐' : '先生'}".`,
