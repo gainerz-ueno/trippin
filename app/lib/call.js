@@ -214,6 +214,27 @@ export function relativeDay(lang, date, now = Date.now()) {
   return '';
 }
 
+// 「明日」などを、その言語の言葉にして渡す（英語の tomorrow のまま渡すと、AIが別の言語に訳すことがある。
+// 2026-11-22 社長の電話：日本語の電話なのに台湾のお店の名前につられて「明天」と言った）
+const VI_WEEK = ['Chủ nhật', 'thứ Hai', 'thứ Ba', 'thứ Tư', 'thứ Năm', 'thứ Sáu', 'thứ Bảy'];
+export function localDayWord(lang, rel, date) {
+  if (!rel) return '';
+  const w = new Date(date + 'T00:00:00Z').getUTCDay();
+  const zh = lang === 'cmn-TW' || lang === 'yue-HK';
+  const T = {
+    'ja-JP': { today: '本日', tomorrow: '明日', after: '明後日', this: `今週の${JA_WEEK[w]}曜日`, next: `来週の${JA_WEEK[w]}曜日` },
+    'ko-KR': { today: '오늘', tomorrow: '내일', after: '모레', this: `이번 주 ${KO_WEEK[w]}요일`, next: `다음 주 ${KO_WEEK[w]}요일` },
+    'vi-VN': { today: 'hôm nay', tomorrow: 'ngày mai', after: 'ngày kia', this: `${VI_WEEK[w]} tuần này`, next: `${VI_WEEK[w]} tuần sau` },
+  }[lang] || (zh ? { today: '今天', tomorrow: '明天', after: '後天', this: `這個星期${ZH_WEEK[w]}`, next: `下個星期${ZH_WEEK[w]}` } : null);
+  if (!T) return rel;
+  if (rel === 'today') return T.today;
+  if (rel === 'tomorrow') return T.tomorrow;
+  if (rel === 'the day after tomorrow') return T.after;
+  if (rel.startsWith('this ')) return T.this;
+  if (rel.startsWith('next ')) return T.next;
+  return rel;
+}
+
 // 名前の伝え方（言語ごと）。日本の名前は「〇〇さん」と日本語の音で言い、念のためローマ字を1文字ずつ
 const cap = (n) => n.split(/\s+/).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 const NAME_HOW = {
@@ -223,6 +244,20 @@ const NAME_HOW = {
   'yue-HK': (k, n, g) => `Say "${cap(n)}${g === 'f' ? '小姐' : '先生'}".`,
 };
 
+// 確認の問いの見本（その言語だけで書く。ほかの言語の見本を渡すと、その言葉がまざる）
+const RECAP_EX = {
+  'ja-JP': '「明日十九時、ふたり、ウエノ様でよろしいでしょうか。」',
+  'ko-KR': '"내일 일곱 시, 두 명, 우에노 상 맞을까요?"',
+  'cmn-TW': '"明天七點，兩位，Ueno先生，對嗎？"',
+  'yue-HK': '"聽日七點，兩位，Ueno先生，啱唔啱？"',
+  'vi-VN': '"Ngày mai bảy giờ tối, hai người, tên Ueno, đúng không ạ?"',
+};
+const NAME_EX = {
+  'ja-JP': '「日本のお客様で、お名前はウエノ様です」',
+  'ko-KR': '「일본 손님이고, 예약 이름은 우에노 상입니다」',
+  'cmn-TW': '「是日本客人，訂位的名字是Ueno先生」',
+  'yue-HK': '「係日本客人，訂位嘅名係Ueno先生」',
+};
 // 電話で話すAIへの指示
 const JA_PEOPLE = { 1: 'ひとり', 2: 'ふたり', 3: 'さんにん', 4: 'よにん', 5: 'ごにん', 6: 'ろくにん', 7: 'ななにん', 8: 'はちにん', 9: 'きゅうにん', 10: 'じゅうにん' };
 export function callSystemPrompt({ lang, placeName, request }) {
@@ -230,11 +265,11 @@ export function callSystemPrompt({ lang, placeName, request }) {
   const wd = WEEK[d.getUTCDay()];
   const kana = romajiToKana(request.name);
   const sd = spokenDate(lang, request.date);
-  const rel = relativeDay(lang, request.date);
+  const rel = localDayWord(lang, relativeDay(lang, request.date), request.date);
   const jp = (n) => (lang === 'ja-JP' ? `${JA_PEOPLE[n] || n + 'にん'}` : `${n}`);
   const win = (c) => (c.timeTo ? `any time from ${c.time} to ${c.timeTo}` : `${c.time} exactly`);
   const alts = (request.alts || []).map((a) => {
-    const r2 = relativeDay(lang, a.date);
+    const r2 = localDayWord(lang, relativeDay(lang, a.date), a.date);
     const s2 = spokenDate(lang, a.date);
     const same = a.date === request.date;
     // 「今週いっぱい」などと言われたときに入るかを、AIが日付の計算で迷わないよう先に書いておく（今日から6日以内は「今週」に入るとみなす）
@@ -246,7 +281,7 @@ export function callSystemPrompt({ lang, placeName, request }) {
   return `You are an AI reservation assistant on a live phone call with a restaurant or shop called "${placeName}".
 You are calling on behalf of a traveler from Japan who cannot speak the local language. You already introduced yourself as an AI booking assistant.
 
-Speak ONLY in ${LANG_NAME[lang]}. Talk like a polite, natural phone caller. When the shop has just said something, start your reply with a very short natural acknowledgement (one or two words, like 好的、/ 네, / はい、) so you can start speaking right away; do not start with an acknowledgement after silence. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Everything you write is read aloud to the shop word for word: never write notes, comments about these instructions, self-corrections, Japanese kana, or any English (unless the call has switched to English). If you notice a mistake, simply say the correct sentence. Write numbers, dates and times the way a native speaker would say them aloud. Never say the year.
+Speak ONLY in ${LANG_NAME[lang]} — every single word, including day words like today or tomorrow. Never use words from another language, even if the shop's name or the traveler's details are written in another language. Talk like a polite, natural phone caller. When the shop has just said something, start your reply with a very short natural acknowledgement (one or two words, like 好的、/ 네, / はい、) so you can start speaking right away; do not start with an acknowledgement after silence. Keep every reply short: one or two short sentences. Never use lists, emoji, markdown, or romanization notes. Everything you write is read aloud to the shop word for word: never write notes, comments about these instructions, self-corrections, Japanese kana, or any English (unless the call has switched to English). If you notice a mistake, simply say the correct sentence. Write numbers, dates and times the way a native speaker would say them aloud. Never say the year.
 
 MOST IMPORTANT — listen like a person: before every reply, take into account everything the shop has said so far in this call. Never ask again for something the shop has already refused or ruled out (a day, a time, a number of people), never try to persuade them after a clear no, and never ask about anything outside the traveler's choices below — not other days, not "next week", not other times, not other numbers of people. Say dates, times and numbers of people exactly as given here; never change them.
 - If they do not take reservations, are closed, do not want to talk to an AI, or decline in any other way: accept it politely at once, thank them, say goodbye and end with [END]. Do not ask again.
@@ -255,10 +290,10 @@ MOST IMPORTANT — listen like a person: before every reply, take into account e
 - Every reply that says goodbye must end with [END].
 
 The reservation the traveler wants (choice 1):
-- Date: ${rel ? `it is ${rel.toUpperCase()} for the shop — first say "${rel}" in the local language (only that word; never say any other day word such as tomorrow), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
+- Date: ${rel ? `first say the day word "${rel}" exactly as written (it is already in ${LANG_NAME[lang]}; never translate it or use any other day word), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${win(request)}${request.timeTo ? ` — the traveler is happy with ANY time in this window. When you ask, say this exact window naturally, or ask for the start time and accept any time the shop offers inside the window.` : ' — accept only this time.'}
 - Number of people: ${request.people}${lang === 'ja-JP' ? ` ("${jp(request.people)}") — in Japanese always write numbers of people in hiragana (ふたり, さんにん, よにん …; never write 名 or 二名: it is misread aloud)` : ''}
-- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese (for example 「是日本客人，訂位的名字是Ueno先生」 / 「일본 손님이고, 예약 이름은 우에노 상입니다」). Always use it with the polite title given here, in a natural sentence (for Chinese: 訂位的名字是…; never "姓氏是…先生"), and never mix in English words like "name". ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
+- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese ${NAME_EX[lang] ? `(for example ${NAME_EX[lang]})` : ''}. Always use it with the polite title given here, in a natural sentence ${lang === 'cmn-TW' || lang === 'yue-HK' ? '(訂位的名字是…; never "姓氏是…先生")' : ''}, and never mix in English words like "name". ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
 
 Other details from the traveler (use only when relevant):
 ${request.flex ? `- Time flexibility: "${request.flex}"
@@ -267,7 +302,7 @@ ${request.flex ? `- Time flexibility: "${request.flex}"
 
 How a call usually goes (this is the usual shape, not a script — always respond to what the shop actually says, the way an experienced, polite human caller would):
 1. REQUEST: in one short sentence, ask if you can book choice 1 (its date, time or time window, and number of people). Say them clearly.
-2. If they agree (any yes, or they ask for the name) — if you asked with a time window and they agreed without naming a time, first settle one exact time inside the window (suggest the start time, or ask what time suits them) — in that SAME reply say that the guest is Japanese, give the name once, and ask one very short recap question with the date word, the time, the number of people and the name, like "明天七點，兩位，Ueno先生，對嗎？". The recap always says the ONE exact time that was agreed (never a window) and the number of people of the choice that was agreed. If the time or date changed during the call (for example the shop offered 19:30 instead), the recap MUST say the NEW time. Never leave out the time. Order: first "the guest is Japanese, the name is …" (say the name only once in this reply), then the recap question as the LAST sentence. Say nothing after the recap question. Keep the whole reply to two short sentences and ask only ONE question (for Japanese, exactly this shape: 「日本のお客様で、お名前は〇〇です。本日十九時半、ふたりでよろしいでしょうか。」). End this reply with the marker [RECAP]. Do this recap only once in the whole call.
+2. If they agree (any yes, or they ask for the name) — if you asked with a time window and they agreed without naming a time, first settle one exact time inside the window (suggest the start time, or ask what time suits them) — in that SAME reply say that the guest is Japanese, give the name once, and ask one very short recap question with the date word, the time, the number of people and the name, like ${RECAP_EX[lang] || '"Tomorrow at seven, two people, Ueno san — is that right?"'}. The recap always says the ONE exact time that was agreed (never a window) and the number of people of the choice that was agreed. If the time or date changed during the call (for example the shop offered 19:30 instead), the recap MUST say the NEW time. Never leave out the time. Order: first "the guest is Japanese, the name is …" (say the name only once in this reply), then the recap question as the LAST sentence. Say nothing after the recap question. Keep the whole reply to two short sentences and ask only ONE question (for Japanese, exactly this shape: 「日本のお客様で、お名前は〇〇です。本日十九時半、ふたりでよろしいでしょうか。」). End this reply with the marker [RECAP]. Do this recap only once in the whole call.
    - If the shop has ALREADY repeated the date, time, people and name back to you, that is the confirmation: skip the recap and go to step 4.
 3. If the requested time is not available: first understand what the shop actually said, then decide — do not follow a fixed script.
    - The ONLY bookings the traveler accepts: choice 1 above${alts.length ? `, and these other choices in this order of preference: ${alts.map((a, i) => `choice ${i + 2}: ${a.say}, ${win(a)}, ${jp(a.people)} people${a.week}`).join('; ')}` : ''}. Each choice has its own date, time window and number of people.

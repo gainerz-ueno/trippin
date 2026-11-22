@@ -26,7 +26,7 @@
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "NOTEAI", "class_name": "NoteAi" }]
+    "bindings": [{ "name": "NOTEAI", "class_name": "NoteAi" }, { "name": "CALLROOM", "class_name": "CallRoom" }]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NoteAi"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["NoteAi"] }, { "tag": "v2", "new_sqlite_classes": ["CallRoom"] }]
 }

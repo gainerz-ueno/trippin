@@ -3,6 +3,7 @@
 // ・「AIで作る」の絵を描く部分だけは sharp（画像の切り貼り・縮小の部品）が要るので「コンテナ」で動かす（下の NoteAi）
 //   使わない時間が続くとコンテナは眠り、費用はかからない。次に使うときは数秒で起き上がる（AIが描く時間に比べればわずか）
 import { Container } from '@cloudflare/containers';
+import { DurableObject } from 'cloudflare:workers';
 import handler from '../.open-next/worker.js';
 import { handleWs, handleStatus, handleShopbot } from './call.js';
 
@@ -28,12 +29,25 @@ export class NoteAi extends Container {
   }
 }
 
+// タビビコールの会話を受け持つ部屋（電話1本につき1つ）。
+// 2026-11-22 社長の電話テストで、ふつうの Worker のまま長い会話をつないでいたため、Cloudflare に途中で打ち切られた（loadShed・74秒で切断）。
+// 長くつなぎっぱなしにする通話は、打ち切られにくい Durable Object で受け持つ
+export class CallRoom extends DurableObject {
+  async fetch(request) {
+    return handleWs(request, this.env, this.ctx);
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     // お店の写真（/api/photo）の転送先は、Vercel のときと同じく1日覚えておく（Google に何度も取りに行かず、費用を抑える）
     const url = new URL(request.url);
     // タビビコール：電話の会話と電話の状態（Twilio から来る。中身は cloudflare/call.js）
-    if (url.pathname === '/call/ws') return handleWs(request, env, ctx);
+    if (url.pathname === '/call/ws') {
+      const c = url.searchParams.get('c') || '';
+      if (!/^[0-9a-f-]{36}$/.test(c) || !env.CALLROOM) return handleWs(request, env, ctx);
+      return env.CALLROOM.get(env.CALLROOM.idFromName(c)).fetch(request);
+    }
     if (url.pathname === '/call/status') return handleStatus(request, env);
     if (url.pathname === '/call/shopbot') return handleShopbot(request, env); // 電話テスト用のお店役
     if (request.method === 'GET' && url.pathname === '/api/photo') {
