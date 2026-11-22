@@ -55,8 +55,15 @@ export function cleanRequest(r) {
     flex: s(r?.flex, 60), // 時間の融通（例：19時〜20時ならOK）
     note: s(r?.note, 120), // ひとこと（例：窓際の席がいい）
     callback: s(r?.callback, 30), // 連絡先（任意）
+    alts: [], // 第2・第3候補の日時（任意。1つ目が無理なときに順に聞く）
   };
   if (!out.date || !out.time || !out.people || !out.name) return null;
+  for (const a of Array.isArray(r?.alts) ? r.alts.slice(0, 2) : []) {
+    const ad = s(a?.date, 10), at = s(a?.time, 5);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ad) || !/^\d{2}:\d{2}$/.test(at)) continue;
+    if ((ad === out.date && at === out.time) || out.alts.some((x) => x.date === ad && x.time === at)) continue;
+    out.alts.push({ date: ad, time: at });
+  }
   return out;
 }
 
@@ -208,6 +215,12 @@ export function callSystemPrompt({ lang, placeName, request }) {
   const kana = romajiToKana(request.name);
   const sd = spokenDate(lang, request.date);
   const rel = relativeDay(lang, request.date);
+  const alts = (request.alts || []).map((a) => {
+    const r2 = relativeDay(lang, a.date);
+    const s2 = spokenDate(lang, a.date);
+    const same = a.date === request.date;
+    return { ...a, say: same ? 'the same day' : `${r2 ? `"${r2}" then ` : ''}${s2 ? `"${s2}"` : `${a.date.slice(5)} (${WEEK[new Date(a.date + 'T00:00:00Z').getUTCDay()]})`}` };
+  });
   return `You are an AI reservation assistant on a live phone call with a restaurant or shop called "${placeName}".
 You are calling on behalf of a traveler from Japan who cannot speak the local language. You already introduced yourself as an AI booking assistant.
 
@@ -228,8 +241,12 @@ How to run the call (follow these steps exactly):
 1. REQUEST: in one short sentence, ask if you can book for the date, time and number of people above. Say them clearly.
 2. If they agree (any yes, or they ask for the name): in that SAME reply say that the guest is Japanese, give the name once, and ask one very short recap question with the date word, the time, the number of people and the name, like "明天七點，兩位，Ueno先生，對嗎？". If the time or date changed during the call (for example the shop offered 19:30 instead), the recap MUST say the NEW time. Never leave out the time. Order: first "the guest is Japanese, the name is …" (say the name only once in this reply), then the recap question as the LAST sentence. Say nothing after the recap question. Keep the whole reply to two short sentences and ask only ONE question (for Japanese, exactly this shape: 「日本のお客様で、お名前は〇〇です。本日十九時半、ふたりでよろしいでしょうか。」). End this reply with the marker [RECAP]. Do this recap only once in the whole call.
    - If the shop has ALREADY repeated the date, time, people and name back to you, that is the confirmation: skip the recap and go to step 4.
-3. If the requested time is not available: ask once what nearby time they have THAT SAME DAY. Accept it only if it fits the time flexibility; then do step 2 with the new time. If nothing fits, or the shop is closed or fully booked that day, or does not take reservations, thank them, say goodbye and end with [END].
-   - NEVER change the date and never ask about or book another day (do not even ask which days they are open). If the shop is closed that day, just thank them and end. NEVER change the number of people. The traveler only wants this date.
+3. If the requested time is not available:${alts.length ? `
+   - The traveler gave other choices. Ask them ONE AT A TIME, in this order, only moving to the next when the previous one is not possible: ${alts.map((a, i) => `choice ${i + 2}: ${a.say}, ${a.time}`).join('; ')}. Ask each in one short sentence with its day word and time (for example 「では、明日の十九時はいかがでしょうか。」). If the shop instead offers a nearby time on a day you are asking about and it fits the time flexibility, accept it.
+   - When a choice is accepted, do step 2 with THAT date and time (the recap must say that day word and time).
+   - If none of the choices work, thank them, say goodbye and end with [END]. Never ask about any other day than the ones listed here.` : `
+   - Ask once what nearby time they have THAT SAME DAY. Accept it only if it fits the time flexibility; then do step 2 with the new time. If nothing fits, or the shop is closed or fully booked that day, or does not take reservations, thank them, say goodbye and end with [END].`}
+   - NEVER ask about or book any day that the traveler did not list. If the shop is closed on all the listed days, just thank them and end. NEVER change the number of people.
 4. DONE: after the recap, any yes, any repeat-back, or no objection means the booking is agreed. Your reply is only a short thank-you and goodbye, with [END] at the very end. Do not repeat the date, time, people or name, and do not ask anything else.
 - If they ask you something (phone number, deposit, allergies, the spelling of the name), answer in one short sentence using only the details above; if you do not know, say the traveler will confirm when they arrive. If the booking was already agreed, add a short thank-you and goodbye with [END] in the same reply.
 - Never ask the shop extra questions of your own (deposit, rules, menus, seats) unless the traveler's message asks for it.
@@ -249,7 +266,7 @@ Never invent details. Never agree to pay anything.`;
 // 電話が終わったあとに、結果を日本語でまとめる指示
 export function summaryPrompt({ request }) {
   return `You read a transcript of a phone call where an AI assistant tried to book a reservation for a Japanese traveler.
-Requested: date ${request.date} (${WEEK[new Date(request.date + 'T00:00:00Z').getUTCDay()]}), time ${request.time}, ${request.people} people, name "${request.name}". Use this weekday when you write the date.
+Requested: date ${request.date} (${WEEK[new Date(request.date + 'T00:00:00Z').getUTCDay()]}), time ${request.time}, ${request.people} people, name "${request.name}". Use this weekday when you write the date.${(request.alts || []).length ? ` The traveler also accepted these other choices (in order): ${request.alts.map((a) => `${a.date} (${WEEK[new Date(a.date + 'T00:00:00Z').getUTCDay()]}) ${a.time}`).join(', ')}. A booking on one of them is "alternative"; write its date and weekday correctly.` : ''}
 Return ONLY a JSON object, no other text:
 {"outcome":"booked|declined|alternative|unclear","date":"YYYY-MM-DD or empty","time":"HH:MM or empty","people":number or 0,"summary_ja":"結果を日本語で2〜3文。決まった日時・人数・名前、お店から言われた注意（席の時間制限・遅れたら取り消し等）があれば入れる","notes_ja":"お店に伝えたこと・聞かれたことを日本語で短く。なければ空"}
 A line "SHOP: （返事が聞こえず・はいとみなして進めた）" means nothing was heard and the assistant assumed yes. If the booking relied only on such assumed answers (no clear spoken agreement from the shop anywhere), return "unclear" and say in notes_ja that お店の返事が聞き取れず、はいとみなして進めたため、予約が取れたかは確かではありません. A line "SHOP: （短い返事・文字にならず）" means the shop said something short that speech recognition could not turn into text; the assistant treated it as yes. If the booking relied on such replies, you may still return "booked", but say in notes_ja that お店の短い返事は文字にならず「はい」とみなした.

@@ -87,7 +87,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
     let gender = 'm', callback = '';
     try { name = localStorage.getItem(NAME_KEY) || ''; gender = localStorage.getItem(NAME_KEY + '.g') || 'm'; callback = localStorage.getItem(NAME_KEY + '.tel') || ''; } catch {}
     const L = langOfPhone(toE164(place.phone));
-    return { date: todayLocal(), time: '19:00', people: 2, name, gender, callback, flex: '', note: '', testPhone: '', testLang: L && !L.testOnly ? L.lang : 'ko-KR' };
+    return { date: todayLocal(), time: '19:00', people: 2, name, gender, callback, flex: '', note: '', alt2d: '', alt2t: '', alt3d: '', alt3t: '', testPhone: '', testLang: L && !L.testOnly ? L.lang : 'ko-KR' };
   });
   const [sending, setSending] = useState(false);
   const [call, setCall] = useState(null);
@@ -120,7 +120,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
     setSending(true);
     try {
       try { localStorage.setItem(NAME_KEY, form.name.trim()); localStorage.setItem(NAME_KEY + '.g', form.gender); localStorage.setItem(NAME_KEY + '.tel', form.callback.trim()); } catch {}
-      const request = { date: form.date, time: form.time, people: Number(form.people), name: form.name.trim(), gender: form.gender, callback: form.callback.trim(), flex: form.flex.trim(), note: form.note.trim() };
+      const request = { date: form.date, time: form.time, people: Number(form.people), name: form.name.trim(), gender: form.gender, callback: form.callback.trim(), flex: form.flex.trim(), note: form.note.trim(), alts: [[form.alt2d, form.alt2t], [form.alt3d, form.alt3t]].filter(([d, t]) => d && t).map(([d, t]) => ({ date: d, time: t })) };
       const body = { placeId: place.placeId, placeName: place.altName || place.name, request };
       if (me?.owner && form.testPhone.trim()) { body.testPhone = form.testPhone.trim(); body.testLang = form.testLang; }
       const d = await callApi('/api/call', { method: 'POST', body: JSON.stringify(body) });
@@ -160,8 +160,13 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
               <p className="hint">回数券が残っていません。回数券の購入はただいま準備中です。</p>
             ) : (
               <div className="call-form">
-                <label>日にち<input type="date" value={form.date} min={todayLocal()} onChange={set('date')} /></label>
-                <label>時間<input type="time" value={form.time} step="900" onChange={set('time')} /></label>
+                <label className="cand-d">第1候補の日にち<input type="date" value={form.date} min={todayLocal()} onChange={set('date')} /></label>
+                <label>第1候補の時間<input type="time" value={form.time} step="900" onChange={set('time')} /></label>
+                <label className="cand-d">第2候補の日にち（任意）<input type="date" value={form.alt2d} min={todayLocal()} onChange={(e) => setForm((f) => ({ ...f, alt2d: e.target.value, alt2t: f.alt2t || f.time }))} /></label>
+                <label>第2候補の時間<input type="time" value={form.alt2t} step="900" onChange={set('alt2t')} /></label>
+                <label className="cand-d">第3候補の日にち（任意）<input type="date" value={form.alt3d} min={todayLocal()} onChange={(e) => setForm((f) => ({ ...f, alt3d: e.target.value, alt3t: f.alt3t || f.time }))} /></label>
+                <label>第3候補の時間<input type="time" value={form.alt3t} step="900" onChange={set('alt3t')} /></label>
+                <p className="hint wide">1つ目が満席のときは、第2候補、第3候補の順にお店へ聞きます。</p>
                 <label>人数
                   <select value={form.people} onChange={set('people')}>
                     {Array.from({ length: 12 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}人</option>)}
