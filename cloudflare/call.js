@@ -59,7 +59,8 @@ export async function handleStatus(request, env) {
       await new Promise((r) => setTimeout(r, 10000));
       const b2 = await rpcJson('call_brief', { cid: p.c, secret: p.k });
       if (b2.ok && b2.data && b2.data.status === 'talking') {
-        await callUpdate(p.c, p.k, { status: 'done', outcome: 'unclear', result: { summary_ja: '会話の途中で電話が切れました（仕組みの不具合の可能性があります）。' } });
+        // こちらの仕組みが止まって切れたときは、使ったポイントを戻す（failed にすると call_update が戻す）
+        await callUpdate(p.c, p.k, { status: 'failed', outcome: 'unclear', result: { summary_ja: '会話の途中で電話が切れました（タビビの仕組みの不具合です）。使ったポイントは戻してあります。' } });
       }
     }
   }
