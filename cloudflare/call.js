@@ -385,7 +385,9 @@ export class CallSession {
       this.armWait();
       return;
     }
-    const done = text.includes(END);
+    // 別れのあいさつで終わっているのに [END] を付け忘れたときも切る（2026-11-22 会話テスト：締めのあとも話し続けた）
+    const BYE = /(失礼いたします|失礼します|再見|再见|拜拜|안녕히 계세요|goodbye|bye)[。.!！\s]*$/i;
+    const done = text.includes(END) || BYE.test(text.replace(/\[[^\]]*\]/g, '').trim());
     if (text.includes(WAIT)) this.holding = true; // お店に待ってと言われた：戻ってくるまで長めに待つ
     // 最後の確認のしるし：[RECAP] を付け忘れても、名前を言って問いで終わっていれば確認とみなす（2026-11-22 電話テスト：付け忘れて、お店の「はい、大丈夫です」のあとに確認をもう一度言っていた）
     const nm = String(this.brief.request?.name || '');

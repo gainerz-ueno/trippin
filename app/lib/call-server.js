@@ -122,7 +122,7 @@ export async function claudeChat(env, { system, messages, maxTokens = 300 }) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages, thinking: NO_THINKING }),
+    body: JSON.stringify({ model: env.CALL_MODEL_OVERRIDE || CLAUDE_MODEL, max_tokens: maxTokens, system, messages, thinking: NO_THINKING }),
     signal: AbortSignal.timeout(30000),
   });
   const d = await r.json().catch(() => ({}));

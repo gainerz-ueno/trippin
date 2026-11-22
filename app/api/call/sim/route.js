@@ -45,6 +45,8 @@ export async function POST(req) {
   const scenario = note ? 'custom' : SHOP[body.scenario] ? body.scenario : 'normal';
   const request = cleanRequest(body.request || {});
   if (!request) return json({ error: '予約の中身が足りません' }, 400);
+  // 比べるために、運営者だけ使うAIを選べる（本番は call-server.js の CLAUDE_MODEL）
+  if (/^claude-(haiku|sonnet|opus)-[0-9-]+$/.test(body.model || '')) env = { ...env, CALL_MODEL_OVERRIDE: body.model };
   const system = callSystemPrompt({ lang, placeName: body.placeName || '北門', request });
   const agent = [], shop = [], transcript = [], raws = [];
   // 同じ側が続いたら1つにまとめる（Claude には交互に渡す決まり）
@@ -89,7 +91,7 @@ export async function POST(req) {
       const a = (await claudeChat(env, { system, messages: agent, maxTokens: 400 })).trim();
       raws.push(a);
       if (a.includes('[RECAP]')) recapped = true;
-      ended = a.includes(END);
+      ended = a.includes(END) || /(失礼いたします|失礼します|再見|再见|拜拜|안녕히 계세요|goodbye|bye)[。.!！\s]*$/i.test(a.replace(/\[[^\]]*\]/g, '').trim());
       say('ai', a.replace(/\[(END|RECAP|WAIT)\]/g, '').trim() || (ended ? '（決まったお礼）' : '（空の返事）'));
       if (ended) break;
       if (scenario === 'noisy') {
