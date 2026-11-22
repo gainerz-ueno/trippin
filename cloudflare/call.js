@@ -159,7 +159,7 @@ export class CallSession {
           return;
         }
         this.greetHeard = null;
-        this.waitDeadline = Date.now() + (this.stage === 'greeting' ? 3500 : 4000);
+        this.waitDeadline = Date.now() + (this.holding ? 30000 : this.stage === 'greeting' ? 3500 : 4000);
         this.armWait();
       }
     } else if (m.type === 'info' && m.name === 'clientSpeaking') {

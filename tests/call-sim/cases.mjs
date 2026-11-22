@@ -42,7 +42,7 @@ for (const [name, shop, want] of cases) {
   let pass = r.ended && r.maxGap <= 10;
   if (want === 'booked19') pass &&= /十九時、ふたり/.test(recapLine) && !/半/.test(recapLine);
   if (want === 'booked1930') pass &&= /十九時半/.test(recapLine) && /空いている時間|近い時間/.test(last);
-  if (/少々/.test(name)) pass &&= ai.some(l => /^はい、お願いします/.test(l)) && ai.findIndex(l => /^はい、お願いします/.test(l)) < ai.findIndex((l, k) => k > 0 && /よろしいでしょうか/.test(l));
+  if (/少々/.test(name)) pass &&= !ai.some(l => /恐れ入ります/.test(l)) && ai.some(l => /^はい、お願いします/.test(l)) && ai.findIndex(l => /^はい、お願いします/.test(l)) < ai.findIndex((l, k) => k > 0 && /よろしいでしょうか/.test(l));
   pass &&= ai.slice(1).filter(l => /よろしいでしょうか/.test(l)).length <= 1; // 確認は1回だけ
   if (want === 'declined') pass &&= !recapLine;
   if (pass) ok++;
