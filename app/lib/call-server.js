@@ -4,7 +4,9 @@
 // ・ANTHROPIC_API_KEY：Claude（会話と結果のまとめ）
 import { SUPABASE_URL, SUPABASE_KEY } from './supabase-public.js';
 
-export const CLAUDE_MODEL = 'claude-haiku-5-5';
+export const CLAUDE_MODEL = 'claude-haiku-5-5'; // 結果のまとめ用
+// 電話の会話のAI：2026-11-22 社長の決定で Sonnet に（Haiku は「今週いっぱい」に来週を聞く・候補を聞かずに切る等が4回に1〜2回あった）
+export const CALL_MODEL = 'claude-sonnet-5-5';
 // 考える時間（thinking）を切る：Haiku 5.5 は初期値で考え、その分が max_tokens に数えられて返事が空・途中切れになっていた。電話は速さが大事（2026-11-21）
 const NO_THINKING = { type: 'disabled' };
 // Sonnet 等は「考えない」の指定の書き方が違う（disabled を受け付けない）
@@ -92,7 +94,7 @@ export async function* claudeStream(env, { system, messages, maxTokens = 400, si
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: CLAUDE_MODEL, max_tokens: maxTokens, system, messages, stream: true, thinking: NO_THINKING }),
+    body: JSON.stringify({ model: CALL_MODEL, max_tokens: maxTokens, system, messages, stream: true, thinking: noThink(CALL_MODEL) }),
     signal,
   });
   if (!r.ok || !r.body) {
@@ -124,7 +126,7 @@ export async function claudeChat(env, { system, messages, maxTokens = 300 }) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model: env.CALL_MODEL_OVERRIDE || CLAUDE_MODEL, max_tokens: maxTokens, system, messages, thinking: noThink(env.CALL_MODEL_OVERRIDE || CLAUDE_MODEL) }),
+    body: JSON.stringify({ model: env.CALL_MODEL_OVERRIDE || CALL_MODEL, max_tokens: maxTokens, system, messages, thinking: noThink(env.CALL_MODEL_OVERRIDE || CALL_MODEL) }),
     signal: AbortSignal.timeout(30000),
   });
   const d = await r.json().catch(() => ({}));

@@ -75,7 +75,7 @@ export async function POST(req) {
   if (!token) return json({ error: 'Googleでログインしてください' }, 401);
   if (MOCK) {
     const b = await req.json().catch(() => null);
-    if (!cleanRequest(b?.request)) return json({ error: '日にち・時間・人数・名前を入れてください' }, 400);
+    if (!cleanRequest(b?.request)) return json({ error: '日にち・時間・人数・名前・電話番号を入れてください' }, 400);
     const id = crypto.randomUUID();
     mockCalls.set(id, { id, t: Date.now(), created_at: new Date().toISOString(), place_id: b.placeId, place_name: b.placeName, request: b.request, is_test: !!b.testPhone });
     return json({ id });
@@ -85,7 +85,7 @@ export async function POST(req) {
   }
   const body = await req.json().catch(() => null);
   const request = cleanRequest(body?.request);
-  if (!request) return json({ error: '日にち・時間・人数・名前を入れてください' }, 400);
+  if (!request) return json({ error: '日にち・時間・人数・名前・電話番号を入れてください' }, 400);
   const placeId = typeof body?.placeId === 'string' ? body.placeId : '';
   const placeName = typeof body?.placeName === 'string' ? body.placeName.replace(/[\u0000-\u001F<>]/g, ' ').slice(0, 200) : '';
   if (!placeName) return json({ error: 'お店の指定が正しくありません' }, 400);

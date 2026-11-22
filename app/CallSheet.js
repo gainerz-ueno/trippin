@@ -117,6 +117,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
   const start = async () => {
     setErr('');
     if (!form.name.trim()) { setErr('予約の名前を入れてください（ローマ字かカタカナ）'); return; }
+    if (form.callback.replace(/[^0-9]/g, '').length < 9) { setErr('連絡先の電話番号を入れてください（お店に聞かれることが多いため）'); return; }
     setSending(true);
     try {
       try { localStorage.setItem(NAME_KEY, form.name.trim()); localStorage.setItem(NAME_KEY + '.g', form.gender); localStorage.setItem(NAME_KEY + '.tel', form.callback.trim()); } catch {}
@@ -181,7 +182,7 @@ export default function CallSheet({ place, user, onSignIn, onClose }) {
                     <option value="f">女性（〇〇小姐など）</option>
                   </select>
                 </label>
-                <label className="wide">連絡先の電話番号（任意・お店に聞かれたときだけ伝えます）<input value={form.callback} maxLength={30} inputMode="tel" placeholder="例：+81 90-1234-5678" onChange={set('callback')} /></label>
+                <label className="wide">連絡先の電話番号（必須・お店に聞かれたら国番号つきで伝えます）<input value={form.callback} maxLength={30} inputMode="tel" placeholder="例：+81 90-1234-5678" onChange={set('callback')} /></label>
                 <label className="wide">お店に伝えたいこと（任意）<input value={form.note} maxLength={120} placeholder="例：子ども1人います" onChange={set('note')} /></label>
                 {me?.owner && (
                   <fieldset className="wide call-test">

@@ -40,6 +40,15 @@ export function toE164(s) {
   return /^\+[0-9]{6,16}$/.test(t) ? t : '';
 }
 
+// 連絡先の番号を国番号つき（+81 90 1234 5678 の形）にそろえる。日本の 0 から始まる番号は +81 に直す
+export function intlPhone(v) {
+  const d = String(v || '').replace(/[^0-9+]/g, '');
+  let n = d.startsWith('+') ? d.slice(1) : d.startsWith('00') ? d.slice(2) : d.startsWith('0') ? '81' + d.slice(1) : d;
+  if (!/^[0-9]{9,15}$/.test(n)) return '';
+  if (n.startsWith('81')) { const r = n.slice(2); return `+81 ${r.slice(0, 2)} ${r.slice(2, r.length - 4)} ${r.slice(-4)}`; }
+  return '+' + n;
+}
+
 // 予約の中身（画面から送られてくる値をそろえる。おかしな値はここで落とす）
 export function cleanRequest(r) {
   const s = (v, n) => (typeof v === 'string' ? v.replace(/[\u0000-\u001F\u007F<>]/g, ' ').trim().slice(0, n) : '');
@@ -54,11 +63,11 @@ export function cleanRequest(r) {
     gender: r?.gender === 'f' ? 'f' : 'm', // 呼び方（中国語の先生・小姐など）
     flex: s(r?.flex, 60), // 時間の融通（例：19時〜20時ならOK）
     note: s(r?.note, 120), // ひとこと（例：窓際の席がいい）
-    callback: s(r?.callback, 30), // 連絡先（任意）
+    callback: intlPhone(s(r?.callback, 30)), // 連絡先（必須。お店に聞かれたら国番号つきで伝える。2026-11-22：番号が無いと断る店があるため）
     timeTo: '', // 第1候補の時間の幅の終わり（「19:00〜20:30の間ならOK」の20:30。空なら時間ぴったりだけ）
     alts: [], // 第2・第3候補（日にち・時間の幅・人数。1つ目が無理なときに聞く）
   };
-  if (!out.date || !out.time || !out.people || !out.name) return null;
+  if (!out.date || !out.time || !out.people || !out.name || !out.callback) return null;
   const hm = (v) => (/^\d{2}:\d{2}$/.test(v) ? v : '');
   const to = hm(s(r?.timeTo, 5));
   out.timeTo = to && to > out.time ? to : '';
@@ -254,7 +263,7 @@ The reservation the traveler wants (choice 1):
 Other details from the traveler (use only when relevant):
 ${request.flex ? `- Time flexibility: "${request.flex}"
 ` : ''}- Message for the shop: ${request.note ? `"${request.note}" — mention it briefly once, after the booking is agreed, before saying goodbye` : 'none'}
-- Contact phone number: ${request.callback ? `"${request.callback}" — give it only if they ask for a phone number; read the digits clearly` : 'none (if they ask for a phone number, say the traveler will confirm it when they arrive)'}
+- Contact phone number: ${request.callback ? `"${request.callback}" — the traveler's mobile phone, with the country code. Give it when they ask for a phone number (or when they need one to take the booking): say it is the guest's mobile with the country code, then read the digits clearly in small groups` : 'none (if they ask for a phone number, say the traveler will confirm it when they arrive)'}
 
 How a call usually goes (this is the usual shape, not a script — always respond to what the shop actually says, the way an experienced, polite human caller would):
 1. REQUEST: in one short sentence, ask if you can book choice 1 (its date, time or time window, and number of people). Say them clearly.
