@@ -15,6 +15,7 @@ const UNHEARD = '（短い返事・文字にならず）';
 const NEG = /不接|不收|不開|不开|不提供|沒辦法|没办法|받지 않|예약을 안|予約は受け|受け付けて|休|關門|关门|打烊|候位|排隊|排队|現場|现场|휴무|쉬는|쉽니다|안 받|closed|walk-in|first come|不是|不對|不对|錯|错|改|換|换|不行|不可以|不能|沒有|没有|沒位|没位|客滿|客满|滿了|满了|無法|无法|不好意思|唔得|冇|아니|안 돼|안돼|없어|없습니다|못|만석|いいえ|無理|できません|ありません|満席|いっぱい|\bno\b|\bnot\b|\bfull\b|sorry|can't|cannot|không|ไม่|tidak|\bnon\b|nein|complet|\bpas\b/i;
 const ASKING = /[?？]|嗎|吗|什麼|什么|幾|几|哪|誰|谁|電話|电话|號碼|号码|名字|貴姓|贵姓|怎麼|怎么|까|나요|번호|이름|성함|ですか|お名前|電話番号|what|when|which|who|how|phone|number|spell/i;
 const TIMEISH = /\d|點|点|時|时|시|분|半|小時|小时|o'clock|pm|am/i;
+const HOLD = /少々|お待ち|待って|稍等|等一下|等等|請稍|请稍|잠시|잠깐|기다려|hold on|one moment|just a moment|wait/i; // 「少々お待ちください」：確かめに行っている
 const SILENT = '（返事が聞こえず・はいとみなして進めた）';
 // 短い「はい」（各国語・英語・日本語）
 const SHORT_YES = /^[\s,.，。、!！~～]*(好|好的|好啊|可以|對|对|是|是的|嗯|沒問題|没问题|行|ok|okay|okey|yes|yeah|sure|네|예|넵|오케이|はい|ええ|うん|係|得|vâng|dạ|được|ค่ะ|ครับ|ya|oui|sì|sí|ja)([\s,.，。、!！~～]*(好|好的|可以|對|对|ok|okay|네|예|はい))*[\s,.，。、!！?？~～]*$/i; // AIが最後の確認（日時・人数・名前）を言ったしるし
@@ -223,7 +224,7 @@ export class CallSession {
     // Twilio の「お店が話している」知らせは、文字になった声にしか来ない（2026-11-21 社長の電話の記録で確認：「OK」は知らせも文字も何も届かなかった）。
     // そのため「黙っている」は「文字にならない短い返事（OK・はい等）をした」かもしれない。止まらないよう、待ちは短く、はい/いいえで答える問いなら「はい」として進める
     // 待ちの期限はAIが言い終わった時から数える。周りの音（テレビ等）で延ばさない（ずっと待ち続けないように）
-    if (!this.waitDeadline) this.waitDeadline = Date.now() + (this.stage === 'greeting' ? 3000 : 4000);
+    if (!this.waitDeadline) this.waitDeadline = Date.now() + (this.holding ? 30000 : this.stage === 'greeting' ? 3000 : 4000);
     const ms = Math.max(300, this.waitDeadline - Date.now());
     this.waitTimer = setTimeout(() => {
       this.waitTimer = null;
@@ -231,7 +232,11 @@ export class CallSession {
       // お店が話し始めて2.5秒以内なら、言い終わるのを少し待つ（それより長く続く声はテレビ等とみなして待たない）
       // お店がAIの言い終わったあとに話し始めていたら、言い終わるまで待つ（最大12秒）。AIの話にかぶって始まった声（テレビ等）は待たない
       // 2026-11-21 社長の電話：「その日は満席です」を言っている途中で「返事なし」と判断していた（2.5秒で打ち切っていたため）
-      if (this.shopTalking && !this.startedOverAgent() && Date.now() - (this.shopOnAt || 0) < 12000) { this.waitDeadline = Date.now() + 1000; this.armWait(); return; }
+      // 待つのは話し始めから6秒まで（あいさつのあとは3秒）。テレビが鳴り続けると「話している」が終わらず、文字も確定しないまま止まっていた（2026-11-22 社長の電話：あいさつのあとの「はい」がテレビの声とつながり、12秒以上待って社長が切った）
+      const cap = this.stage === 'greeting' ? 3000 : 6000;
+      if (this.shopTalking && !this.startedOverAgent() && Date.now() - (this.shopOnAt || 0) < cap) { this.waitDeadline = Date.now() + 500; this.armWait(); return; }
+      // 待ちきれなかった：途中の文字があればそれを返事として使う（テレビ混じりなら長い文字の決まりで、最後の答えだけに返事する）
+      if (this.shopTalking && this.partial && this.stage !== 'greeting') { const p = this.partial; this.partial = ''; this.turnHandled = true; this.onShop(p); return; }
       // お店が話し終わって、文字を待っている間（文字にならなかった声の判断の前）は、無言とみなさない
       if (this.unheardTimer) { this.waitDeadline = Date.now() + 1000; this.armWait(); return; }
       this.waitDeadline = null;
@@ -327,6 +332,7 @@ export class CallSession {
     this.heard = true;
     this.silentCount = 0;
     this.unclearAsks = 0;
+    if (!HOLD.test(said)) this.holding = false;
     this.clearWait();
     this.transcript.push({ who: 'shop', text: said });
     if (!this.greeted) {
@@ -351,6 +357,12 @@ export class CallSession {
       // 時間・数の入った返事（「いえ、十九時半です」等）は訂正かもしれないので、AIに渡して確かめさせる（2026-11-22 の通し試験で見つけた）
       if (!NEG.test(said) && !ASKING.test(said) && !TIMEISH.test(said) && !/いえ|違|ちが|じゃなく|ではなく/.test(said)) { this.finishThanks(); return; }
       this.reply(`${said}\n(You have ALREADY asked the recap. Do not repeat the recap or ask again. If this is the shop clearly saying something is wrong, fix only that in one short phrase. If it is a question, answer it in one short sentence and then thank them and say goodbye with [END]. If it does not make sense as the shop's answer, reply only [IGNORE].)`);
+      return;
+    }
+    if (HOLD.test(said) && !NEG.test(said) && !TIMEISH.test(said)) {
+      // 「少々お待ちください」：はいと答えて、戻ってくるまで（最大30秒）黙って待つ。「はい」として先へ進めない（2026-11-22 通し試験で見つけた）
+      this.holding = true;
+      this.reply(`${said}\n(They asked you to wait. Reply only with a very short "OK, I'll wait" in the local language (for Japanese: はい、お願いします。). Then wait silently. Do not repeat your request and do not move to the next step.)`);
       return;
     }
     if (this.askedOnce && !NEG.test(said) && !ASKING.test(said) && !TIMEISH.test(said) && said.replace(/[\s,.，。、!！?？~～]/g, '').length <= 12) {
@@ -441,8 +453,8 @@ export class CallSession {
     this.snapBefore = null;
     if (recap) this.stage = 'recap';
     else if (this.stage === 'talk' && spoken) this.askedOnce = true; // 用件を聞いた（このあとの短い言葉は「はい」として扱う）
-    if (!recap && !done && this.stage === 'recap' && spoken) {
-      // 確認のあとにAIがまた話した：2回目は認めず、次の返事を待たずに締める準備（確認の繰り返しを止める）
+    if (!done && snapStage === 'recap' && spoken) {
+      // 確認のあとにAIがまた話した（確認のやり直しを含む）：2回目は認めず締める（確認の繰り返しで終わらなくなるのを防ぐ。2026-11-22 通し試験で見つけた）
       this.afterRecapTalks = (this.afterRecapTalks || 0) + 1;
       if (this.afterRecapTalks >= 2) { this.finishThanks(); return; }
     }
@@ -548,10 +560,9 @@ export async function handleShopbot(request, env) {
   if (!ok || form.From !== env.TWILIO_FROM) return twiml('<Reject/>');
   const say = (t) => `<Say language="cmn-TW" voice="Google.cmn-TW-Standard-A">${t}</Say>`;
   const pause = (s) => `<Pause length="${s}"/>`;
-  // 2026-11-22：日本語・満席の場面（社長の電話の再現）。テレビの声のあとに「十九時は満席です」をつなげて言う
-  // あいさつ（約9秒）→ はい、どうぞ → 用件（約7秒）→ テレビ＋満席 → 別の時間を聞く（約4秒）→ 十九時半 → 確認（約8秒）→ はい → お礼
+  // 2026-11-22：日本語・社長の電話の再現（あいさつの最中に「もしもし」→言い終わり直後に「はい」→少々お待ちください→テレビの声＋満席→十九時半→はい）
   const ja = (t) => `<Say language="ja-JP" voice="Google.ja-JP-Standard-A">${t}</Say>`;
-  return twiml([pause(1), ja('もしもし'), pause(9), ja('はい、どうぞ'), pause(8),
-    ja('中国の国営メディアは、日本のこうした懸念に反論していたのです。十九時は満席です。'), pause(6),
+  return twiml([pause(2), ja('もしもし'), pause(11), ja('はい'), pause(9), ja('少々お待ちください'), pause(5),
+    ja('お待たせしました。中国の国営メディアは、日本のこうした懸念に反論していたのです。十九時は満席です。'), pause(6),
     ja('十九時半なら空いてます。'), pause(13), ja('はい、大丈夫です。'), pause(6)].join(''));
 }
