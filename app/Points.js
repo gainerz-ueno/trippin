@@ -16,7 +16,11 @@ async function call(method = 'GET') {
   return d;
 }
 
+const COST = ['お店の検索：2pt', 'スクショからさがす：3pt', 'お店の詳細を見る：1pt', '口コミを見る：1pt', 'AIのおすすめ：1pt', 'AIで画像を作る：3pt', 'タビビコール（お店への電話予約）：45pt（3分ごと）'];
+const seenKey = (id) => `tabibi:ptwelcome:${id}`;
+
 export default function Points({ user, onSignIn }) {
+  const [welcome, setWelcome] = useState(false);
   const [p, setP] = useState(null); // { balance, owner, pack, canBuy, cost }
   const [open, setOpen] = useState(false);
   const [login, setLogin] = useState(false);
@@ -26,6 +30,12 @@ export default function Points({ user, onSignIn }) {
   const load = useCallback(() => { if (user) call().then((d) => { setP(d); if (d.added) setMsg(`${d.pack.points}ポイントを追加しました`); }).catch(() => {}); }, [user]);
 
   useEffect(() => { if (user) load(); else setP(null); }, [user, load]);
+  // はじめてログインした人に、ポイントのしくみを一度だけ見せる（運営者には出さない）
+  useEffect(() => {
+    if (!user || !p || p.owner) return;
+    try { if (!localStorage.getItem(seenKey(user.id))) setWelcome(true); } catch {}
+  }, [user, p]);
+  const closeWelcome = () => { setWelcome(false); try { localStorage.setItem(seenKey(user.id), '1'); } catch {} };
   useEffect(() => {
     const need = () => { setOpen(true); load(); };
     const needLogin = () => setLogin(true);
@@ -54,9 +64,28 @@ export default function Points({ user, onSignIn }) {
   return (
     <>
       {user && p && (
-        <button type="button" className="pt-chip" onClick={() => setOpen(true)} aria-label="ポイントを見る・買う">
-          <b>{p.owner ? '∞' : p.balance}</b>pt
+        <span className="pt-bar">
+          <button type="button" className="pt-chip" onClick={() => setOpen(true)} aria-label="ポイントの残りと使い方を見る">
+            <span className="pt-lbl">ポイント</span><b>{p.owner ? '使い放題' : `${p.balance}pt`}</b>
+          </button>
+          <button type="button" className="pt-buynow" onClick={() => setOpen(true)}>ポイントを買う</button>
+        </span>
+      )}
+      {!user && (
+        <button type="button" className="pt-chip" onClick={() => setLogin(true)} aria-label="ログインしてお試しポイントをもらう">
+          <span className="pt-lbl">ポイント</span><b>お試し10pt</b>
         </button>
+      )}
+      {welcome && p && (
+        <div className="prem-back" role="dialog" aria-modal="true" aria-labelledby="pt-w" onClick={closeWelcome}>
+          <div className="prem" onClick={(e) => e.stopPropagation()}>
+            <h2 id="pt-w">お試し10ポイントをプレゼント</h2>
+            <p>Tabibi は、使った分だけポイントを使うしくみです。月額の料金はかかりません。</p>
+            <ul className="pt-cost">{COST.map((c) => <li key={c}>{c}</li>)}</ul>
+            <p>足りなくなったら、上の「ポイントを買う」から買えます（{p.pack?.yen?.toLocaleString('ja-JP') || '1,000'}円で{p.pack?.points || 150}ポイント）。</p>
+            <button type="button" className="btn pt-buy" onClick={closeWelcome}>さっそく使ってみる</button>
+          </div>
+        </div>
       )}
       {msg && <div className="pt-toast" role="status">{msg}</div>}
       {login && !user && (
@@ -74,15 +103,7 @@ export default function Points({ user, onSignIn }) {
           <div className="prem" onClick={(e) => e.stopPropagation()}>
             <h2 id="pt-h">ポイント</h2>
             <p className="pt-now">いまのポイント：<b>{p ? (p.owner ? '使い放題（運営者）' : `${p.balance}pt`) : '確認中…'}</b></p>
-            <ul className="pt-cost">
-              <li>お店の検索：2pt</li>
-              <li>スクショからさがす：3pt</li>
-              <li>お店の詳細を見る：1pt</li>
-              <li>口コミを見る：1pt</li>
-              <li>AIのおすすめ：1pt</li>
-              <li>AIで画像を作る：3pt</li>
-              <li>タビビコール：45pt（3分ごと）</li>
-            </ul>
+            <ul className="pt-cost">{COST.map((c) => <li key={c}>{c}</li>)}</ul>
             {p?.canBuy === false
               ? <p className="hint">ポイントの購入はただいま準備中です。</p>
               : <button type="button" className="btn pt-buy" disabled={busy || !p} onClick={buy}>{busy ? '決済の画面を開いています…' : `ポイントを買う（${p?.pack?.yen?.toLocaleString('ja-JP') || '1,000'}円で${p?.pack?.points || 150}pt）`}</button>}

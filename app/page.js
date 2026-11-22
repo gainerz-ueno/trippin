@@ -1567,7 +1567,7 @@ export default function Home() {
         <span className="head-btns">
           <Points user={user} onSignIn={() => signIn()} />
           {user
-            ? <button type="button" className="login-btn" onClick={() => signOut()}><IcUser size={16} />ログアウト</button>
+            ? <button type="button" className="login-btn" onClick={() => signOut()} aria-label="ログアウト"><IcUser size={16} /><span className="lo-txt">ログアウト</span></button>
             : <button type="button" className="login-btn on" onClick={() => signIn()}><IcUser size={16} />ログイン</button>}
         </span>
       </header>

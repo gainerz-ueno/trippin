@@ -668,10 +668,17 @@ label.dd-item{flex-direction:row;font-size:14px;color:var(--ink)}
 @media (max-width:380px){.call-form{grid-template-columns:1fr 1fr}.call-cand{grid-template-columns:1fr 1fr}.call-test{grid-template-columns:1fr}}
 
 /* ポイント（2026-11-22） */
-.pt-chip{font:inherit;display:inline-flex;align-items:center;gap:2px;height:36px;padding:0 12px;border-radius:999px;border:1.5px solid var(--copybtn);background:var(--card);color:var(--copybtn);font-size:13px;font-weight:800;cursor:pointer;margin-right:6px}
+.pt-bar{display:inline-flex;align-items:center;gap:6px;margin-right:6px}
+.pt-lbl{font-size:11px;font-weight:700;opacity:.85;margin-right:4px}
+.pt-buynow{font:inherit;height:36px;padding:0 12px;border-radius:999px;border:0;background:#ff8a00;color:#1a1200;font-size:13px;font-weight:900;cursor:pointer;white-space:nowrap;box-shadow:0 2px 8px rgba(255,138,0,.35)}
+.pt-chip{font:inherit;display:inline-flex;align-items:center;gap:2px;height:36px;padding:0 12px;white-space:nowrap;border-radius:999px;border:1.5px solid var(--copybtn);background:var(--card);color:var(--copybtn);font-size:13px;font-weight:800;cursor:pointer;margin-right:6px}
 .pt-chip b{font-size:15px}
 .pt-toast{position:fixed;left:50%;top:14px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:700;z-index:120;box-shadow:0 6px 20px rgba(0,0,0,.25)}
 .pt-now{font-size:15px}
 .pt-now b{font-size:20px}
 .pt-cost{margin:8px 0 14px;padding-left:18px;font-size:14px;line-height:1.8}
 .btn.pt-buy{width:100%;background:var(--copybtn);color:var(--copybtn-ink);border-color:var(--copybtn);font-size:16px;font-weight:800;padding:12px}
+
+/* 2026-11-22 ポイントの帯：スマホではログアウトを人のマークだけにして、ロゴとポイントの場所を空ける */
+@media (max-width:440px){.lo-txt{display:none}.head-btns .login-btn{padding:0 12px}.pt-chip,.pt-buynow{padding:0 10px}}
+@media (max-width:380px){h1.logo img{height:22px}.pt-chip b{font-size:13px}.pt-lbl{font-size:10px;margin-right:2px}.pt-buynow{font-size:12px;padding:0 8px}.pt-chip{padding:0 8px}.pt-bar{gap:4px;margin-right:2px}}
