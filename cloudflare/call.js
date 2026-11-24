@@ -2,7 +2,7 @@
 // ・/call/ws     … お店が話したこと（文字）が届く → Claude が現地語で返事 → Twilio が読み上げる
 // ・/call/status … Twilio から「呼び出し中・出た・切れた・出なかった」が届く
 // どちらも、電話を始めたときに作った合言葉（k）が合うときだけ動く。サイトのパスワードはかけない（Twilio が来るため）
-import { CALL_BLOCK_SEC, GREETING, GOODBYE, THANKS, callSystemPrompt, summaryPrompt, romajiToKana } from '../app/lib/call.js';
+import { CALL_BLOCK_SEC, GREETING, GOODBYE, THANKS, callSystemPrompt, summaryPrompt, romajiToKana, cleanResultGroups } from '../app/lib/call.js';
 import { rpcJson, callUpdate, claudeStream, claudeOnce, twilioSignatureOk } from '../app/lib/call-server.js';
 
 const extend = (p, use) => rpcJson('call_extend', { cid: p.c, secret: p.k, use }).then((r) => r.ok && r.data === true).catch(() => false);
@@ -493,12 +493,14 @@ export class CallSession {
         if (!j) throw new Error('summary json');
         outcome = ['booked', 'declined', 'alternative', 'unclear'].includes(j.outcome) ? j.outcome : 'unclear';
         result = {
-          summary_ja: String(j.summary_ja || '').slice(0, 600),
+          summary_ja: String(j.summary_ja || '').slice(0, 800),
           notes_ja: String(j.notes_ja || '').slice(0, 600),
           date: /^\d{4}-\d{2}-\d{2}$/.test(j.date) ? j.date : '',
           time: /^\d{2}:\d{2}$/.test(j.time) ? j.time : '',
           people: Number(j.people) > 0 ? Math.round(Number(j.people)) : 0,
         };
+        const gs = cleanResultGroups(j.groups);
+        if (gs.length) result.groups = gs; // 複数テーブルのとき：テーブルごとの結果
       } catch (e) {
         console.error('[tabibi] summary', String(e?.message || e));
         result = { summary_ja: '結果をまとめられませんでした。下の会話の記録を見てください。', notes_ja: '' };

@@ -49,36 +49,100 @@ export function intlPhone(v) {
   return '+' + n;
 }
 
+export const CALL_MAX_CANDS = 5; // 候補の数の上限
+export const CALL_MAX_GROUPS = 4; // テーブル（グループ）の数の上限
+export const CALL_MAX_PEOPLE = 30; // 全テーブルの合計人数の上限
+
+// テーブル（グループ）をそろえる：大人・子どもの人数、子どもの年齢、近くの席の希望。合計が0のものは落とす
+function cleanGroups(list, s) {
+  const n = (v) => { const x = Math.round(Number(v)); return Number.isFinite(x) && x >= 0 && x <= CALL_MAX_PEOPLE ? x : 0; };
+  const out = [];
+  let sum = 0;
+  for (const g of Array.isArray(list) ? list.slice(0, CALL_MAX_GROUPS) : []) {
+    const adults = n(g?.adults), children = n(g?.children);
+    if (adults + children < 1 || sum + adults + children > CALL_MAX_PEOPLE) continue;
+    sum += adults + children;
+    out.push({ adults, children, childAges: children ? s(g?.childAges, 40) : '', near: g?.near === false ? false : true });
+  }
+  return out;
+}
+
 // 予約の中身（画面から送られてくる値をそろえる。おかしな値はここで落とす）
+// 新しい形：candidates（最大5。日にち・時間・時間の幅）と groups（最大4。大人・子ども・年齢・近くの席）と partial（all＝全テーブルが取れる時間だけ／any＝片方だけでも）
+// 古い形：date/time/timeTo/people/alts も同じ意味に直す（古い画面・保存済みの記録が動くように）
+// どちらの形でも、date/time/timeTo/people/alts（第1候補と第2候補以降・合計人数）を埋めて返す
 export function cleanRequest(r) {
   const s = (v, n) => (typeof v === 'string' ? v.replace(/[\u0000-\u001F\u007F<>]/g, ' ').trim().slice(0, n) : '');
-  const date = s(r?.date, 10);
-  const time = s(r?.time, 5);
-  const people = Math.round(Number(r?.people));
+  const hm0 = (v) => (/^\d{2}:\d{2}$/.test(v) ? v : '');
+  const people0 = Math.round(Number(r?.people));
+  let groups = cleanGroups(r?.groups, s);
+  if (!groups.length) {
+    const p = Number.isFinite(people0) && people0 >= 1 && people0 <= CALL_MAX_PEOPLE ? people0 : 0;
+    groups = p ? [{ adults: p, children: 0, childAges: '', near: true }] : [];
+  }
+  const total = groups.reduce((a, g) => a + g.adults + g.children, 0);
+  // 候補：新しい形（candidates）を先に。無ければ古い形（date/time + alts）
+  const cands = [];
+  const addCand = (c, people) => {
+    const d = s(c?.date, 10), t = hm0(s(c?.time, 5)), to = hm0(s(c?.timeTo, 5));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !t || cands.length >= CALL_MAX_CANDS) return;
+    const cand = { date: d, time: t, timeTo: to && to > t ? to : '', people };
+    if (cands.some((x) => x.date === cand.date && x.time === cand.time && x.timeTo === cand.timeTo && x.people === cand.people)) return;
+    cands.push(cand);
+  };
+  if (Array.isArray(r?.candidates) && r.candidates.length) {
+    for (const c of r.candidates.slice(0, CALL_MAX_CANDS + 3)) addCand(c, total);
+  } else {
+    addCand(r, total);
+    for (const a of Array.isArray(r?.alts) ? r.alts.slice(0, CALL_MAX_CANDS - 1) : []) {
+      const ap = Math.round(Number(a?.people));
+      addCand(a, groups.length === 1 && Number.isFinite(ap) && ap >= 1 && ap <= CALL_MAX_PEOPLE ? ap : total);
+    }
+  }
+  const first = cands[0] || { date: '', time: '', timeTo: '' };
   const out = {
-    date: /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : '',
-    time: /^\d{2}:\d{2}$/.test(time) ? time : '',
-    people: Number.isFinite(people) && people >= 1 && people <= 30 ? people : 0,
+    date: first.date,
+    time: first.time,
+    people: total,
+    groups,
+    partial: r?.partial === 'any' ? 'any' : 'all', // 複数テーブルのとき：all＝全テーブルが取れる時間だけ予約する／any＝片方だけでも予約する
     name: s(r?.name, 40), // 予約の名前（ローマ字かカタカナ）
     gender: r?.gender === 'f' ? 'f' : 'm', // 呼び方（中国語の先生・小姐など）
     flex: s(r?.flex, 60), // 時間の融通（例：19時〜20時ならOK）
     note: s(r?.note, 120), // ひとこと（例：窓際の席がいい）
     callback: intlPhone(s(r?.callback, 30)), // 連絡先（必須。お店に聞かれたら国番号つきで伝える。2026-11-22：番号が無いと断る店があるため）
-    timeTo: '', // 第1候補の時間の幅の終わり（「19:00〜20:30の間ならOK」の20:30。空なら時間ぴったりだけ）
-    alts: [], // 第2・第3候補（日にち・時間の幅・人数。1つ目が無理なときに聞く）
+    timeTo: first.timeTo || '', // 第1候補の時間の幅の終わり（「19:00〜20:30の間ならOK」の20:30。空なら時間ぴったりだけ）
+    alts: cands.slice(1), // 第2候補以降（日にち・時間の幅・人数。1つ目が無理なときに聞く。最大4つ）
+    candidates: cands, // 第1〜第5候補（順番どおり）
   };
   if (!out.date || !out.time || !out.people || !out.name || !out.callback) return null;
-  const hm = (v) => (/^\d{2}:\d{2}$/.test(v) ? v : '');
-  const to = hm(s(r?.timeTo, 5));
-  out.timeTo = to && to > out.time ? to : '';
-  for (const a of Array.isArray(r?.alts) ? r.alts.slice(0, 2) : []) {
-    const ad = s(a?.date, 10), at = hm(s(a?.time, 5)), aTo = hm(s(a?.timeTo, 5));
-    const ap = Math.round(Number(a?.people));
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(ad) || !at) continue;
-    const alt = { date: ad, time: at, timeTo: aTo && aTo > at ? aTo : '', people: Number.isFinite(ap) && ap >= 1 && ap <= 30 ? ap : out.people };
-    const same = (x) => x.date === alt.date && x.time === alt.time && x.timeTo === alt.timeTo && x.people === alt.people;
-    if (same(out) || out.alts.some(same)) continue;
-    out.alts.push(alt);
+  return out;
+}
+
+// 「11月27日18:30」の形
+const dateTimeJa = (date, time) => {
+  const m = /^\d{4}-(\d{2})-(\d{2})$/.exec(date || '');
+  return `${m ? `${Number(m[1])}月${Number(m[2])}日` : ''}${time || ''}`;
+};
+
+// 結果の画面用：テーブルごとの1行（groups があるときだけ）。例：「テーブル1（5名）：11月27日18:30 予約できました」
+export function groupLines(groups) {
+  return (Array.isArray(groups) ? groups : []).map((g, i) => {
+    const n = g.people > 0 ? `（${g.people}名）` : '';
+    const what = g.outcome === 'booked' ? `${dateTimeJa(g.date, g.time)} 予約できました`.trim() : g.outcome === 'declined' ? '予約できませんでした' : '結果がはっきりしません';
+    return { key: i, ok: g.outcome === 'booked', text: `テーブル${g.table || i + 1}${n}：${what}` };
+  });
+}
+
+// 電話のあとのまとめ（AIが返したテーブルごとの結果）をそろえる。おかしな値は落とす
+export function cleanResultGroups(list) {
+  const out = [];
+  for (const g of Array.isArray(list) ? list.slice(0, CALL_MAX_GROUPS) : []) {
+    const oc = ['booked', 'declined', 'unclear'].includes(g?.outcome) ? g.outcome : 'unclear';
+    const date = typeof g?.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(g.date) ? g.date : '';
+    const time = typeof g?.time === 'string' && /^\d{2}:\d{2}$/.test(g.time) ? g.time : '';
+    const p = Math.round(Number(g?.people));
+    out.push({ table: out.length + 1, outcome: oc, date: oc === 'booked' ? date : '', time: oc === 'booked' ? time : '', people: Number.isFinite(p) && p >= 1 && p <= CALL_MAX_PEOPLE ? p : 0 });
   }
   return out;
 }
@@ -266,7 +330,71 @@ export function jaPhone(p) {
 }
 // 電話で話すAIへの指示
 const JA_PEOPLE = { 1: 'ひとり', 2: 'ふたり', 3: 'さんにん', 4: 'よにん', 5: 'ごにん', 6: 'ろくにん', 7: 'ななにん', 8: 'はちにん', 9: 'きゅうにん', 10: 'じゅうにん' };
+// 学年・年齢の書き方を、お店に伝える年齢の目安に（お店は「何歳？」と聞く）
+const AGE_HINT = 'Japanese school grades: 小1 = first grade of elementary school, about 6-7 years old; 小2 = 7-8; 小3 = 8-9; 小4 = 9-10; 小5 = 10-11; 小6 = 11-12; 中1 = 12-13; 中2 = 13-14; 中3 = 14-15; 高1 = 15-16. 年少 = 3 years old, 年中 = 4, 年長 = 5 (kindergarten). "N歳" or "Nさい" = N years old.';
+
+// 複数テーブル（グループ）のときの指示：1つの電話で全テーブルをまとめて聞く
+function groupsPrompt({ lang, placeName, request }) {
+  const base = legacyPrompt({ lang, placeName, request: { ...request, alts: [], groups: undefined } });
+  const head = base.slice(0, base.indexOf('The reservation the traveler wants'));
+  const tail = base.slice(base.indexOf('What you receive during the call'));
+  const G = request.groups;
+  const total = G.reduce((a, g) => a + g.adults + g.children, 0);
+  const kana = romajiToKana(request.name);
+  const cands = (request.candidates && request.candidates.length ? request.candidates : [{ date: request.date, time: request.time, timeTo: request.timeTo }]);
+  const win = (c) => (c.timeTo ? `any time from ${c.time} to ${c.timeTo}` : `${c.time} exactly`);
+  const nw = (n) => (lang === 'ja-JP' ? JA_PEOPLE[n] || n + 'にん' : String(n));
+  const groupLines = G.map((g, i) => {
+    const n = g.adults + g.children;
+    const kids = g.children ? ` — ${g.adults} adult${g.adults === 1 ? '' : 's'} and ${g.children} child${g.children === 1 ? '' : 'ren'}${g.childAges ? ` (traveler wrote the child's age/grade as "${g.childAges}")` : ''}` : (g.adults ? ` — ${g.adults} adults, no children` : '');
+    return `- Table ${i + 1}: ${n} people (say "${nw(n)}")${kids}. Seats: ${g.near ? 'the traveler would like this table NEAR the other table(s) — ask for nearby seats' : 'the tables may be apart from each other'}.`;
+  }).join('\n');
+  const tablesSay = G.map((g) => nw(g.adults + g.children)).join(' / ');
+  const candLines = cands.map((c, i) => {
+    const rel = localDayWord(lang, relativeDay(lang, c.date), c.date);
+    const sdc = spokenDate(lang, c.date);
+    const sameDay = i > 0 && c.date === cands[0].date;
+    const when = sameDay ? 'the same day as choice 1' : `${rel ? `"${rel}" then ` : ''}${sdc ? `"${sdc}"` : `${c.date.slice(5)} (${WEEK[new Date(c.date + 'T00:00:00Z').getUTCDay()]})`}`;
+    return `  choice ${i + 1}: ${when}, ${win(c)}`;
+  }).join('\n');
+  const all = request.partial !== 'any';
+  const hasKids = G.some((g) => g.children > 0);
+  const callbackLine = request.callback ? `
+- Contact phone number: "${request.callback}"${lang === 'ja-JP' ? ` (in Japanese read it exactly as 「${jaPhone(request.callback)}」 — digits one by one in hiragana)` : ''} — the traveler's mobile phone, with the country code. Give it once together with the name at the recap step, and again if they ask.` : '';
+  return `${head}The reservation the traveler wants — SEVERAL TABLES IN ONE CALL (${G.length} tables, ${total} people in total, all under one name):
+${groupLines}
+- The tables are for the same party of friends/family: ask for ALL tables together in the SAME request and the SAME time, in one short sentence, for example "two tables, for ${tablesSay} people${G.some((g) => g.near) ? ', with seats close to each other' : ''}". Do not ask about the tables one by one unless the shop can only do some of them (see below).
+- Choices in the traveler's order of preference (ask in exactly this order; the first one is the most wanted):
+${candLines}
+  Each choice has its own time or time window. A time is acceptable ONLY if it is inside the window of a choice on that same day (an exact time means only that time).
+- Name for the booking: ${request.name} — the SAME name for every table; a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese ${NAME_EX[lang] ? `(for example ${NAME_EX[lang]})` : ''}. ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
+- Children: ${hasKids ? `there ${G.reduce((a, g) => a + g.children, 0) === 1 ? 'is a child' : 'are children'} in the party (see the tables above). When you ask for the tables, mention briefly that the party includes children (for example "including one child"). If the shop asks about the children's ages, a child seat, a kids' chair or a kids' menu, answer from the details above: give the age in years (${AGE_HINT}); if the shop asks something about the child you do not know, say the traveler will confirm when they arrive. Never invent an age.` : 'none.'}
+
+Other details from the traveler (use only when relevant):
+${request.flex ? `- Time flexibility: "${request.flex}"
+` : ''}- Message for the shop: ${request.note ? `"${request.note}" — mention it briefly once, after the booking is agreed, before saying goodbye` : 'none'}${callbackLine}
+
+How this call goes — MULTIPLE TABLES (not a script; always respond to what the shop actually says, like an experienced, polite human caller):
+1. REQUEST: ask whether choice 1 is possible for ALL tables together: its date, the time or time window, the number of tables and the number of people at each table, and (if wanted) seats close together. One or two short sentences.
+${all ? `2. RULE — ALL TABLES OR NOTHING: the traveler books ONLY a time when the shop can seat EVERY table (all ${G.length}) at the same time. If at some choice the shop can take only some of the tables (for example one table but not the other), do NOT agree to it and do NOT book anything: politely say that you need all the tables together, remember what the shop said is possible, and in the SAME reply ask about the next choice that is still possible. Never say "just that one is fine".` : `2. RULE — PARTIAL BOOKING IS OK: the traveler accepts booking only some of the tables. If at a choice the shop can take only some of the tables, accept those (say which table(s), by number of people), and then in the SAME reply ask about the next choice that is still possible for ONLY the tables that are not booked yet (say their number of people). Keep going through the choices until every table is booked or no choice is left. Never ask again for a table that is already booked.`}
+3. If the shop offers a time: accept it ONLY if it is inside the window of a choice (same day). A time outside every window must NOT be accepted, however close it is — say politely that it does not suit and ask about the next choice. Never ask about or accept any day, time, number of people or number of tables that the traveler did not list. Never add a choice of your own.
+4. If a choice is ruled out (the shop is full at that time, or for a whole period such as "all evening" or "this week" — then every choice inside that period is ruled out too), never ask about it again. Ask about at most one choice per reply, in one short natural sentence with its day word, time or window, and the tables and numbers of people.
+5. WHEN ${all ? 'ALL TABLES CAN BE BOOKED AT THE SAME CHOICE' : 'THE BOOKINGS ARE SETTLED (all tables booked, or no choice is left but some tables are booked)'}: in ONE reply say that the guest is Japanese, give the name once${request.callback ? ', give the contact phone number once (the guest\'s mobile with the country code, digits in small groups)' : ''}, and ask ONE short recap question, as the LAST sentence, that says the day word, the ONE exact time, the number of people at EACH table (and the number of tables) and the name${all ? '' : ' — and, if the bookings are on different days or times, each one'} (for example ${RECAP_EX[lang] || '"Tomorrow at seven, two tables for four and five people, Ueno san — is that right?"'}, but with the real tables and numbers of this call). End this reply with [RECAP]. Do this recap only ONCE in the whole call. The name is the same for every table; say it only once. If the shop has ALREADY repeated the date, time, tables and name back, skip the recap and go to step 7.
+6. ${all ? 'IF NO CHOICE WORKS FOR ALL TABLES (every choice has been asked, or ruled out): do NOT book anything. Thank them for checking, then ask the shop ONE short question just to learn the situation — for example which times or tables are available on that day (so the traveler can decide later) — listen to the answer, say clearly that you are not booking now and that the traveler will contact them again, thank them, say goodbye and end with [END]. Do not book even if they offer something.' : 'IF NO CHOICE IS LEFT and some table could not be booked: thank them, say goodbye and end with [END] (after the recap if something was booked).'}
+7. DONE: once the shop has confirmed (a yes, a repeat-back, or no objection after your recap), close warmly in one or two short sentences: thank them, state the agreed booking once as the final arrangement — day word, exact time, the tables and numbers of people, name — not as a question, and say goodbye. End that reply with [END].
+- If they ask you something (phone number, deposit, allergies, the children's ages, a child seat, the spelling of the name), answer in one short sentence using only the details above; if you do not know, say the traveler will confirm when they arrive.
+- Never ask the shop extra questions of your own (deposit, rules, menus) except what step 6 allows, and asking for seats close together. Never add a choice, a time or a number of people of your own until the shop has settled this one.
+- Every reply must contain words to say; never reply with only a marker.
+- If they say they do not take reservations, are closed, or will not talk to an AI, thank them, say goodbye, and end with [END].
+${tail}`;
+}
+
 export function callSystemPrompt({ lang, placeName, request }) {
+  if (Array.isArray(request.groups) && request.groups.length > 1) return groupsPrompt({ lang, placeName, request });
+  return legacyPrompt({ lang, placeName, request });
+}
+
+function legacyPrompt({ lang, placeName, request }) {
   const d = new Date(request.date + 'T00:00:00Z');
   const wd = WEEK[d.getUTCDay()];
   const kana = romajiToKana(request.name);
@@ -299,7 +427,8 @@ The reservation the traveler wants (choice 1):
 - Date: ${rel ? `first say the day word "${rel}" exactly as written (it is already in ${LANG_NAME[lang]}; never translate it or use any other day word), then the date: ` : ''}${sd ? `"${sd}"` : `${request.date.slice(5)} (month-day, ${wd}); say only the month, day and weekday`}
 - Time: ${win(request)}${request.timeTo ? ` — the traveler is happy with ANY time in this window. When you ask, say this exact window naturally, or ask for the start time and accept any time the shop offers inside the window.` : ' — accept only this time.'}
 - Number of people: ${request.people}${lang === 'ja-JP' ? ` ("${jp(request.people)}") — in Japanese always write numbers of people in hiragana (ふたり, さんにん, よにん …; never write 名 or 二名: it is misread aloud)` : ''}
-- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese ${NAME_EX[lang] ? `(for example ${NAME_EX[lang]})` : ''}. Always use it with the polite title given here, in a natural sentence ${lang === 'cmn-TW' || lang === 'yue-HK' ? '(訂位的名字是…; never "姓氏是…先生")' : ''}, and never mix in English words like "name". ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
+${request.groups?.length === 1 && request.groups[0].children > 0 ? `- Children: ${request.groups[0].children} of the people are children${request.groups[0].childAges ? ` (age/grade written by the traveler: "${request.groups[0].childAges}". ${AGE_HINT})` : ''}. Mention it briefly with the request, and answer if the shop asks about ages or a child seat. Never invent an age.
+` : ''}- Name for the booking: ${request.name} — a Japanese name, pronounced "${kana}" in Japanese. When you give the name, also say clearly that the guest is Japanese ${NAME_EX[lang] ? `(for example ${NAME_EX[lang]})` : ''}. Always use it with the polite title given here, in a natural sentence ${lang === 'cmn-TW' || lang === 'yue-HK' ? '(訂位的名字是…; never "姓氏是…先生")' : ''}, and never mix in English words like "name". ${NAME_HOW[lang] ? NAME_HOW[lang](kana, request.name, request.gender) : `Say it as it sounds in Japanese with "san" (for example "Ueno san"). Never read it as an English word.`} Spell the Latin letters one by one (${request.name.toUpperCase().split('').join(', ')}) only if they ask how to write it.
 
 Other details from the traveler (use only when relevant):
 ${request.flex ? `- Time flexibility: "${request.flex}"
@@ -335,7 +464,23 @@ Never invent details. Never agree to pay anything.`;
 }
 
 // 電話が終わったあとに、結果を日本語でまとめる指示
+function groupsSummaryPrompt({ request }) {
+  const G = request.groups;
+  const cands = request.candidates && request.candidates.length ? request.candidates : [{ date: request.date, time: request.time, timeTo: request.timeTo }];
+  const wd = (d) => WEEK[new Date(d + 'T00:00:00Z').getUTCDay()];
+  return `You read a transcript of a phone call where an AI assistant tried to book ${G.length} tables in ONE call for a Japanese traveler (name "${request.name}").
+Tables: ${G.map((g, i) => `table ${i + 1} = ${g.adults + g.children} people (${g.adults} adults, ${g.children} children)`).join('; ')}.
+Choices in order: ${cands.map((c, i) => `${i + 1}) ${c.date} (${wd(c.date)}) ${c.time}${c.timeTo ? `–${c.timeTo}` : ''}`).join(', ')}. Use these weekdays when you write dates.
+The traveler's rule: ${request.partial === 'any' ? 'booking only some of the tables is OK.' : 'book ONLY a time when ALL tables can be seated; if only some tables were available, nothing should be booked.'}
+Return ONLY a JSON object, no other text:
+{"outcome":"booked|declined|alternative|unclear","date":"YYYY-MM-DD or empty","time":"HH:MM or empty","people":number or 0,"groups":[${G.map((g, i) => `{"table":${i + 1},"outcome":"booked|declined|unclear","date":"YYYY-MM-DD or empty","time":"HH:MM or empty","people":${g.adults + g.children}}`).join(',')}],"summary_ja":"結果を日本語で2〜4文。テーブルごとに、決まった日時・人数・名前、取れなかったテーブルがあればその理由（満席など）、お店から言われた空きの状況（例：19時なら4名のテーブルだけ空いている）、注意（席の時間制限・遅れたら取り消し等）を入れる","notes_ja":"お店に伝えたこと・聞かれたこと（子どもの年齢・子ども用の椅子など）を日本語で短く。なければ空"}
+"groups" must have exactly one item per table, in the same order. For each table: "booked" = the shop agreed (and did not refuse later) to that table on that date and time — put the agreed date, time and the table's number of people; "declined" = that table was NOT booked (leave date and time empty); "unclear" = cannot tell. Tables that the shop agreed together share the same date and time. If the shop said they could seat only some tables at some time but the call ended WITHOUT agreeing a booking, those tables are "declined" and the availability the shop mentioned goes into summary_ja (it is only information, not a booking).
+Top-level "outcome": "booked" = every table is booked (at any choice the traveler listed); "alternative" = at least one table booked but not all of them; "declined" = no table was booked; "unclear" = cannot tell. Top-level date/time/people = the first booked table (empty/0 if none).
+A line "SHOP: （返事が聞こえず）" means nothing was heard. A line "SHOP: （短い返事・文字にならず）" means the shop said something short that speech recognition could not turn into text. If a booking relied only on such lines (no clear spoken agreement anywhere), return "unclear" for it and say in notes_ja that お店の返事がはっきり聞き取れなかったため、予約が取れたかは確かではありません.`;
+}
+
 export function summaryPrompt({ request }) {
+  if (Array.isArray(request.groups) && request.groups.length > 1) return groupsSummaryPrompt({ request });
   return `You read a transcript of a phone call where an AI assistant tried to book a reservation for a Japanese traveler.
 Requested: date ${request.date} (${WEEK[new Date(request.date + 'T00:00:00Z').getUTCDay()]}), time ${request.time}${request.timeTo ? `–${request.timeTo}` : ''}, ${request.people} people, name "${request.name}". Use this weekday when you write the date.${(request.alts || []).length ? ` The traveler also accepted these other choices (in order): ${request.alts.map((a) => `${a.date} (${WEEK[new Date(a.date + 'T00:00:00Z').getUTCDay()]}) ${a.time}${a.timeTo ? `–${a.timeTo}` : ''} ${a.people || request.people} people`).join(', ')}. A booking on one of them is "alternative"; write its date and weekday correctly.` : ''}
 Return ONLY a JSON object, no other text:
