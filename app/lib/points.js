@@ -47,12 +47,12 @@ export async function refund(s) {
 export const myPoints = (token) => rpcUser('my_points', token);
 
 // 管理用の鍵で Supabase を呼ぶ（買ったポイントを足すときだけ）
-export async function service(path, { method = 'GET', body } = {}) {
+export async function service(path, { method = 'GET', body, prefer } = {}) {
   const key = envOf().SUPABASE_SERVICE_ROLE_KEY;
   if (!key) return { ok: false, status: 503 };
   const r = await fetch(`${SUPABASE_URL}${path}`, {
     method,
-    headers: { apikey: key, ...(key.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${key}` }), 'content-type': 'application/json', ...(/\/rpc\//.test(path) ? {} : { Prefer: 'return=minimal' }) },
+    headers: { apikey: key, ...(key.startsWith('sb_secret_') ? {} : { Authorization: `Bearer ${key}` }), 'content-type': 'application/json', ...(prefer ? { Prefer: prefer } : (/\/rpc\//.test(path) ? {} : { Prefer: 'return=minimal' })) },
     body: body === undefined ? undefined : JSON.stringify(body),
     cache: 'no-store',
     signal: AbortSignal.timeout(10000),

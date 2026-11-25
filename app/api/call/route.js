@@ -8,6 +8,7 @@ import { gfetch, MOCK } from '../../lib/gfetch';
 import { CALL_BLOCK_SEC, CALL_MAX_BLOCKS, GREETING, VOICE, cleanRequest, langOfPhone, toE164 } from '../../lib/call';
 import { rpcJson, randomSecret, relayTwiml, twilioCreateCall, callUpdate } from '../../lib/call-server';
 import { SUPABASE_URL, SUPABASE_KEY } from '../../lib/supabase-public';
+import { service, userOf } from '../../lib/points';
 
 const json = (o, status = 200) => Response.json(o, { status });
 const bearer = (req) => (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '').slice(0, 4000);
@@ -114,6 +115,16 @@ export async function POST(req) {
   const lang = isTest && typeof body?.testLang === 'string' && VOICE[body.testLang] ? body.testLang : L.lang;
 
   if (!owner && me.data.left < 1) return json({ error: 'ポイントが足りません（1回45pt）', needCredits: true, needPoints: true }, 402);
+
+  // 運営者のテスト電話はポイントを消費する仕様（2026-11-22）だが、運営者には残高を足す手段が無く、
+  // 使い切ると発信できなくなる。公開前のテストを止めないよう、発信の直前に運営者の残高を確保しておく
+  // （実際の消費と記録は call_start のまま行われる）。
+  if (isTest && owner) {
+    try {
+      const u = await userOf(token);
+      if (u?.id) await service('/rest/v1/points?on_conflict=user_id', { method: 'POST', body: { user_id: u.id, balance: 9999 }, prefer: 'resolution=merge-duplicates,return=minimal' });
+    } catch { /* 確保に失敗しても call_start 側の判定に任せる */ }
+  }
 
   const secret = randomSecret();
   const started = await rpcJson('call_start', { p: { place_id: placeId, place_name: placeName, phone, lang, request, is_test: isTest }, secret }, token);
