@@ -308,8 +308,8 @@ export class CallSession {
       return;
     }
     if (this.greeted && this.stage !== 'greeting' && (this.busy || this.agentSpeaking) && !meaningful) {
-      // AIが返事を作っている・話している最中に届いた、意味のはっきりしない言葉：周りの音とみなして記録だけ（話を乱さない）
-      this.transcript.push({ who: 'shop', text: `（周りの音：${said}）` });
+      // AIが返事を作っている・話している最中に届いた言葉：短い「はい/네」などの肯定はお店の返事として記録に残す（結果判定に使う）。それ以外は周りの音とみなして記録だけ。どちらも返事はしない（話を乱さない）
+      this.transcript.push({ who: 'shop', text: SHORT_YES.test(said) ? said : `（周りの音：${said}）` });
       return;
     }
     this.heard = true;
